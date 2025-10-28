@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  Passenger
+  Driver
+  BusCompany
+}
+
+enum BusSize {
+  small
+  medium
+  large
+}
+
+enum TripStatus {
+  open
+  awarded
+  cancelled
+}
+
+enum BidStatus {
+  open
+  withdrawn
+  awarded
+  lost
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  passwordHash String
+  role        UserRole
+  createdAt   DateTime @default(now())
+  
+  tripsAsPassenger Trip[] @relation("PassengerTrips")
+  bids            Bid[]
+}
+
+model Trip {
+  id          String     @id @default(cuid())
+  passengerId String
+  passenger   User       @relation("PassengerTrips", fields: [passengerId], references: [id])
+  origin      String
+  destination String
+  dateTime    DateTime
+  paxCount    Int
+  busSize     BusSize
+  status      TripStatus @default(open)
+  createdAt   DateTime   @default(now())
+  
+  bids Bid[]
+}
+
+model Bid {
+  id        String    @id @default(cuid())
+  tripId    String
+  trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  bidderId  String
+  bidder    User      @relation(fields: [bidderId], references: [id])
+  price     Decimal
+  note      String?
+  status    BidStatus @default(open)
+  createdAt DateTime  @default(now())
+  
+  @@index([tripId])
+  @@index([bidderId])
+}
+
