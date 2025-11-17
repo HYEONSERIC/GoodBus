@@ -114,7 +114,7 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error creating trip:', error);
-            alert('여행 생성에 실패했습니다');
+            alert('Failed to create trip');
         }
     }
 
@@ -125,12 +125,12 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error awarding trip:', error);
-            alert('입찰 선정에 실패했습니다');
+            alert('Failed to award bid');
         }
     }
 
     async function cancelTrip(tripId: string) {
-        if (!confirm('정말 이 여행을 취소하시겠습니까?')) {
+        if (!confirm('Are you sure you want to cancel this trip?')) {
             return;
         }
 
@@ -139,7 +139,7 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error cancelling trip:', error);
-            alert('여행 취소에 실패했습니다');
+            alert('Failed to cancel trip');
         }
     }
 
@@ -147,29 +147,29 @@ export default function PassengerDashboard() {
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">여행객 대시보드</h1>
+                    <h1 className="text-3xl font-bold">Passenger Dashboard</h1>
                     <div className="flex gap-4 items-center">
                         <span className="text-gray-600">{user?.email}</span>
                         <Button onClick={handleLogout} variant="outline">
-                            로그아웃
+                            Logout
                         </Button>
                     </div>
                 </div>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                     <DialogTrigger asChild>
-                        <Button>새 여행 만들기</Button>
+                        <Button>Create New Trip</Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>여행 만들기</DialogTitle>
+                            <DialogTitle>Create Trip</DialogTitle>
                             <DialogDescription>
-                                여행 정보를 입력하세요
+                                Enter trip information
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                             <div>
-                                <Label>출발지</Label>
+                                <Label>Origin</Label>
                                 <Input
                                     value={newTrip.origin}
                                     onChange={(e) =>
@@ -181,7 +181,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>도착지</Label>
+                                <Label>Destination</Label>
                                 <Input
                                     value={newTrip.destination}
                                     onChange={(e) =>
@@ -193,7 +193,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>날짜 및 시간</Label>
+                                <Label>Date & Time</Label>
                                 <Input
                                     type="datetime-local"
                                     value={newTrip.dateTime}
@@ -206,7 +206,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>승객 수</Label>
+                                <Label>Number of Passengers</Label>
                                 <Input
                                     type="number"
                                     value={newTrip.paxCount}
@@ -219,7 +219,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>버스 크기</Label>
+                                <Label>Bus Size</Label>
                                 <Select
                                     value={newTrip.busSize}
                                     onValueChange={(value) =>
@@ -234,19 +234,19 @@ export default function PassengerDashboard() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="small">
-                                            소형
+                                            Small
                                         </SelectItem>
                                         <SelectItem value="medium">
-                                            중형
+                                            Medium
                                         </SelectItem>
                                         <SelectItem value="large">
-                                            대형
+                                            Large
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <Button onClick={createTrip} className="w-full">
-                                여행 만들기
+                                Create Trip
                             </Button>
                         </div>
                     </DialogContent>
@@ -276,16 +276,16 @@ export default function PassengerDashboard() {
                                         }
                                     >
                                         {trip.status === 'awarded'
-                                            ? '선정됨'
-                                            : '진행중'}
+                                            ? 'Awarded'
+                                            : 'Open'}
                                     </Badge>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <p>승객 수: {trip.paxCount}</p>
-                                <p>버스 크기: {trip.busSize}</p>
+                                <p>Passengers: {trip.paxCount}</p>
+                                <p>Bus Size: {trip.busSize}</p>
                                 <p className="mt-2 font-semibold">
-                                    입찰: {trip.bids?.length || 0}
+                                    Bids: {trip.bids?.length || 0}
                                 </p>
                                 {trip.bids && trip.bids.length > 0 && (
                                     <div className="mt-4 space-y-2">
@@ -316,12 +316,12 @@ export default function PassengerDashboard() {
                                         {trip.bids && trip.bids.length > 0 && (
                                             <Dialog>
                                                 <DialogTrigger asChild>
-                                                    <Button>입찰 선정</Button>
+                                                    <Button>Award Bid</Button>
                                                 </DialogTrigger>
                                                 <DialogContent>
                                                     <DialogHeader>
                                                         <DialogTitle>
-                                                            입찰 선정
+                                                            Award Bid
                                                         </DialogTitle>
                                                     </DialogHeader>
                                                     <Select
@@ -331,7 +331,7 @@ export default function PassengerDashboard() {
                                                         }
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder="입찰을 선택하세요" />
+                                                            <SelectValue placeholder="Select a bid" />
                                                         </SelectTrigger>
                                                         <SelectContent>
                                                             {trip.bids.map(
@@ -365,7 +365,7 @@ export default function PassengerDashboard() {
                                                         }
                                                         disabled={!selectedBid}
                                                     >
-                                                        선정
+                                                        Award
                                                     </Button>
                                                 </DialogContent>
                                             </Dialog>
@@ -374,7 +374,7 @@ export default function PassengerDashboard() {
                                             variant="destructive"
                                             onClick={() => cancelTrip(trip.id)}
                                         >
-                                            여행 취소
+                                            Cancel Trip
                                         </Button>
                                     </div>
                                 )}

@@ -40,13 +40,13 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <Card className="w-full max-w-md">
                 <CardHeader>
-                    <CardTitle>굿버스에 오신 것을 환영합니다</CardTitle>
-                    <CardDescription>계정에 로그인하세요</CardDescription>
+                    <CardTitle>Welcome to GoodBus</CardTitle>
+                    <CardDescription>Log in to your account</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email">이메일</Label>
+                            <Label htmlFor="email">Email</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -57,7 +57,7 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="password">비밀번호</Label>
+                            <Label htmlFor="password">Password</Label>
                             <Input
                                 id="password"
                                 type="password"
@@ -76,16 +76,16 @@ export default function LoginPage() {
                             className="w-full"
                             disabled={loading}
                         >
-                            {loading ? '로그인 중...' : '로그인'}
+                            {loading ? 'Logging in...' : 'Login'}
                         </Button>
 
                         <p className="text-sm text-center text-gray-600">
-                            계정이 없으신가요?{' '}
+                            Don't have an account?{' '}
                             <a
                                 href="/signup"
                                 className="text-blue-600 hover:underline"
                             >
-                                회원가입
+                                Sign up
                             </a>
                         </p>
                     </form>

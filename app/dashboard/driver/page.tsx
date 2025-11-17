@@ -124,7 +124,7 @@ export default function DriverDashboard() {
 
     async function createBid(tripId: string) {
         if (bidData.price <= 0) {
-            alert('가격을 올바르게 입력해주세요 (양수만 가능)');
+            alert('Please enter a valid price (positive numbers only)');
             return;
         }
 
@@ -135,12 +135,12 @@ export default function DriverDashboard() {
             loadData();
         } catch (error) {
             console.error('Error creating bid:', error);
-            alert('입찰 생성에 실패했습니다');
+            alert('Failed to create bid');
         }
     }
 
     async function handleWithdrawBid(trip: Trip) {
-        if (!confirm('입찰을 철회하시겠습니까?')) {
+        if (!confirm('Are you sure you want to withdraw this bid?')) {
             return;
         }
 
@@ -154,7 +154,7 @@ export default function DriverDashboard() {
             loadData();
         } catch (error) {
             console.error('Error withdrawing bid:', error);
-            alert('입찰 철회에 실패했습니다');
+            alert('Failed to withdraw bid');
         }
     }
 
@@ -162,11 +162,11 @@ export default function DriverDashboard() {
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">기사 대시보드</h1>
+                    <h1 className="text-3xl font-bold">Driver Dashboard</h1>
                     <div className="flex gap-4 items-center">
                         <span className="text-gray-600">{user?.email}</span>
                         <Button onClick={handleLogout} variant="outline">
-                            로그아웃
+                            Logout
                         </Button>
                     </div>
                 </div>
@@ -180,14 +180,14 @@ export default function DriverDashboard() {
                         }
                         className="w-full sm:w-auto"
                     >
-                        입찰 가능한 여정
+                        Available Trips
                     </Button>
                     <Button
                         onClick={() => setActiveTab('myBids')}
                         variant={activeTab === 'myBids' ? 'default' : 'outline'}
                         className="w-full sm:w-auto"
                     >
-                        입찰/낙찰
+                        My Bids & Awards
                     </Button>
                 </div>
 
@@ -195,7 +195,7 @@ export default function DriverDashboard() {
                     <>
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold mb-4">
-                                낙찰된 여정
+                                Awarded Trips
                             </h2>
                             {awardedTrips.length > 0 ? (
                                 <div className="grid gap-6">
@@ -229,21 +229,21 @@ export default function DriverDashboard() {
                                                             </p>
                                                         </div>
                                                         <Badge className="bg-green-500">
-                                                            낙찰됨
+                                                            Awarded
                                                         </Badge>
                                                     </div>
                                                 </CardHeader>
                                                 <CardContent>
                                                     <p>
-                                                        승객 수: {trip.paxCount}
+                                                        Passengers: {trip.paxCount}
                                                     </p>
                                                     <p>
-                                                        버스 크기:{' '}
+                                                        Bus Size:{' '}
                                                         {trip.busSize}
                                                     </p>
                                                     <div className="mt-4 p-3 bg-green-100 rounded">
                                                         <p className="font-bold text-green-800">
-                                                            🎉 낙찰: $
+                                                            🎉 Awarded: $
                                                             {myBid?.price}
                                                         </p>
                                                         {myBid?.note && (
@@ -259,14 +259,14 @@ export default function DriverDashboard() {
                                 </div>
                             ) : (
                                 <p className="text-gray-500 text-center py-8">
-                                    낙찰된 여정이 없습니다
+                                    No awarded trips
                                 </p>
                             )}
                         </div>
 
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold mb-4">
-                                내 입찰 현황
+                                My Bids
                             </h2>
                             {myBids.length > 0 ? (
                                 <div className="grid gap-6">
@@ -296,20 +296,20 @@ export default function DriverDashboard() {
                                                                 )}
                                                             </p>
                                                         </div>
-                                                        <Badge>입찰함</Badge>
+                                                        <Badge>Bid Placed</Badge>
                                                     </div>
                                                 </CardHeader>
                                                 <CardContent>
                                                     <p>
-                                                        승객 수: {trip.paxCount}
+                                                        Passengers: {trip.paxCount}
                                                     </p>
                                                     <p>
-                                                        버스 크기:{' '}
+                                                        Bus Size:{' '}
                                                         {trip.busSize}
                                                     </p>
                                                     <div className="mt-4 p-3 bg-green-50 rounded">
                                                         <p className="font-semibold text-green-700">
-                                                            내 입찰가: $
+                                                            My Bid: $
                                                             {myBid?.price}
                                                         </p>
                                                         {myBid?.note && (
@@ -327,7 +327,7 @@ export default function DriverDashboard() {
                                                             )
                                                         }
                                                     >
-                                                        입찰 철회
+                                                        Withdraw Bid
                                                     </Button>
                                                 </CardContent>
                                             </Card>
@@ -336,7 +336,7 @@ export default function DriverDashboard() {
                                 </div>
                             ) : (
                                 <p className="text-gray-500 text-center py-8">
-                                    입찰한 여정이 없습니다
+                                    No bids placed
                                 </p>
                             )}
                         </div>
@@ -346,7 +346,7 @@ export default function DriverDashboard() {
                 {activeTab === 'available' && (
                     <div>
                         <h2 className="text-xl font-bold mb-4">
-                            입찰 가능한 여정
+                            Available Trips
                         </h2>
                         <div className="grid gap-6">
                             {trips.map((trip) => (
@@ -369,26 +369,26 @@ export default function DriverDashboard() {
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        <p>승객 수: {trip.paxCount}</p>
-                                        <p>버스 크기: {trip.busSize}</p>
+                                        <p>Passengers: {trip.paxCount}</p>
+                                        <p>Bus Size: {trip.busSize}</p>
                                         <Dialog>
                                             <DialogTrigger asChild>
                                                 <Button className="mt-4">
-                                                    입찰하기
+                                                    Place Bid
                                                 </Button>
                                             </DialogTrigger>
                                             <DialogContent>
                                                 <DialogHeader>
                                                     <DialogTitle>
-                                                        입찰하기
+                                                        Place Bid
                                                     </DialogTitle>
                                                     <DialogDescription>
-                                                        입찰 정보를 입력하세요
+                                                        Enter bid information
                                                     </DialogDescription>
                                                 </DialogHeader>
                                                 <div className="space-y-4 py-4">
                                                     <div>
-                                                        <Label>가격 ($)</Label>
+                                                        <Label>Price ($)</Label>
                                                         <Input
                                                             type="number"
                                                             value={
@@ -420,7 +420,7 @@ export default function DriverDashboard() {
                                                     </div>
                                                     <div>
                                                         <Label>
-                                                            메모 (선택사항)
+                                                            Note (Optional)
                                                         </Label>
                                                         <Textarea
                                                             value={bidData.note}
@@ -442,7 +442,7 @@ export default function DriverDashboard() {
                                                             bidData.price <= 0
                                                         }
                                                     >
-                                                        입찰 제출
+                                                        Submit Bid
                                                     </Button>
                                                 </div>
                                             </DialogContent>

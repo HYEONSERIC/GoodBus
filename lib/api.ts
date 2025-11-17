@@ -1,23 +1,38 @@
 const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
+    process.env.NEXT_PUBLIC_API_BASE_URL || 
+    process.env.NEXT_PUBLIC_API_URL || 
+    'http://localhost:4000';
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        credentials: 'include',
-        headers: {
-            'Content-Type': 'application/json',
-            ...options?.headers,
-        },
-    });
+    try {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...options,
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+            },
+        });
 
-    const data = await response.json();
+        if (!response.ok) {
+            let errorMessage = 'Something went wrong';
+            try {
+                const data = await response.json();
+                errorMessage = data.error || errorMessage;
+            } catch {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            throw new Error(errorMessage);
+        }
 
-    if (!response.ok) {
-        throw new Error(data.error || 'Something went wrong');
+        const data = await response.json();
+        return data;
+    } catch (error: any) {
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            throw new Error('Cannot connect to server. Please check if the backend server is running.');
+        }
+        throw error;
     }
-
-    return data;
 }
 
 export const authAPI = {

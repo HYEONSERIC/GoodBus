@@ -90,22 +90,32 @@ If you get an error, wait a few more seconds and try again to let Docker fully s
 
 ### Running the Application
 
-1. Start the backend server (in `server/` directory):
+#### 방법 1: 간편 실행 (권장)
 
+프론트엔드와 백엔드를 한 번에 실행:
+
+```bash
+npm run dev:all
+```
+
+이 명령어는 프론트엔드(http://localhost:3000)와 백엔드(http://localhost:4000)를 동시에 실행합니다.
+
+#### 방법 2: 개별 실행
+
+별도의 터미널에서 각각 실행하려면:
+
+**터미널 1: 백엔드 서버**
 ```bash
 cd server
 npm run dev
 ```
+백엔드는 http://localhost:4000에서 실행됩니다.
 
-The server will run on http://localhost:4000
-
-2. Start the frontend (in root directory):
-
+**터미널 2: 프론트엔드**
 ```bash
 npm run dev
 ```
-
-The frontend will run on http://localhost:3000
+프론트엔드는 http://localhost:3000에서 실행됩니다.
 
 ## Default Test Accounts
 
@@ -141,6 +151,8 @@ The seed script creates three test accounts (all with password: `password123`):
 ### Frontend
 
 -   `npm run dev` - Start development server
+-   `npm run dev:server` - Start backend server only
+-   `npm run dev:all` - Start both frontend and backend servers simultaneously
 -   `npm run build` - Build for production
 -   `npm run start` - Start production server
 -   `npm run lint` - Run linter
