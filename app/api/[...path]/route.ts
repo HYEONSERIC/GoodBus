@@ -13,9 +13,13 @@ function getBackendBaseUrl() {
     return url.replace(/\/+$/, '');
 }
 
-async function handler(req: NextRequest, context: { params: { path: string[] } }) {
+async function handler(
+    req: NextRequest,
+    context: { params: Promise<{ path: string[] }> }
+) {
     const backendBaseUrl = getBackendBaseUrl();
-    const path = (context.params?.path || []).join('/');
+    const params = await context.params;
+    const path = (params?.path || []).join('/');
     const search = req.nextUrl.search;
     const targetUrl = `${backendBaseUrl}/${path}${search}`;
 
