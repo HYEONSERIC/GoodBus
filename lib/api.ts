@@ -22,7 +22,15 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
                 const data = await response.json();
                 errorMessage = data.error || errorMessage;
             } catch {
-                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const text = await response.text();
+                    errorMessage =
+                        text?.trim()
+                            ? `HTTP ${response.status}: ${text.trim()}`
+                            : `HTTP ${response.status}: ${response.statusText}`;
+                } catch {
+                    errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                }
             }
             throw new Error(errorMessage);
         }
