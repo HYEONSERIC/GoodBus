@@ -30,7 +30,7 @@ export default function LoginPage() {
             await authAPI.login(email, password);
             router.push('/dashboard');
         } catch (err: any) {
-            setError(err.message || 'Login failed');
+            setError(err.message || '로그인에 실패했습니다');
         } finally {
             setLoading(false);
         }
@@ -40,13 +40,13 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <Card className="w-full max-w-md">
                 <CardHeader>
-                    <CardTitle>Welcome to GoodBus</CardTitle>
-                    <CardDescription>Log in to your account</CardDescription>
+                    <CardTitle>굿버스에 오신 것을 환영합니다</CardTitle>
+                    <CardDescription>계정에 로그인하세요</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="email">이메일</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -57,7 +57,7 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password">비밀번호</Label>
                             <Input
                                 id="password"
                                 type="password"
@@ -76,16 +76,16 @@ export default function LoginPage() {
                             className="w-full"
                             disabled={loading}
                         >
-                            {loading ? 'Logging in...' : 'Login'}
+                            {loading ? '로그인 중...' : '로그인'}
                         </Button>
 
                         <p className="text-sm text-center text-gray-600">
-                            Don't have an account?{' '}
+                            계정이 없으신가요?{' '}
                             <a
                                 href="/signup"
                                 className="text-blue-600 hover:underline"
                             >
-                                Sign up
+                                회원가입
                             </a>
                         </p>
                     </form>

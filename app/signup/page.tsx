@@ -34,7 +34,7 @@ export default function SignupPage() {
             await authAPI.signup(email, password, role);
             router.push('/dashboard');
         } catch (err: any) {
-            setError(err.message || 'Signup failed');
+            setError(err.message || '회원가입에 실패했습니다');
         } finally {
             setLoading(false);
         }
@@ -44,13 +44,13 @@ export default function SignupPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
             <Card className="w-full max-w-md">
                 <CardHeader>
-                    <CardTitle>Create Account</CardTitle>
-                    <CardDescription>Join GoodBus</CardDescription>
+                    <CardTitle>계정 만들기</CardTitle>
+                    <CardDescription>굿버스에 가입하세요</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="email">이메일</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -61,7 +61,7 @@ export default function SignupPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password">비밀번호</Label>
                             <Input
                                 id="password"
                                 type="password"
@@ -73,7 +73,7 @@ export default function SignupPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Account Type</Label>
+                            <Label>계정 유형</Label>
                             <RadioGroup
                                 value={role}
                                 onValueChange={(value) => setRole(value as any)}
@@ -84,7 +84,7 @@ export default function SignupPage() {
                                         htmlFor="r1"
                                         className="cursor-pointer"
                                     >
-                                        Passenger
+                                        승객
                                     </Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -93,7 +93,7 @@ export default function SignupPage() {
                                         htmlFor="r2"
                                         className="cursor-pointer"
                                     >
-                                        Driver
+                                        운전자
                                     </Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -105,7 +105,7 @@ export default function SignupPage() {
                                         htmlFor="r3"
                                         className="cursor-pointer"
                                     >
-                                        Bus Company
+                                        버스 회사
                                     </Label>
                                 </div>
                             </RadioGroup>
@@ -120,16 +120,16 @@ export default function SignupPage() {
                             className="w-full"
                             disabled={loading}
                         >
-                            {loading ? 'Creating account...' : 'Sign up'}
+                            {loading ? '계정 생성 중...' : '회원가입'}
                         </Button>
 
                         <p className="text-sm text-center text-gray-600">
-                            Already have an account?{' '}
+                            이미 계정이 있으신가요?{' '}
                             <a
                                 href="/login"
                                 className="text-blue-600 hover:underline"
                             >
-                                Login
+                                로그인
                             </a>
                         </p>
                     </form>

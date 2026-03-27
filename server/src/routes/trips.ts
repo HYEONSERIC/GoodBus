@@ -2,7 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { BusSize, TripStatus, UserRole } from '@prisma/client';
+import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
+import { sendBidAwardedEmail } from '../utils/email';
 
 const router = express.Router();
 
@@ -42,7 +43,30 @@ router.get('/', requireAuth, async (req, res) => {
         orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ trips });
+    // Calculate minimum bid price for each trip using AGGREGATE query
+    const tripsWithMinBid = await Promise.all(
+        trips.map(async (trip) => {
+            // AGGREGATE query: Find minimum bid price for open bids
+            const minBidResult = await prisma.bid.aggregate({
+                where: {
+                    tripId: trip.id,
+                    status: 'open',
+                },
+                _min: {
+                    price: true,
+                },
+            });
+
+            return {
+                ...trip,
+                minBidPrice: minBidResult._min.price
+                    ? Number(minBidResult._min.price)
+                    : null,
+            };
+        })
+    );
+
+    res.json({ trips: tripsWithMinBid });
 });
 
 router.post(
@@ -117,8 +141,173 @@ router.get('/:id', requireAuth, async (req, res) => {
         return res.status(404).json({ error: 'Trip not found' });
     }
 
-    res.json({ trip });
+    // AGGREGATE query: Find minimum bid price for open bids
+    const minBidResult = await prisma.bid.aggregate({
+        where: {
+            tripId: trip.id,
+            status: 'open',
+        },
+        _min: {
+            price: true,
+        },
+    });
+
+    const tripWithMinBid = {
+        ...trip,
+        minBidPrice: minBidResult._min.price
+            ? Number(minBidResult._min.price)
+            : null,
+    };
+
+    res.json({ trip: tripWithMinBid });
 });
+
+const updateTripSchema = z.object({
+    origin: z.string().min(1).optional(),
+    destination: z.string().min(1).optional(),
+    dateTime: z.string().datetime().optional(),
+    paxCount: z.number().int().positive().optional(),
+    busSize: z.enum(['small', 'medium', 'large']).optional(),
+});
+
+router.patch(
+    '/:id',
+    requireAuth,
+    requireRole(UserRole.Passenger),
+    async (req, res) => {
+        try {
+            const updateData = updateTripSchema.parse(req.body);
+
+            // Get trip with bids
+            const trip = await prisma.trip.findUnique({
+                where: { id: req.params.id },
+                include: {
+                    bids: {
+                        where: { status: 'open' },
+                        include: {
+                            bidder: {
+                                select: {
+                                    id: true,
+                                    email: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!trip) {
+                return res.status(404).json({ error: 'Trip not found' });
+            }
+
+            if (trip.passengerId !== req.user!.userId) {
+                return res.status(403).json({ error: 'Not your trip' });
+            }
+
+            if (trip.status !== 'open') {
+                return res
+                    .status(400)
+                    .json({ error: 'Only open trips can be updated' });
+            }
+
+            // Prepare update data
+            const dataToUpdate: any = {};
+            if (updateData.origin) dataToUpdate.origin = updateData.origin;
+            if (updateData.destination)
+                dataToUpdate.destination = updateData.destination;
+            if (updateData.dateTime)
+                dataToUpdate.dateTime = new Date(updateData.dateTime);
+            if (updateData.paxCount) dataToUpdate.paxCount = updateData.paxCount;
+            if (updateData.busSize)
+                dataToUpdate.busSize = updateData.busSize as BusSize;
+
+            // Use transaction to update trip and cancel all open bids
+            const updatedTrip = await prisma.$transaction(async (tx) => {
+                // Update trip
+                const trip = await tx.trip.update({
+                    where: { id: req.params.id },
+                    data: dataToUpdate,
+                    include: {
+                        passenger: {
+                            select: {
+                                id: true,
+                                email: true,
+                                role: true,
+                            },
+                        },
+                        bids: {
+                            include: {
+                                bidder: {
+                                    select: {
+                                        id: true,
+                                        email: true,
+                                        role: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                });
+
+                // Cancel all open bids
+                const openBids = trip.bids.filter((bid) => bid.status === 'open');
+                if (openBids.length > 0) {
+                    await tx.bid.updateMany({
+                        where: {
+                            tripId: trip.id,
+                            status: 'open',
+                        },
+                        data: { status: 'withdrawn' },
+                    });
+
+                    // Create notifications for all bidders
+                    const notifications = openBids.map((bid) => ({
+                        userId: bid.bidder.id,
+                        type: NotificationType.BID_RECEIVED, // Reusing type, but message will be different
+                        title: 'Trip Updated - Bid Cancelled',
+                        message: `The trip from ${trip.origin} to ${trip.destination} has been updated. Your bid has been automatically cancelled. Please place a new bid if you're still interested.`,
+                        tripId: trip.id,
+                        bidId: bid.id,
+                    }));
+
+                    await tx.notification.createMany({
+                        data: notifications,
+                    });
+                }
+
+                return trip;
+            });
+
+            // Calculate min bid price for updated trip
+            const minBidResult = await prisma.bid.aggregate({
+                where: {
+                    tripId: updatedTrip.id,
+                    status: 'open',
+                },
+                _min: {
+                    price: true,
+                },
+            });
+
+            const tripWithMinBid = {
+                ...updatedTrip,
+                minBidPrice: minBidResult._min.price
+                    ? Number(minBidResult._min.price)
+                    : null,
+            };
+
+            res.json({ trip: tripWithMinBid });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res
+                    .status(400)
+                    .json({ error: 'Invalid input', details: error.errors });
+            }
+            console.error('Update trip error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+);
 
 router.post(
     '/:id/award',
@@ -161,6 +350,31 @@ router.post(
                 return res.status(400).json({ error: 'Bid is not open' });
             }
 
+            // Get trip and bid details for notifications
+            const tripWithDetails = await prisma.trip.findUnique({
+                where: { id: trip.id },
+                include: {
+                    passenger: {
+                        select: {
+                            id: true,
+                            email: true,
+                        },
+                    },
+                },
+            });
+
+            const awardedBid = await prisma.bid.findUnique({
+                where: { id: bidId },
+                include: {
+                    bidder: {
+                        select: {
+                            id: true,
+                            email: true,
+                        },
+                    },
+                },
+            });
+
             // Use a transaction to ensure atomicity
             await prisma.$transaction([
                 // Award the winning bid
@@ -183,6 +397,29 @@ router.post(
                     data: { status: 'awarded' },
                 }),
             ]);
+
+            // Create notification for the bidder
+            if (awardedBid && tripWithDetails) {
+                await prisma.notification.create({
+                    data: {
+                        userId: awardedBid.bidder.id,
+                        type: NotificationType.BID_AWARDED,
+                        title: 'Bid Awarded',
+                        message: `Congratulations! Your bid of $${awardedBid.price} has been awarded for the trip from ${tripWithDetails.origin} to ${tripWithDetails.destination}`,
+                        tripId: trip.id,
+                        bidId: bidId,
+                    },
+                });
+
+                // Send email to bidder
+                sendBidAwardedEmail(
+                    awardedBid.bidder.email,
+                    tripWithDetails.origin,
+                    tripWithDetails.destination,
+                    Number(awardedBid.price),
+                    tripWithDetails.passenger.email
+                );
+            }
 
             res.json({ message: 'Trip awarded successfully' });
         } catch (error) {

@@ -77,6 +77,11 @@ export const tripsAPI = {
         fetchAPI(`/trips/${tripId}/cancel`, {
             method: 'PATCH',
         }),
+    update: async (tripId: string, data: any) =>
+        fetchAPI(`/trips/${tripId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }),
 };
 
 export const bidsAPI = {
@@ -87,6 +92,19 @@ export const bidsAPI = {
         }),
     withdraw: async (id: string) =>
         fetchAPI(`/bids/${id}/withdraw`, {
+            method: 'PATCH',
+        }),
+};
+
+export const notificationsAPI = {
+    getAll: async () => fetchAPI('/notifications'),
+    getUnreadCount: async () => fetchAPI('/notifications/unread-count'),
+    markAsRead: async (id: string) =>
+        fetchAPI(`/notifications/${id}/read`, {
+            method: 'PATCH',
+        }),
+    markAllAsRead: async () =>
+        fetchAPI('/notifications/read-all', {
             method: 'PATCH',
         }),
 };

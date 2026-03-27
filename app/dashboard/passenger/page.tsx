@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { authAPI, tripsAPI, bidsAPI } from '@/lib/api';
+import { Notifications } from '@/components/Notifications';
 import {
     Dialog,
     DialogContent,
@@ -45,6 +46,7 @@ interface Trip {
         role: string;
     };
     bids: Bid[];
+    minBidPrice: number | null;
 }
 
 interface Bid {
@@ -71,6 +73,15 @@ export default function PassengerDashboard() {
     });
     const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
     const [selectedBid, setSelectedBid] = useState<string>('');
+    const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+    const [editTripData, setEditTripData] = useState({
+        origin: '',
+        destination: '',
+        dateTime: '',
+        paxCount: 1,
+        busSize: 'small' as 'small' | 'medium' | 'large',
+    });
 
     useEffect(() => {
         loadData();
@@ -114,7 +125,7 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error creating trip:', error);
-            alert('Failed to create trip');
+            alert('여정 생성에 실패했습니다');
         }
     }
 
@@ -125,12 +136,12 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error awarding trip:', error);
-            alert('Failed to award bid');
+            alert('입찰 수주에 실패했습니다');
         }
     }
 
     async function cancelTrip(tripId: string) {
-        if (!confirm('Are you sure you want to cancel this trip?')) {
+        if (!confirm('이 여정을 취소하시겠습니까?')) {
             return;
         }
 
@@ -139,7 +150,63 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error cancelling trip:', error);
-            alert('Failed to cancel trip');
+            alert('여정 취소에 실패했습니다');
+        }
+    }
+
+    function openEditDialog(trip: Trip) {
+        setEditingTrip(trip);
+        // Format dateTime for datetime-local input
+        const dateTime = new Date(trip.dateTime);
+        const formattedDateTime = new Date(
+            dateTime.getTime() - dateTime.getTimezoneOffset() * 60000
+        )
+            .toISOString()
+            .slice(0, 16);
+        setEditTripData({
+            origin: trip.origin,
+            destination: trip.destination,
+            dateTime: formattedDateTime,
+            paxCount: trip.paxCount,
+            busSize: trip.busSize as 'small' | 'medium' | 'large',
+        });
+        setEditDialogOpen(true);
+    }
+
+    async function updateTrip() {
+        if (!editingTrip) return;
+
+        if (
+            !editTripData.origin ||
+            !editTripData.destination ||
+            !editTripData.dateTime
+        ) {
+            alert('모든 필수 항목을 입력해주세요');
+            return;
+        }
+
+        if (
+            !confirm(
+                '여정 정보를 수정하면 모든 기존 입찰이 취소됩니다. 계속하시겠습니까?'
+            )
+        ) {
+            return;
+        }
+
+        try {
+            await tripsAPI.update(editingTrip.id, {
+                origin: editTripData.origin,
+                destination: editTripData.destination,
+                dateTime: new Date(editTripData.dateTime).toISOString(),
+                paxCount: editTripData.paxCount,
+                busSize: editTripData.busSize,
+            });
+            setEditDialogOpen(false);
+            setEditingTrip(null);
+            loadData();
+        } catch (error) {
+            console.error('Error updating trip:', error);
+            alert('여정 수정에 실패했습니다');
         }
     }
 
@@ -147,29 +214,30 @@ export default function PassengerDashboard() {
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">Passenger Dashboard</h1>
+                    <h1 className="text-3xl font-bold">승객 대시보드</h1>
                     <div className="flex gap-4 items-center">
+                        <Notifications />
                         <span className="text-gray-600">{user?.email}</span>
                         <Button onClick={handleLogout} variant="outline">
-                            Logout
+                            로그아웃
                         </Button>
                     </div>
                 </div>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                     <DialogTrigger asChild>
-                        <Button>Create New Trip</Button>
+                        <Button>새 여정 만들기</Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Create Trip</DialogTitle>
+                            <DialogTitle>여정 만들기</DialogTitle>
                             <DialogDescription>
-                                Enter trip information
+                                여정 정보를 입력하세요
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                             <div>
-                                <Label>Origin</Label>
+                                <Label>출발지</Label>
                                 <Input
                                     value={newTrip.origin}
                                     onChange={(e) =>
@@ -181,7 +249,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>Destination</Label>
+                                <Label>도착지</Label>
                                 <Input
                                     value={newTrip.destination}
                                     onChange={(e) =>
@@ -193,7 +261,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>Date & Time</Label>
+                                <Label>날짜 및 시간</Label>
                                 <Input
                                     type="datetime-local"
                                     value={newTrip.dateTime}
@@ -206,7 +274,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>Number of Passengers</Label>
+                                <Label>승객 수</Label>
                                 <Input
                                     type="number"
                                     value={newTrip.paxCount}
@@ -219,7 +287,7 @@ export default function PassengerDashboard() {
                                 />
                             </div>
                             <div>
-                                <Label>Bus Size</Label>
+                                <Label>버스 크기</Label>
                                 <Select
                                     value={newTrip.busSize}
                                     onValueChange={(value) =>
@@ -234,19 +302,116 @@ export default function PassengerDashboard() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="small">
-                                            Small
+                                            소형
                                         </SelectItem>
                                         <SelectItem value="medium">
-                                            Medium
+                                            중형
                                         </SelectItem>
                                         <SelectItem value="large">
-                                            Large
+                                            대형
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <Button onClick={createTrip} className="w-full">
-                                Create Trip
+                                여정 만들기
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Trip Dialog */}
+                <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>여정 수정</DialogTitle>
+                            <DialogDescription>
+                                여정 정보를 수정하세요. 모든 기존 입찰이 취소됩니다.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div>
+                                <Label>출발지</Label>
+                                <Input
+                                    value={editTripData.origin}
+                                    onChange={(e) =>
+                                        setEditTripData({
+                                            ...editTripData,
+                                            origin: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Label>도착지</Label>
+                                <Input
+                                    value={editTripData.destination}
+                                    onChange={(e) =>
+                                        setEditTripData({
+                                            ...editTripData,
+                                            destination: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Label>날짜 및 시간</Label>
+                                <Input
+                                    type="datetime-local"
+                                    value={editTripData.dateTime}
+                                    onChange={(e) =>
+                                        setEditTripData({
+                                            ...editTripData,
+                                            dateTime: e.target.value,
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Label>승객 수</Label>
+                                <Input
+                                    type="number"
+                                    value={editTripData.paxCount}
+                                    onChange={(e) =>
+                                        setEditTripData({
+                                            ...editTripData,
+                                            paxCount: parseInt(e.target.value),
+                                        })
+                                    }
+                                />
+                            </div>
+                            <div>
+                                <Label>버스 크기</Label>
+                                <Select
+                                    value={editTripData.busSize}
+                                    onValueChange={(value) =>
+                                        setEditTripData({
+                                            ...editTripData,
+                                            busSize: value as
+                                                | 'small'
+                                                | 'medium'
+                                                | 'large',
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="small">
+                                            소형
+                                        </SelectItem>
+                                        <SelectItem value="medium">
+                                            중형
+                                        </SelectItem>
+                                        <SelectItem value="large">
+                                            대형
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={updateTrip} className="w-full">
+                                여정 수정
                             </Button>
                         </div>
                     </DialogContent>
@@ -276,52 +441,65 @@ export default function PassengerDashboard() {
                                         }
                                     >
                                         {trip.status === 'awarded'
-                                            ? 'Awarded'
-                                            : 'Open'}
+                                            ? '낙찰됨'
+                                            : '진행중'}
                                     </Badge>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <p>Passengers: {trip.paxCount}</p>
-                                <p>Bus Size: {trip.busSize}</p>
+                                <p>승객 수: {trip.paxCount}</p>
+                                <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
                                 <p className="mt-2 font-semibold">
-                                    Bids: {trip.bids?.length || 0}
+                                    입찰 수: {trip.bids?.length || 0}
                                 </p>
+                                {trip.minBidPrice !== null && (
+                                    <p className="mt-1 text-sm text-blue-600 font-semibold">
+                                        💰 최저 입찰가: ${trip.minBidPrice}
+                                    </p>
+                                )}
                                 {trip.bids && trip.bids.length > 0 && (
                                     <div className="mt-4 space-y-2">
-                                        {trip.bids.map((bid: Bid) => (
-                                            <Card key={bid.id} className="p-3">
-                                                <div className="flex justify-between">
-                                                    <div>
-                                                        <p className="font-semibold">
-                                                            ${bid.price}
-                                                        </p>
-                                                        <p className="text-sm text-gray-600">
-                                                            {bid.note}
-                                                        </p>
-                                                        <p className="text-xs text-gray-500">
-                                                            {bid.bidder.email}
-                                                        </p>
+                                        {trip.bids
+                                            .filter((bid: Bid) => bid.status === 'open')
+                                            .map((bid: Bid) => (
+                                                <Card key={bid.id} className="p-3">
+                                                    <div className="flex justify-between">
+                                                        <div>
+                                                            <p className="font-semibold">
+                                                                ${bid.price}
+                                                            </p>
+                                                            <p className="text-sm text-gray-600">
+                                                                {bid.note || '메모 없음'}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                📧 {bid.bidder.email}
+                                                            </p>
+                                                        </div>
+                                                        <Badge variant="secondary">
+                                                            {bid.status === 'open' ? '진행중' : bid.status === 'awarded' ? '낙찰됨' : bid.status === 'withdrawn' ? '철회됨' : '실패'}
+                                                        </Badge>
                                                     </div>
-                                                    <Badge variant="secondary">
-                                                        {bid.status}
-                                                    </Badge>
-                                                </div>
-                                            </Card>
-                                        ))}
+                                                </Card>
+                                            ))}
                                     </div>
                                 )}
                                 {trip.status === 'open' && (
-                                    <div className="flex gap-2 mt-4">
+                                    <div className="flex gap-2 mt-4 flex-wrap">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => openEditDialog(trip)}
+                                        >
+                                            여정 수정
+                                        </Button>
                                         {trip.bids && trip.bids.length > 0 && (
                                             <Dialog>
                                                 <DialogTrigger asChild>
-                                                    <Button>Award Bid</Button>
+                                                    <Button>입찰 수주</Button>
                                                 </DialogTrigger>
                                                 <DialogContent>
                                                     <DialogHeader>
                                                         <DialogTitle>
-                                                            Award Bid
+                                                            입찰 수주
                                                         </DialogTitle>
                                                     </DialogHeader>
                                                     <Select
@@ -331,32 +509,38 @@ export default function PassengerDashboard() {
                                                         }
                                                     >
                                                         <SelectTrigger>
-                                                            <SelectValue placeholder="Select a bid" />
+                                                            <SelectValue placeholder="입찰을 선택하세요" />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {trip.bids.map(
-                                                                (bid: Bid) => (
-                                                                    <SelectItem
-                                                                        key={
-                                                                            bid.id
-                                                                        }
-                                                                        value={
-                                                                            bid.id
-                                                                        }
-                                                                    >
-                                                                        $
-                                                                        {
-                                                                            bid.price
-                                                                        }{' '}
-                                                                        -{' '}
-                                                                        {
-                                                                            bid
-                                                                                .bidder
-                                                                                .email
-                                                                        }
-                                                                    </SelectItem>
+                                                            {trip.bids
+                                                                .filter(
+                                                                    (bid: Bid) =>
+                                                                        bid.status ===
+                                                                        'open'
                                                                 )
-                                                            )}
+                                                                .map(
+                                                                    (bid: Bid) => (
+                                                                        <SelectItem
+                                                                            key={
+                                                                                bid.id
+                                                                            }
+                                                                            value={
+                                                                                bid.id
+                                                                            }
+                                                                        >
+                                                                            $
+                                                                            {
+                                                                                bid.price
+                                                                            }{' '}
+                                                                            -{' '}
+                                                                            {
+                                                                                bid
+                                                                                    .bidder
+                                                                                    .email
+                                                                            }
+                                                                        </SelectItem>
+                                                                    )
+                                                                )}
                                                         </SelectContent>
                                                     </Select>
                                                     <Button
@@ -365,7 +549,7 @@ export default function PassengerDashboard() {
                                                         }
                                                         disabled={!selectedBid}
                                                     >
-                                                        Award
+                                                        수주하기
                                                     </Button>
                                                 </DialogContent>
                                             </Dialog>
@@ -374,7 +558,7 @@ export default function PassengerDashboard() {
                                             variant="destructive"
                                             onClick={() => cancelTrip(trip.id)}
                                         >
-                                            Cancel Trip
+                                            여정 취소
                                         </Button>
                                     </div>
                                 )}

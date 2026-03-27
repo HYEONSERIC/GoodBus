@@ -2,7 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole } from '@prisma/client';
+import { UserRole, NotificationType } from '@prisma/client';
+import { sendBidReceivedEmail } from '../utils/email';
 
 const router = express.Router();
 
@@ -42,7 +43,16 @@ router.post(
                     note,
                 },
                 include: {
-                    trip: true,
+                    trip: {
+                        include: {
+                            passenger: {
+                                select: {
+                                    id: true,
+                                    email: true,
+                                },
+                            },
+                        },
+                    },
                     bidder: {
                         select: {
                             id: true,
@@ -52,6 +62,27 @@ router.post(
                     },
                 },
             });
+
+            // Create notification for passenger
+            await prisma.notification.create({
+                data: {
+                    userId: bid.trip.passenger.id,
+                    type: NotificationType.BID_RECEIVED,
+                    title: 'New Bid Received',
+                    message: `You received a new bid of $${price} from ${bid.bidder.email} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
+                    tripId: tripId,
+                    bidId: bid.id,
+                },
+            });
+
+            // Send email to passenger
+            sendBidReceivedEmail(
+                bid.trip.passenger.email,
+                bid.trip.origin,
+                bid.trip.destination,
+                Number(price),
+                bid.bidder.email
+            );
 
             res.status(201).json({ bid });
         } catch (error) {

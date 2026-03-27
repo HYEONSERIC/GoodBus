@@ -44,6 +44,7 @@ model User {
   
   tripsAsPassenger Trip[] @relation("PassengerTrips")
   bids            Bid[]
+  notifications   Notification[] @relation("UserNotifications")
 }
 
 model Trip {
@@ -76,3 +77,28 @@ model Bid {
   @@index([bidderId])
 }
 
+enum NotificationType {
+  BID_RECEIVED
+  BID_AWARDED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  tripId    String?
+  bidId     String?
+  createdAt DateTime         @default(now())
+  
+  @@index([userId])
+  @@index([read])
+}
+
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./erd.svg" 
+}

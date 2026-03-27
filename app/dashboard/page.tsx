@@ -43,10 +43,10 @@ export default function DashboardPage() {
     };
 
     if (loading) {
-        return <div className="p-8">Loading...</div>;
+        return <div className="p-8">로딩 중...</div>;
     }
 
     if (!user) return null;
 
-    return <div className="p-8">Redirecting...</div>;
+    return <div className="p-8">리다이렉팅 중...</div>;
 }

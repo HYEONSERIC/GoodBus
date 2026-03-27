@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { authAPI, tripsAPI, bidsAPI } from '@/lib/api';
+import { Notifications } from '@/components/Notifications';
 import {
     Dialog,
     DialogContent,
@@ -123,7 +124,7 @@ export default function CompanyDashboard() {
 
     async function createBid(tripId: string) {
         if (bidData.price <= 0) {
-            alert('Please enter a valid price (positive numbers only)');
+            alert('올바른 가격을 입력해주세요 (양수만 가능)');
             return;
         }
 
@@ -133,12 +134,12 @@ export default function CompanyDashboard() {
             loadData();
         } catch (error) {
             console.error('Error creating bid:', error);
-            alert('Failed to create bid');
+            alert('입찰 생성에 실패했습니다');
         }
     }
 
     async function handleWithdrawBid(trip: Trip) {
-        if (!confirm('Are you sure you want to withdraw this bid?')) {
+        if (!confirm('이 입찰을 철회하시겠습니까?')) {
             return;
         }
 
@@ -152,7 +153,7 @@ export default function CompanyDashboard() {
             loadData();
         } catch (error) {
             console.error('Error withdrawing bid:', error);
-            alert('Failed to withdraw bid');
+            alert('입찰 철회에 실패했습니다');
         }
     }
 
@@ -160,11 +161,12 @@ export default function CompanyDashboard() {
         <div className="min-h-screen bg-gray-50 p-8">
             <div className="max-w-6xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">Bus Company Dashboard</h1>
+                    <h1 className="text-3xl font-bold">버스 회사 대시보드</h1>
                     <div className="flex gap-4 items-center">
+                        <Notifications />
                         <span className="text-gray-600">{user?.email}</span>
                         <Button onClick={handleLogout} variant="outline">
-                            Logout
+                            로그아웃
                         </Button>
                     </div>
                 </div>
@@ -178,14 +180,14 @@ export default function CompanyDashboard() {
                         }
                         className="w-full sm:w-auto"
                     >
-                        Available Trips
+                        가능한 여정
                     </Button>
                     <Button
                         onClick={() => setActiveTab('myBids')}
                         variant={activeTab === 'myBids' ? 'default' : 'outline'}
                         className="w-full sm:w-auto"
                     >
-                        My Bids & Awards
+                        내 입찰 및 낙찰
                     </Button>
                 </div>
 
@@ -193,7 +195,7 @@ export default function CompanyDashboard() {
                     <>
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold mb-4">
-                                Awarded Trips
+                                낙찰된 여정
                             </h2>
                             {awardedTrips.length > 0 ? (
                                 <div className="grid gap-6">
@@ -227,21 +229,21 @@ export default function CompanyDashboard() {
                                                             </p>
                                                         </div>
                                                         <Badge className="bg-green-500">
-                                                            Awarded
+                                                            낙찰됨
                                                         </Badge>
                                                     </div>
                                                 </CardHeader>
                                                 <CardContent>
                                                     <p>
-                                                        Passengers: {trip.paxCount}
+                                                        승객 수: {trip.paxCount}
                                                     </p>
                                                     <p>
-                                                        Bus Size:{' '}
-                                                        {trip.busSize}
+                                                        버스 크기:{' '}
+                                                        {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}
                                                     </p>
                                                     <div className="mt-4 p-3 bg-green-100 rounded">
                                                         <p className="font-bold text-green-800">
-                                                            🎉 Awarded: $
+                                                            🎉 낙찰가: $
                                                             {myBid?.price}
                                                         </p>
                                                         {myBid?.note && (
@@ -257,14 +259,14 @@ export default function CompanyDashboard() {
                                 </div>
                             ) : (
                                 <p className="text-gray-500 text-center py-8">
-                                    No awarded trips
+                                    낙찰된 여정이 없습니다
                                 </p>
                             )}
                         </div>
 
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold mb-4">
-                                My Bids
+                                내 입찰
                             </h2>
                             {myBids.length > 0 ? (
                                 <div className="grid gap-6">
@@ -294,20 +296,20 @@ export default function CompanyDashboard() {
                                                                 )}
                                                             </p>
                                                         </div>
-                                                        <Badge>Bid Placed</Badge>
+                                                        <Badge>입찰 완료</Badge>
                                                     </div>
                                                 </CardHeader>
                                                 <CardContent>
                                                     <p>
-                                                        Passengers: {trip.paxCount}
+                                                        승객 수: {trip.paxCount}
                                                     </p>
                                                     <p>
-                                                        Bus Size:{' '}
-                                                        {trip.busSize}
+                                                        버스 크기:{' '}
+                                                        {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}
                                                     </p>
                                                     <div className="mt-4 p-3 bg-green-50 rounded">
                                                         <p className="font-semibold text-green-700">
-                                                            My Bid: $
+                                                            내 입찰가: $
                                                             {myBid?.price}
                                                         </p>
                                                         {myBid?.note && (
@@ -325,7 +327,7 @@ export default function CompanyDashboard() {
                                                             )
                                                         }
                                                     >
-                                                        Withdraw Bid
+                                                        입찰 철회
                                                     </Button>
                                                 </CardContent>
                                             </Card>
@@ -334,7 +336,7 @@ export default function CompanyDashboard() {
                                 </div>
                             ) : (
                                 <p className="text-gray-500 text-center py-8">
-                                    No bids placed
+                                    입찰한 내역이 없습니다
                                 </p>
                             )}
                         </div>
@@ -344,7 +346,7 @@ export default function CompanyDashboard() {
                 {activeTab === 'available' && (
                     <div>
                         <h2 className="text-xl font-bold mb-4">
-                            Available Trips
+                            가능한 여정
                         </h2>
                         <div className="grid gap-6">
                             {trips.map((trip) => (
@@ -363,30 +365,30 @@ export default function CompanyDashboard() {
                                                     )}
                                                 </p>
                                             </div>
-                                            <Badge>{trip.status}</Badge>
+                                            <Badge>{trip.status === 'open' ? '진행중' : trip.status === 'awarded' ? '낙찰됨' : '취소됨'}</Badge>
                                         </div>
                                     </CardHeader>
                                     <CardContent>
-                                        <p>Passengers: {trip.paxCount}</p>
-                                        <p>Bus Size: {trip.busSize}</p>
+                                        <p>승객 수: {trip.paxCount}</p>
+                                        <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
                                         <Dialog>
                                             <DialogTrigger asChild>
                                                 <Button className="mt-4">
-                                                    Place Bid
+                                                    입찰하기
                                                 </Button>
                                             </DialogTrigger>
                                             <DialogContent>
                                                 <DialogHeader>
                                                     <DialogTitle>
-                                                        Place Bid
+                                                        입찰하기
                                                     </DialogTitle>
                                                     <DialogDescription>
-                                                        Enter bid information
+                                                        입찰 정보를 입력하세요
                                                     </DialogDescription>
                                                 </DialogHeader>
                                                 <div className="space-y-4 py-4">
                                                     <div>
-                                                        <Label>Price ($)</Label>
+                                                        <Label>가격 ($)</Label>
                                                         <Input
                                                             type="number"
                                                             value={
@@ -418,7 +420,7 @@ export default function CompanyDashboard() {
                                                     </div>
                                                     <div>
                                                         <Label>
-                                                            Note (Optional)
+                                                            메모 (선택사항)
                                                         </Label>
                                                         <Textarea
                                                             value={bidData.note}
@@ -440,7 +442,7 @@ export default function CompanyDashboard() {
                                                             bidData.price <= 0
                                                         }
                                                     >
-                                                        Submit Bid
+                                                        입찰 제출
                                                     </Button>
                                                 </div>
                                             </DialogContent>

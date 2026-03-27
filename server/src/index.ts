@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import tripsRoutes from './routes/trips';
 import bidsRoutes from './routes/bids';
+import notificationsRoutes from './routes/notifications';
 
 dotenv.config();
 
@@ -28,6 +29,7 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/trips', tripsRoutes);
 app.use('/bids', bidsRoutes);
+app.use('/notifications', notificationsRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
