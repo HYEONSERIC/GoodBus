@@ -1,6 +1,8 @@
 const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 
-    process.env.NEXT_PUBLIC_API_URL || 
+    // Use same-origin proxy in production/deployments (avoids CORS + cookie issues)
+    (typeof window !== 'undefined' ? '/api' : '') ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
     'http://localhost:4000';
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
