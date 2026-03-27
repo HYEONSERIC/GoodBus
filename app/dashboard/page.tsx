@@ -25,11 +25,13 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (!loading && user) {
-            const rolePath = {
+            const rolePaths: Record<string, string> = {
                 Passenger: '/dashboard/passenger',
                 Driver: '/dashboard/driver',
                 BusCompany: '/dashboard/company',
-            }[user.role];
+            };
+
+            const rolePath = rolePaths[user.role];
 
             if (rolePath) {
                 router.push(rolePath);
