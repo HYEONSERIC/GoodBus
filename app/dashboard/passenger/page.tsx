@@ -64,6 +64,15 @@ export default function PassengerDashboard() {
     const [user, setUser] = useState<any>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [openDialog, setOpenDialog] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState<'quote' | 'booking' | 'chat' | 'support'>(
+        'quote'
+    );
+    const [chatOpen, setChatOpen] = useState(false);
+    const [supportOpen, setSupportOpen] = useState(false);
+    const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
+        'menu'
+    );
     const [newTrip, setNewTrip] = useState({
         origin: '',
         destination: '',
@@ -210,19 +219,137 @@ export default function PassengerDashboard() {
         }
     }
 
+    const awardedTrips = trips.filter((trip) => trip.status === 'awarded');
+
     return (
-        <div className="min-h-screen bg-gray-50 p-8">
-            <div className="max-w-6xl mx-auto">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">승객 대시보드</h1>
-                    <div className="flex gap-4 items-center">
+        <div className="min-h-screen bg-gray-50">
+            <div className="border-b bg-white">
+                <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={() => setMenuOpen(true)}
+                        >
+                            메뉴
+                        </Button>
+                        <span className="text-lg font-semibold">GOODBUS</span>
+                    </div>
+                    <div className="flex items-center gap-3">
                         <Notifications />
-                        <span className="text-gray-600">{user?.email}</span>
-                        <Button onClick={handleLogout} variant="outline">
-                            로그아웃
+                        <span className="text-sm text-gray-600">
+                            {user?.email}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {menuOpen && (
+                <div className="fixed inset-0 z-40 bg-black/30">
+                    <div className="absolute left-0 top-0 h-full w-72 bg-white shadow-lg p-6 space-y-6">
+                        <div>
+                            <p className="text-lg font-semibold">
+                                {user?.email}
+                            </p>
+                            <p className="text-sm text-gray-500">Passenger</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                    setActiveTab('quote');
+                                    setMenuOpen(false);
+                                }}
+                            >
+                                견적
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                    setActiveTab('booking');
+                                    setMenuOpen(false);
+                                }}
+                            >
+                                예약
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                    setSupportOpen(true);
+                                    setSupportStep('menu');
+                                    setMenuOpen(false);
+                                }}
+                            >
+                                문의하기
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={handleLogout}
+                            >
+                                로그아웃
+                            </Button>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            className="w-full"
+                            onClick={() => setMenuOpen(false)}
+                        >
+                            닫기
                         </Button>
                     </div>
                 </div>
+            )}
+
+            <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm text-gray-500">
+                                회원등급
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-lg font-semibold">
+                            일반회원
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm text-gray-500">
+                                적립금
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-lg font-semibold">
+                            0원
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm text-gray-500">
+                                추천 혜택
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-lg font-semibold">
+                            월 100만원
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>굿버스에서 가격비교 하고 적립금도 받아가세요.</CardTitle>
+                        <CardDescription>
+                            원하는 여정을 등록하면 기사/업체가 입찰을 제안합니다.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button onClick={() => setOpenDialog(true)}>
+                            견적 등록하기
+                        </Button>
+                    </CardContent>
+                </Card>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                     <DialogTrigger asChild>
@@ -417,12 +544,175 @@ export default function PassengerDashboard() {
                     </DialogContent>
                 </Dialog>
 
-                <div className="mt-8 grid gap-6">
-                    {trips.map((trip) => (
-                        <Card key={trip.id}>
-                            <CardHeader>
-                                <div className="flex justify-between">
-                                    <div>
+                {activeTab === 'quote' && (
+                    <div className="grid gap-6">
+                        {trips.map((trip) => (
+                            <Card key={trip.id}>
+                                <CardHeader>
+                                    <div className="flex justify-between">
+                                        <div>
+                                            <CardTitle>
+                                                {trip.origin} → {trip.destination}
+                                            </CardTitle>
+                                            <CardDescription>
+                                                {format(
+                                                    new Date(trip.dateTime),
+                                                    'PPP p'
+                                                )}
+                                            </CardDescription>
+                                        </div>
+                                        <Badge
+                                            variant={
+                                                trip.status === 'awarded'
+                                                    ? 'default'
+                                                    : 'secondary'
+                                            }
+                                        >
+                                            {trip.status === 'awarded'
+                                                ? '낙찰됨'
+                                                : '진행중'}
+                                        </Badge>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <p>승객 수: {trip.paxCount}</p>
+                                    <p>
+                                        버스 크기:{' '}
+                                        {trip.busSize === 'small'
+                                            ? '소형'
+                                            : trip.busSize === 'medium'
+                                            ? '중형'
+                                            : '대형'}
+                                    </p>
+                                    <p className="mt-2 font-semibold">
+                                        입찰 수: {trip.bids?.length || 0}
+                                    </p>
+                                    {trip.minBidPrice !== null && (
+                                        <p className="mt-1 text-sm text-blue-600 font-semibold">
+                                            💰 최저 입찰가: ${trip.minBidPrice}
+                                        </p>
+                                    )}
+                                    {trip.bids && trip.bids.length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                            {trip.bids
+                                                .filter(
+                                                    (bid: Bid) =>
+                                                        bid.status === 'open'
+                                                )
+                                                .map((bid: Bid) => (
+                                                    <Card key={bid.id} className="p-3">
+                                                        <div className="flex justify-between">
+                                                            <div>
+                                                                <p className="font-semibold">
+                                                                    ${bid.price}
+                                                                </p>
+                                                                <p className="text-sm text-gray-600">
+                                                                    {bid.note ||
+                                                                        '메모 없음'}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mt-1">
+                                                                    📧{' '}
+                                                                    {bid.bidder.email}
+                                                                </p>
+                                                            </div>
+                                                            <Badge variant="secondary">
+                                                                {bid.status === 'open'
+                                                                    ? '진행중'
+                                                                    : bid.status ===
+                                                                      'awarded'
+                                                                    ? '낙찰됨'
+                                                                    : bid.status ===
+                                                                      'withdrawn'
+                                                                    ? '철회됨'
+                                                                    : '실패'}
+                                                            </Badge>
+                                                        </div>
+                                                    </Card>
+                                                ))}
+                                        </div>
+                                    )}
+                                    {trip.status === 'open' && (
+                                        <div className="flex gap-2 mt-4 flex-wrap">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => openEditDialog(trip)}
+                                            >
+                                                여정 수정
+                                            </Button>
+                                            {trip.bids && trip.bids.length > 0 && (
+                                                <Dialog>
+                                                    <DialogTrigger asChild>
+                                                        <Button>입찰 수주</Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent>
+                                                        <DialogHeader>
+                                                            <DialogTitle>
+                                                                입찰 수주
+                                                            </DialogTitle>
+                                                        </DialogHeader>
+                                                        <Select
+                                                            value={selectedBid}
+                                                            onValueChange={setSelectedBid}
+                                                        >
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="입찰을 선택하세요" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {trip.bids
+                                                                    .filter(
+                                                                        (bid: Bid) =>
+                                                                            bid.status ===
+                                                                            'open'
+                                                                    )
+                                                                    .map(
+                                                                        (bid: Bid) => (
+                                                                            <SelectItem
+                                                                                key={bid.id}
+                                                                                value={bid.id}
+                                                                            >
+                                                                                ${bid.price}
+                                                                                {' - '}
+                                                                                {bid.bidder.email}
+                                                                            </SelectItem>
+                                                                        )
+                                                                    )}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Button
+                                                            onClick={() => awardTrip(trip.id)}
+                                                            disabled={!selectedBid}
+                                                        >
+                                                            수주하기
+                                                        </Button>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            )}
+                                            <Button
+                                                variant="destructive"
+                                                onClick={() => cancelTrip(trip.id)}
+                                            >
+                                                여정 취소
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                )}
+
+                {activeTab === 'booking' && (
+                    <div className="grid gap-6">
+                        {awardedTrips.length === 0 ? (
+                            <Card>
+                                <CardContent className="p-6 text-sm text-gray-600">
+                                    아직 낙찰된 여정이 없습니다.
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            awardedTrips.map((trip) => (
+                                <Card key={trip.id}>
+                                    <CardHeader>
                                         <CardTitle>
                                             {trip.origin} → {trip.destination}
                                         </CardTitle>
@@ -432,141 +722,167 @@ export default function PassengerDashboard() {
                                                 'PPP p'
                                             )}
                                         </CardDescription>
-                                    </div>
-                                    <Badge
-                                        variant={
-                                            trip.status === 'awarded'
-                                                ? 'default'
-                                                : 'secondary'
-                                        }
-                                    >
-                                        {trip.status === 'awarded'
-                                            ? '낙찰됨'
-                                            : '진행중'}
-                                    </Badge>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <p>승객 수: {trip.paxCount}</p>
-                                <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
-                                <p className="mt-2 font-semibold">
-                                    입찰 수: {trip.bids?.length || 0}
-                                </p>
-                                {trip.minBidPrice !== null && (
-                                    <p className="mt-1 text-sm text-blue-600 font-semibold">
-                                        💰 최저 입찰가: ${trip.minBidPrice}
-                                    </p>
-                                )}
-                                {trip.bids && trip.bids.length > 0 && (
-                                    <div className="mt-4 space-y-2">
-                                        {trip.bids
-                                            .filter((bid: Bid) => bid.status === 'open')
-                                            .map((bid: Bid) => (
-                                                <Card key={bid.id} className="p-3">
-                                                    <div className="flex justify-between">
-                                                        <div>
-                                                            <p className="font-semibold">
-                                                                ${bid.price}
-                                                            </p>
-                                                            <p className="text-sm text-gray-600">
-                                                                {bid.note || '메모 없음'}
-                                                            </p>
-                                                            <p className="text-xs text-gray-500 mt-1">
-                                                                📧 {bid.bidder.email}
-                                                            </p>
-                                                        </div>
-                                                        <Badge variant="secondary">
-                                                            {bid.status === 'open' ? '진행중' : bid.status === 'awarded' ? '낙찰됨' : bid.status === 'withdrawn' ? '철회됨' : '실패'}
-                                                        </Badge>
-                                                    </div>
-                                                </Card>
-                                            ))}
-                                    </div>
-                                )}
-                                {trip.status === 'open' && (
-                                    <div className="flex gap-2 mt-4 flex-wrap">
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm text-gray-600">
+                                            낙찰된 여정입니다. 기사와 채팅으로
+                                            일정을 확인하세요.
+                                        </p>
                                         <Button
-                                            variant="outline"
-                                            onClick={() => openEditDialog(trip)}
+                                            className="mt-3"
+                                            onClick={() => setChatOpen(true)}
                                         >
-                                            여정 수정
+                                            기사와 채팅하기
                                         </Button>
-                                        {trip.bids && trip.bids.length > 0 && (
-                                            <Dialog>
-                                                <DialogTrigger asChild>
-                                                    <Button>입찰 수주</Button>
-                                                </DialogTrigger>
-                                                <DialogContent>
-                                                    <DialogHeader>
-                                                        <DialogTitle>
-                                                            입찰 수주
-                                                        </DialogTitle>
-                                                    </DialogHeader>
-                                                    <Select
-                                                        value={selectedBid}
-                                                        onValueChange={
-                                                            setSelectedBid
-                                                        }
-                                                    >
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="입찰을 선택하세요" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {trip.bids
-                                                                .filter(
-                                                                    (bid: Bid) =>
-                                                                        bid.status ===
-                                                                        'open'
-                                                                )
-                                                                .map(
-                                                                    (bid: Bid) => (
-                                                                        <SelectItem
-                                                                            key={
-                                                                                bid.id
-                                                                            }
-                                                                            value={
-                                                                                bid.id
-                                                                            }
-                                                                        >
-                                                                            $
-                                                                            {
-                                                                                bid.price
-                                                                            }{' '}
-                                                                            -{' '}
-                                                                            {
-                                                                                bid
-                                                                                    .bidder
-                                                                                    .email
-                                                                            }
-                                                                        </SelectItem>
-                                                                    )
-                                                                )}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Button
-                                                        onClick={() =>
-                                                            awardTrip(trip.id)
-                                                        }
-                                                        disabled={!selectedBid}
-                                                    >
-                                                        수주하기
-                                                    </Button>
-                                                </DialogContent>
-                                            </Dialog>
-                                        )}
-                                        <Button
-                                            variant="destructive"
-                                            onClick={() => cancelTrip(trip.id)}
-                                        >
-                                            여정 취소
-                                        </Button>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    ))}
+                                    </CardContent>
+                                </Card>
+                            ))
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'chat' && (
+                    <Card>
+                        <CardContent className="p-6 space-y-4">
+                            <p className="text-sm text-gray-600">
+                                낙찰된 버스기사와의 채팅 영역입니다. 실제
+                                채팅 기능은 향후 실시간 기능과 함께
+                                추가됩니다.
+                            </p>
+                            <Button onClick={() => setChatOpen(true)}>
+                                채팅 열기
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {activeTab === 'support' && (
+                    <Card>
+                        <CardContent className="p-6 space-y-4">
+                            <p className="text-sm text-gray-600">
+                                문의는 버튼을 눌러 진행해주세요. 상담 기록은
+                                추후 저장될 수 있습니다.
+                            </p>
+                            <Button
+                                onClick={() => {
+                                    setSupportOpen(true);
+                                    setSupportStep('menu');
+                                }}
+                            >
+                                문의하기
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
+                <div className="max-w-6xl mx-auto px-6 py-3 flex justify-between">
+                    <Button
+                        variant={activeTab === 'quote' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('quote')}
+                    >
+                        견적
+                    </Button>
+                    <Button
+                        variant={activeTab === 'booking' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('booking')}
+                    >
+                        예약
+                    </Button>
+                    <Button
+                        variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('chat')}
+                    >
+                        채팅
+                    </Button>
+                    <Button
+                        variant={activeTab === 'support' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('support')}
+                    >
+                        문의
+                    </Button>
                 </div>
             </div>
+
+            <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>채팅</DialogTitle>
+                        <DialogDescription>
+                            낙찰된 기사와 연결되는 대화창입니다.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm text-gray-700">
+                        <div className="rounded border p-3">
+                            안녕하세요. 일정 확인을 위해 연락드립니다.
+                        </div>
+                        <div className="rounded border p-3">
+                            기사님과 시간 조율 후 확정됩니다.
+                        </div>
+                        <Button className="w-full">새 문의하기</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>문의하기</DialogTitle>
+                        <DialogDescription>
+                            문의 유형을 선택해주세요.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {supportStep === 'menu' && (
+                        <div className="space-y-3">
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setSupportStep('form')}
+                            >
+                                견적 금액 문의
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setSupportStep('form')}
+                            >
+                                예약 진행 문의
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setSupportStep('form')}
+                            >
+                                기타 문의
+                            </Button>
+                        </div>
+                    )}
+                    {supportStep === 'form' && (
+                        <div className="space-y-4">
+                            <div>
+                                <Label>문의 내용</Label>
+                                <Textarea placeholder="문의 내용을 입력하세요" />
+                            </div>
+                            <Button onClick={() => setSupportStep('done')}>
+                                문의하기
+                            </Button>
+                        </div>
+                    )}
+                    {supportStep === 'done' && (
+                        <div className="space-y-4 text-sm text-gray-600">
+                            문의가 접수되었습니다. 빠르게 답변드리겠습니다.
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => setSupportOpen(false)}
+                            >
+                                닫기
+                            </Button>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

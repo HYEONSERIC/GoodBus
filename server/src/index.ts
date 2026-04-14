@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import tripsRoutes from './routes/trips';
 import bidsRoutes from './routes/bids';
 import notificationsRoutes from './routes/notifications';
+import adminRoutes from './routes/admin';
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ app.use('/auth', authRoutes);
 app.use('/trips', tripsRoutes);
 app.use('/bids', bidsRoutes);
 app.use('/notifications', notificationsRoutes);
+app.use('/admin', adminRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

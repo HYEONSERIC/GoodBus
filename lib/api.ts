@@ -118,3 +118,25 @@ export const notificationsAPI = {
             method: 'PATCH',
         }),
 };
+
+export const adminAPI = {
+    getOverview: async () => fetchAPI('/admin/overview'),
+    getUsers: async (params?: {
+        role?: string;
+        status?: string;
+        search?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/users${query}`);
+    },
+    updateUserStatus: async (id: string, status: 'Active' | 'Blocked') =>
+        fetchAPI(`/admin/users/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        }),
+    getUserDetails: async (id: string) => fetchAPI(`/admin/users/${id}`),
+};
