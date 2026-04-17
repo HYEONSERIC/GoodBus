@@ -60,18 +60,32 @@ interface Bid {
     };
 }
 
+declare global {
+    interface Window {
+        kakao?: any;
+        __KAKAO_JS_KEY?: string;
+    }
+}
+
+interface KakaoPlace {
+    id: string;
+    place_name: string;
+    address_name: string;
+    road_address_name: string;
+}
+
 export default function PassengerDashboard() {
     const [user, setUser] = useState<any>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [openDialog, setOpenDialog] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<'quote' | 'booking' | 'chat' | 'support'>(
-        'quote'
-    );
+    const [activeTab, setActiveTab] = useState<
+        'quote' | 'booking' | 'chat' | 'support'
+    >('quote');
     const [chatOpen, setChatOpen] = useState(false);
     const [supportOpen, setSupportOpen] = useState(false);
     const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
-        'menu'
+        'menu',
     );
     const [newTrip, setNewTrip] = useState({
         origin: '',
@@ -91,9 +105,78 @@ export default function PassengerDashboard() {
         paxCount: 1,
         busSize: 'small' as 'small' | 'medium' | 'large',
     });
+    const [kakaoReady, setKakaoReady] = useState(false);
+    const [kakaoLoadError, setKakaoLoadError] = useState('');
+    const [kakaoKeyMissing, setKakaoKeyMissing] = useState(false);
+    const [kakaoKeyPreview, setKakaoKeyPreview] = useState('');
+    const [kakaoStatusMessage, setKakaoStatusMessage] = useState('');
+    const [originResults, setOriginResults] = useState<KakaoPlace[]>([]);
+    const [destinationResults, setDestinationResults] = useState<KakaoPlace[]>(
+        [],
+    );
 
     useEffect(() => {
         loadData();
+    }, []);
+
+    useEffect(() => {
+        const kakaoKey =
+            process.env.NEXT_PUBLIC_KAKAO_JS_KEY ||
+            process.env.NEXT_PUBLIC_KAKAO_MAPS_KEY ||
+            window.__KAKAO_JS_KEY ||
+            '0e65aead6268e1312dfed1ed972c289d';
+        if (!kakaoKey) {
+            setKakaoKeyMissing(true);
+            return;
+        }
+        setKakaoKeyMissing(false);
+        setKakaoKeyPreview(kakaoKey.slice(-4));
+
+        if (window.kakao?.maps?.services) {
+            setKakaoReady(true);
+            setKakaoStatusMessage('Kakao SDK 준비 완료');
+            return;
+        }
+
+        const handleKakaoReady = () => {
+            if (window.kakao?.maps?.load) {
+                window.kakao.maps.load(() => {
+                    setKakaoReady(true);
+                    setKakaoStatusMessage('Kakao SDK 준비 완료');
+                });
+            } else if (window.kakao?.maps?.services) {
+                setKakaoReady(true);
+                setKakaoStatusMessage('Kakao SDK 준비 완료');
+            }
+        };
+
+        if (window.kakao) {
+            handleKakaoReady();
+            return;
+        }
+
+        const script = document.querySelector<HTMLScriptElement>(
+            'script[src*="dapi.kakao.com/v2/maps/sdk.js"]'
+        );
+
+        if (!script) {
+            setKakaoLoadError('Kakao SDK 로드 실패');
+            return;
+        }
+
+        const handleLoad = () => {
+            setKakaoLoadError('');
+            handleKakaoReady();
+        };
+        const handleError = () => setKakaoLoadError('Kakao SDK 로드 실패');
+
+        script.addEventListener('load', handleLoad);
+        script.addEventListener('error', handleError);
+
+        return () => {
+            script.removeEventListener('load', handleLoad);
+            script.removeEventListener('error', handleError);
+        };
     }, []);
 
     async function loadData() {
@@ -126,6 +209,14 @@ export default function PassengerDashboard() {
 
     async function createTrip() {
         try {
+            if (
+                !newTrip.origin.trim() ||
+                !newTrip.destination.trim() ||
+                !newTrip.dateTime
+            ) {
+                alert('출발지, 도착지, 날짜 및 시간을 입력해주세요');
+                return;
+            }
             await tripsAPI.create({
                 ...newTrip,
                 dateTime: new Date(newTrip.dateTime).toISOString(),
@@ -168,7 +259,7 @@ export default function PassengerDashboard() {
         // Format dateTime for datetime-local input
         const dateTime = new Date(trip.dateTime);
         const formattedDateTime = new Date(
-            dateTime.getTime() - dateTime.getTimezoneOffset() * 60000
+            dateTime.getTime() - dateTime.getTimezoneOffset() * 60000,
         )
             .toISOString()
             .slice(0, 16);
@@ -196,7 +287,7 @@ export default function PassengerDashboard() {
 
         if (
             !confirm(
-                '여정 정보를 수정하면 모든 기존 입찰이 취소됩니다. 계속하시겠습니까?'
+                '여정 정보를 수정하면 모든 기존 입찰이 취소됩니다. 계속하시겠습니까?',
             )
         ) {
             return;
@@ -219,26 +310,58 @@ export default function PassengerDashboard() {
         }
     }
 
+    function searchPlaces(
+        query: string,
+        setResults: (data: KakaoPlace[]) => void,
+    ) {
+        if (!kakaoReady || !window.kakao?.maps?.services || !query.trim()) {
+            setResults([]);
+            if (!query.trim()) {
+                setKakaoStatusMessage('');
+            } else if (!kakaoReady) {
+                setKakaoStatusMessage('Kakao SDK 준비 중');
+            } else {
+                setKakaoStatusMessage('Kakao 서비스가 준비되지 않았습니다');
+            }
+            return;
+        }
+
+        const places = new window.kakao.maps.services.Places();
+        places.keywordSearch(query, (data: KakaoPlace[], status: string) => {
+            if (status === window.kakao.maps.services.Status.OK) {
+                setResults(data.slice(0, 5));
+                setKakaoStatusMessage(`${data.length}건 조회됨`);
+            } else {
+                if (status !== window.kakao.maps.services.Status.ZERO_RESULT) {
+                    console.warn('Kakao search status:', status);
+                }
+                if (status === window.kakao.maps.services.Status.ZERO_RESULT) {
+                    setKakaoStatusMessage('검색 결과 없음');
+                } else {
+                    setKakaoStatusMessage(`검색 오류: ${status}`);
+                }
+                setResults([]);
+            }
+        });
+    }
+
     const awardedTrips = trips.filter((trip) => trip.status === 'awarded');
 
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="border-b bg-white">
-                <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-                    <div className="flex items-center gap-3">
+                <div className="max-w-6xl mx-auto relative flex items-center justify-center px-4 sm:px-6 py-4">
+                    <div className="absolute left-4 sm:left-6">
                         <Button
                             variant="outline"
                             onClick={() => setMenuOpen(true)}
                         >
                             메뉴
                         </Button>
-                        <span className="text-lg font-semibold">GOODBUS</span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <span className="text-lg font-semibold">GOODBUS</span>
+                    <div className="absolute right-4 sm:right-6 flex items-center gap-3">
                         <Notifications />
-                        <span className="text-sm text-gray-600">
-                            {user?.email}
-                        </span>
                     </div>
                 </div>
             </div>
@@ -303,7 +426,7 @@ export default function PassengerDashboard() {
                 </div>
             )}
 
-            <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
                     <Card>
                         <CardHeader>
@@ -338,13 +461,16 @@ export default function PassengerDashboard() {
                 </div>
 
                 <Card>
-                    <CardHeader>
-                        <CardTitle>굿버스에서 가격비교 하고 적립금도 받아가세요.</CardTitle>
+                    <CardHeader className="text-center">
+                        <CardTitle>
+                            굿버스에서 가격비교 하고 적립금도 받아가세요.
+                        </CardTitle>
                         <CardDescription>
-                            원하는 여정을 등록하면 기사/업체가 입찰을 제안합니다.
+                            원하는 여정을 등록하면 기사/업체가 입찰을
+                            제안합니다.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="flex justify-center">
                         <Button onClick={() => setOpenDialog(true)}>
                             견적 등록하기
                         </Button>
@@ -352,9 +478,6 @@ export default function PassengerDashboard() {
                 </Card>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogTrigger asChild>
-                        <Button>새 여정 만들기</Button>
-                    </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>여정 만들기</DialogTitle>
@@ -365,27 +488,116 @@ export default function PassengerDashboard() {
                         <div className="space-y-4 py-4">
                             <div>
                                 <Label>출발지</Label>
+                                {kakaoKeyMissing && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                        Kakao JS 키가 없습니다. `.env.local`에
+                                        `NEXT_PUBLIC_KAKAO_JS_KEY`를
+                                        설정해주세요.
+                                    </p>
+                                )}
+                                {!kakaoKeyMissing && kakaoKeyPreview && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Kakao JS 키 로드됨 (끝 4자리:{' '}
+                                        {kakaoKeyPreview})
+                                    </p>
+                                )}
+                                {kakaoStatusMessage && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {kakaoStatusMessage}
+                                    </p>
+                                )}
+                                {kakaoLoadError && (
+                                    <p className="text-xs text-red-500 mt-1">
+                                        {kakaoLoadError} - 도메인/키 설정을
+                                        확인해주세요.
+                                    </p>
+                                )}
                                 <Input
                                     value={newTrip.origin}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                        const value = e.target.value;
                                         setNewTrip({
                                             ...newTrip,
-                                            origin: e.target.value,
-                                        })
-                                    }
+                                            origin: value,
+                                        });
+                                        searchPlaces(value, setOriginResults);
+                                    }}
                                 />
+                                {originResults.length > 0 && (
+                                    <div className="mt-2 border rounded-md bg-white shadow-sm">
+                                        {originResults.map((place) => (
+                                            <button
+                                                key={place.id}
+                                                type="button"
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                                onClick={() => {
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        origin:
+                                                            place.road_address_name ||
+                                                            place.address_name ||
+                                                            place.place_name,
+                                                    });
+                                                    setOriginResults([]);
+                                                }}
+                                            >
+                                                <div className="font-medium">
+                                                    {place.place_name}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {place.road_address_name ||
+                                                        place.address_name}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Label>도착지</Label>
                                 <Input
                                     value={newTrip.destination}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                        const value = e.target.value;
                                         setNewTrip({
                                             ...newTrip,
-                                            destination: e.target.value,
-                                        })
-                                    }
+                                            destination: value,
+                                        });
+                                        searchPlaces(
+                                            value,
+                                            setDestinationResults,
+                                        );
+                                    }}
                                 />
+                                {destinationResults.length > 0 && (
+                                    <div className="mt-2 border rounded-md bg-white shadow-sm">
+                                        {destinationResults.map((place) => (
+                                            <button
+                                                key={place.id}
+                                                type="button"
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                                                onClick={() => {
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        destination:
+                                                            place.road_address_name ||
+                                                            place.address_name ||
+                                                            place.place_name,
+                                                    });
+                                                    setDestinationResults([]);
+                                                }}
+                                            >
+                                                <div className="font-medium">
+                                                    {place.place_name}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {place.road_address_name ||
+                                                        place.address_name}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <Label>날짜 및 시간</Label>
@@ -453,7 +665,8 @@ export default function PassengerDashboard() {
                         <DialogHeader>
                             <DialogTitle>여정 수정</DialogTitle>
                             <DialogDescription>
-                                여정 정보를 수정하세요. 모든 기존 입찰이 취소됩니다.
+                                여정 정보를 수정하세요. 모든 기존 입찰이
+                                취소됩니다.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
@@ -552,12 +765,13 @@ export default function PassengerDashboard() {
                                     <div className="flex justify-between">
                                         <div>
                                             <CardTitle>
-                                                {trip.origin} → {trip.destination}
+                                                {trip.origin} →{' '}
+                                                {trip.destination}
                                             </CardTitle>
                                             <CardDescription>
                                                 {format(
                                                     new Date(trip.dateTime),
-                                                    'PPP p'
+                                                    'PPP p',
                                                 )}
                                             </CardDescription>
                                         </div>
@@ -581,8 +795,8 @@ export default function PassengerDashboard() {
                                         {trip.busSize === 'small'
                                             ? '소형'
                                             : trip.busSize === 'medium'
-                                            ? '중형'
-                                            : '대형'}
+                                              ? '중형'
+                                              : '대형'}
                                     </p>
                                     <p className="mt-2 font-semibold">
                                         입찰 수: {trip.bids?.length || 0}
@@ -597,10 +811,13 @@ export default function PassengerDashboard() {
                                             {trip.bids
                                                 .filter(
                                                     (bid: Bid) =>
-                                                        bid.status === 'open'
+                                                        bid.status === 'open',
                                                 )
                                                 .map((bid: Bid) => (
-                                                    <Card key={bid.id} className="p-3">
+                                                    <Card
+                                                        key={bid.id}
+                                                        className="p-3"
+                                                    >
                                                         <div className="flex justify-between">
                                                             <div>
                                                                 <p className="font-semibold">
@@ -612,19 +829,24 @@ export default function PassengerDashboard() {
                                                                 </p>
                                                                 <p className="text-xs text-gray-500 mt-1">
                                                                     📧{' '}
-                                                                    {bid.bidder.email}
+                                                                    {
+                                                                        bid
+                                                                            .bidder
+                                                                            .email
+                                                                    }
                                                                 </p>
                                                             </div>
                                                             <Badge variant="secondary">
-                                                                {bid.status === 'open'
+                                                                {bid.status ===
+                                                                'open'
                                                                     ? '진행중'
                                                                     : bid.status ===
-                                                                      'awarded'
-                                                                    ? '낙찰됨'
-                                                                    : bid.status ===
-                                                                      'withdrawn'
-                                                                    ? '철회됨'
-                                                                    : '실패'}
+                                                                        'awarded'
+                                                                      ? '낙찰됨'
+                                                                      : bid.status ===
+                                                                          'withdrawn'
+                                                                        ? '철회됨'
+                                                                        : '실패'}
                                                             </Badge>
                                                         </div>
                                                     </Card>
@@ -635,61 +857,95 @@ export default function PassengerDashboard() {
                                         <div className="flex gap-2 mt-4 flex-wrap">
                                             <Button
                                                 variant="outline"
-                                                onClick={() => openEditDialog(trip)}
+                                                onClick={() =>
+                                                    openEditDialog(trip)
+                                                }
                                             >
                                                 여정 수정
                                             </Button>
-                                            {trip.bids && trip.bids.length > 0 && (
-                                                <Dialog>
-                                                    <DialogTrigger asChild>
-                                                        <Button>입찰 수주</Button>
-                                                    </DialogTrigger>
-                                                    <DialogContent>
-                                                        <DialogHeader>
-                                                            <DialogTitle>
+                                            {trip.bids &&
+                                                trip.bids.length > 0 && (
+                                                    <Dialog>
+                                                        <DialogTrigger asChild>
+                                                            <Button>
                                                                 입찰 수주
-                                                            </DialogTitle>
-                                                        </DialogHeader>
-                                                        <Select
-                                                            value={selectedBid}
-                                                            onValueChange={setSelectedBid}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="입찰을 선택하세요" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {trip.bids
-                                                                    .filter(
-                                                                        (bid: Bid) =>
-                                                                            bid.status ===
-                                                                            'open'
-                                                                    )
-                                                                    .map(
-                                                                        (bid: Bid) => (
-                                                                            <SelectItem
-                                                                                key={bid.id}
-                                                                                value={bid.id}
-                                                                            >
-                                                                                ${bid.price}
-                                                                                {' - '}
-                                                                                {bid.bidder.email}
-                                                                            </SelectItem>
+                                                            </Button>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogHeader>
+                                                                <DialogTitle>
+                                                                    입찰 수주
+                                                                </DialogTitle>
+                                                            </DialogHeader>
+                                                            <Select
+                                                                value={
+                                                                    selectedBid
+                                                                }
+                                                                onValueChange={
+                                                                    setSelectedBid
+                                                                }
+                                                            >
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="입찰을 선택하세요" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {trip.bids
+                                                                        .filter(
+                                                                            (
+                                                                                bid: Bid,
+                                                                            ) =>
+                                                                                bid.status ===
+                                                                                'open',
                                                                         )
-                                                                    )}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Button
-                                                            onClick={() => awardTrip(trip.id)}
-                                                            disabled={!selectedBid}
-                                                        >
-                                                            수주하기
-                                                        </Button>
-                                                    </DialogContent>
-                                                </Dialog>
-                                            )}
+                                                                        .map(
+                                                                            (
+                                                                                bid: Bid,
+                                                                            ) => (
+                                                                                <SelectItem
+                                                                                    key={
+                                                                                        bid.id
+                                                                                    }
+                                                                                    value={
+                                                                                        bid.id
+                                                                                    }
+                                                                                >
+                                                                                    $
+                                                                                    {
+                                                                                        bid.price
+                                                                                    }
+                                                                                    {
+                                                                                        ' - '
+                                                                                    }
+                                                                                    {
+                                                                                        bid
+                                                                                            .bidder
+                                                                                            .email
+                                                                                    }
+                                                                                </SelectItem>
+                                                                            ),
+                                                                        )}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Button
+                                                                onClick={() =>
+                                                                    awardTrip(
+                                                                        trip.id,
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    !selectedBid
+                                                                }
+                                                            >
+                                                                수주하기
+                                                            </Button>
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                )}
                                             <Button
                                                 variant="destructive"
-                                                onClick={() => cancelTrip(trip.id)}
+                                                onClick={() =>
+                                                    cancelTrip(trip.id)
+                                                }
                                             >
                                                 여정 취소
                                             </Button>
@@ -719,7 +975,7 @@ export default function PassengerDashboard() {
                                         <CardDescription>
                                             {format(
                                                 new Date(trip.dateTime),
-                                                'PPP p'
+                                                'PPP p',
                                             )}
                                         </CardDescription>
                                     </CardHeader>
@@ -745,9 +1001,8 @@ export default function PassengerDashboard() {
                     <Card>
                         <CardContent className="p-6 space-y-4">
                             <p className="text-sm text-gray-600">
-                                낙찰된 버스기사와의 채팅 영역입니다. 실제
-                                채팅 기능은 향후 실시간 기능과 함께
-                                추가됩니다.
+                                낙찰된 버스기사와의 채팅 영역입니다. 실제 채팅
+                                기능은 향후 실시간 기능과 함께 추가됩니다.
                             </p>
                             <Button onClick={() => setChatOpen(true)}>
                                 채팅 열기
@@ -777,28 +1032,32 @@ export default function PassengerDashboard() {
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
-                <div className="max-w-6xl mx-auto px-6 py-3 flex justify-between">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
                     <Button
                         variant={activeTab === 'quote' ? 'default' : 'ghost'}
                         onClick={() => setActiveTab('quote')}
+                        className="text-xs sm:text-sm"
                     >
                         견적
                     </Button>
                     <Button
                         variant={activeTab === 'booking' ? 'default' : 'ghost'}
                         onClick={() => setActiveTab('booking')}
+                        className="text-xs sm:text-sm"
                     >
                         예약
                     </Button>
                     <Button
                         variant={activeTab === 'chat' ? 'default' : 'ghost'}
                         onClick={() => setActiveTab('chat')}
+                        className="text-xs sm:text-sm"
                     >
                         채팅
                     </Button>
                     <Button
                         variant={activeTab === 'support' ? 'default' : 'ghost'}
                         onClick={() => setActiveTab('support')}
+                        className="text-xs sm:text-sm"
                     >
                         문의
                     </Button>

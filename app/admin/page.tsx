@@ -44,6 +44,27 @@ interface AdminUserDetail extends AdminUser {
     };
 }
 
+interface AdminUserActivity {
+    trips: Array<{
+        id: string;
+        origin: string;
+        destination: string;
+        status: string;
+        createdAt: string;
+    }>;
+    bids: Array<{
+        id: string;
+        price: string;
+        status: string;
+        createdAt: string;
+        trip: {
+            id: string;
+            origin: string;
+            destination: string;
+        };
+    }>;
+}
+
 export default function AdminPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -51,13 +72,22 @@ export default function AdminPage() {
     const [error, setError] = useState('');
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+    const [selectedUserActivity, setSelectedUserActivity] =
+        useState<AdminUserActivity | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [adminFormOpen, setAdminFormOpen] = useState(false);
+    const [adminForm, setAdminForm] = useState({
+        email: '',
+        password: '',
+        adminRole: 'CustomerSupport',
+    });
     const [roleFilter, setRoleFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'revenue'>(
-        'overview'
-    );
+    const [activeTab, setActiveTab] = useState<
+        'overview' | 'users' | 'revenue' | 'faq'
+    >('overview');
+    const [adminRole, setAdminRole] = useState<string | null>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -67,6 +97,7 @@ export default function AdminPage() {
                     router.push('/dashboard');
                     return;
                 }
+                setAdminRole(me.user?.adminRole || null);
                 const [overviewData, usersData] = await Promise.all([
                     adminAPI.getOverview(),
                     adminAPI.getUsers(),
@@ -106,12 +137,39 @@ export default function AdminPage() {
     const loadUserDetails = async (userId: string) => {
         setDetailLoading(true);
         try {
-            const data = await adminAPI.getUserDetails(userId);
-            setSelectedUser(data.user);
+            const [detailData, activityData] = await Promise.all([
+                adminAPI.getUserDetails(userId),
+                adminAPI.getUserActivity(userId),
+            ]);
+            setSelectedUser(detailData.user);
+            setSelectedUserActivity(activityData);
         } catch (err: any) {
             setError(err.message || 'Failed to load user details');
         } finally {
             setDetailLoading(false);
+        }
+    };
+
+    const handleCreateAdmin = async () => {
+        if (!adminForm.email || !adminForm.password) {
+            setError('관리자 이메일과 비밀번호를 입력하세요.');
+            return;
+        }
+        try {
+            await adminAPI.createAdmin({
+                email: adminForm.email,
+                password: adminForm.password,
+                adminRole: adminForm.adminRole as
+                    | 'Super'
+                    | 'CustomerSupport'
+                    | 'Operations'
+                    | 'Finance',
+            });
+            setAdminForm({ email: '', password: '', adminRole: 'CustomerSupport' });
+            setAdminFormOpen(false);
+            await handleFilter();
+        } catch (err: any) {
+            setError(err.message || '관리자 생성에 실패했습니다.');
         }
     };
 
@@ -152,11 +210,19 @@ export default function AdminPage() {
                 >
                     사용자
                 </Button>
+                {adminRole !== 'CustomerSupport' && (
+                    <Button
+                        variant={activeTab === 'revenue' ? 'default' : 'outline'}
+                        onClick={() => setActiveTab('revenue')}
+                    >
+                        매출 (예정)
+                    </Button>
+                )}
                 <Button
-                    variant={activeTab === 'revenue' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('revenue')}
+                    variant={activeTab === 'faq' ? 'default' : 'outline'}
+                    onClick={() => setActiveTab('faq')}
                 >
-                    매출 (예정)
+                    FAQ/문의
                 </Button>
             </div>
 
@@ -295,11 +361,12 @@ export default function AdminPage() {
                                             className="py-2 pr-4"
                                             onClick={(e) => e.stopPropagation()}
                                         >
-                                            {user.role === 'Admin' ? (
-                                                <span className="text-xs text-gray-500">
-                                                    보호됨
-                                                </span>
-                                            ) : (
+                                        {user.role === 'Admin' &&
+                                        adminRole !== 'Super' ? (
+                                            <span className="text-xs text-gray-500">
+                                                보호됨
+                                            </span>
+                                        ) : (
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -357,13 +424,142 @@ export default function AdminPage() {
                                     <span className="font-medium">입찰 수:</span>{' '}
                                     {selectedUser._count.bids}
                                 </div>
+                                {selectedUserActivity && (
+                                    <>
+                                        <div className="pt-2">
+                                            <span className="font-medium">
+                                                최근 여정
+                                            </span>
+                                            <div className="mt-2 space-y-2">
+                                                {selectedUserActivity.trips.length ===
+                                                0 ? (
+                                                    <p className="text-xs text-gray-500">
+                                                        여정 기록이 없습니다.
+                                                    </p>
+                                                ) : (
+                                                    selectedUserActivity.trips.map(
+                                                        (trip) => (
+                                                            <div
+                                                                key={trip.id}
+                                                                className="rounded border p-2 text-xs"
+                                                            >
+                                                                {trip.origin} →{' '}
+                                                                {trip.destination} (
+                                                                {trip.status})
+                                                            </div>
+                                                        )
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="pt-2">
+                                            <span className="font-medium">
+                                                최근 입찰
+                                            </span>
+                                            <div className="mt-2 space-y-2">
+                                                {selectedUserActivity.bids.length ===
+                                                0 ? (
+                                                    <p className="text-xs text-gray-500">
+                                                        입찰 기록이 없습니다.
+                                                    </p>
+                                                ) : (
+                                                    selectedUserActivity.bids.map(
+                                                        (bid) => (
+                                                            <div
+                                                                key={bid.id}
+                                                                className="rounded border p-2 text-xs"
+                                                            >
+                                                                {bid.trip.origin} →{' '}
+                                                                {bid.trip.destination} /
+                                                                {Number(
+                                                                    bid.price
+                                                                ).toLocaleString()}
+                                                                원 ({bid.status})
+                                                            </div>
+                                                        )
+                                                    )
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
+
+                    {adminRole === 'Super' && (
+                        <div className="rounded-lg border p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold">
+                                    관리자 계정 생성
+                                </h3>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setAdminFormOpen((prev) => !prev)}
+                                >
+                                    {adminFormOpen ? '닫기' : '열기'}
+                                </Button>
+                            </div>
+                            {adminFormOpen && (
+                                <div className="space-y-3">
+                                    <div>
+                                        <Label>이메일</Label>
+                                        <Input
+                                            value={adminForm.email}
+                                            onChange={(e) =>
+                                                setAdminForm((prev) => ({
+                                                    ...prev,
+                                                    email: e.target.value,
+                                                }))
+                                            }
+                                            placeholder="admin2@example.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>비밀번호</Label>
+                                        <Input
+                                            type="password"
+                                            value={adminForm.password}
+                                            onChange={(e) =>
+                                                setAdminForm((prev) => ({
+                                                    ...prev,
+                                                    password: e.target.value,
+                                                }))
+                                            }
+                                            placeholder="비밀번호"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>관리자 역할</Label>
+                                        <select
+                                            className="border rounded px-2 py-1 w-full"
+                                            value={adminForm.adminRole}
+                                            onChange={(e) =>
+                                                setAdminForm((prev) => ({
+                                                    ...prev,
+                                                    adminRole: e.target.value,
+                                                }))
+                                            }
+                                        >
+                                            <option value="CustomerSupport">
+                                                고객지원
+                                            </option>
+                                            <option value="Operations">운영</option>
+                                            <option value="Finance">재무</option>
+                                        </select>
+                                    </div>
+                                    <Button onClick={handleCreateAdmin}>
+                                        관리자 생성
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
-            {activeTab === 'revenue' && (
+            {activeTab === 'revenue' && adminRole !== 'CustomerSupport' && (
                 <div className="rounded-lg border p-6 space-y-4">
                     <h2 className="text-lg font-semibold">매출 (예정)</h2>
                     <p className="text-sm text-gray-600">
@@ -387,6 +583,27 @@ export default function AdminPage() {
                     </div>
                     <div className="rounded-lg border border-dashed p-6 text-sm text-gray-500">
                         차트 자리: 월별 매출 추이
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'faq' && (
+                <div className="rounded-lg border p-6 space-y-4">
+                    <h2 className="text-lg font-semibold">FAQ / 1:1 문의 (예정)</h2>
+                    <p className="text-sm text-gray-600">
+                        FAQ 업데이트와 1:1 문의 응대를 위한 탭입니다. 문의 유형별
+                        분류, 상태 추적, 답변 히스토리를 관리할 수 있습니다.
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="rounded-lg border p-4 text-sm text-gray-600">
+                            FAQ 관리 (작성/수정/노출 순서)
+                        </div>
+                        <div className="rounded-lg border p-4 text-sm text-gray-600">
+                            1:1 문의 처리 (대기/처리중/완료)
+                        </div>
+                    </div>
+                    <div className="rounded-lg border border-dashed p-6 text-sm text-gray-500">
+                        문의 리스트/상세/답변 UI가 들어올 자리입니다.
                     </div>
                 </div>
             )}

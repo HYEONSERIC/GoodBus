@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,11 +23,33 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const fallbackKakaoKey = "0e65aead6268e1312dfed1ed972c289d";
+  const kakaoJsKey =
+    process.env.NEXT_PUBLIC_KAKAO_JS_KEY ||
+    process.env.NEXT_PUBLIC_KAKAO_MAPS_KEY ||
+    fallbackKakaoKey;
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {kakaoJsKey && (
+          <>
+            <Script
+              id="kakao-js-key"
+              strategy="beforeInteractive"
+              dangerouslySetInnerHTML={{
+                __html: `window.__KAKAO_JS_KEY = "${kakaoJsKey}";`,
+              }}
+            />
+            <Script
+              id="kakao-sdk"
+              src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoJsKey}&libraries=services&autoload=false`}
+              strategy="beforeInteractive"
+            />
+          </>
+        )}
         {children}
       </body>
     </html>

@@ -139,4 +139,14 @@ export const adminAPI = {
             body: JSON.stringify({ status }),
         }),
     getUserDetails: async (id: string) => fetchAPI(`/admin/users/${id}`),
+    getUserActivity: async (id: string) => fetchAPI(`/admin/users/${id}/activity`),
+    createAdmin: async (data: {
+        email: string;
+        password: string;
+        adminRole: 'Super' | 'CustomerSupport' | 'Operations' | 'Finance';
+    }) =>
+        fetchAPI('/admin/admins', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
 };

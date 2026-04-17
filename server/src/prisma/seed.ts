@@ -50,6 +50,7 @@ async function main() {
             passwordHash,
             role: 'Admin',
             status: 'Active',
+            adminRole: 'Super',
         },
     });
 
