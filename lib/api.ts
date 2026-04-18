@@ -118,3 +118,50 @@ export const notificationsAPI = {
             method: 'PATCH',
         }),
 };
+
+export const adminAPI = {
+    getOverview: async () => fetchAPI('/admin/overview'),
+    getUsers: async (params?: {
+        role?: string;
+        status?: string;
+        search?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/users${query}`);
+    },
+    updateUserStatus: async (id: string, status: 'Active' | 'Blocked') =>
+        fetchAPI(`/admin/users/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        }),
+    getUserDetails: async (id: string) => fetchAPI(`/admin/users/${id}`),
+    getUserActivity: async (id: string, take?: number) =>
+        fetchAPI(`/admin/users/${id}/activity${take ? `?take=${take}` : ''}`),
+    createAdmin: async (data: {
+        email: string;
+        password: string;
+        adminRole: 'Super' | 'CustomerSupport' | 'Operations' | 'Finance';
+    }) =>
+        fetchAPI('/admin/admins', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    getBids: async (params?: {
+        search?: string;
+        bidStatus?: string;
+        tripStatus?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/bids${query}`);
+    },
+};

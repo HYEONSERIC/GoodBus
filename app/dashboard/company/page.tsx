@@ -48,16 +48,44 @@ export default function CompanyDashboard() {
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
     const [bidData, setBidData] = useState({ price: 0, note: '' });
-    const [activeTab, setActiveTab] = useState<'available' | 'myBids'>(
-        'available'
-    );
+    const [activeTab, setActiveTab] = useState<
+        'available' | 'contract' | 'chat' | 'support'
+    >('available');
+    const [regionFilterOpen, setRegionFilterOpen] = useState(false);
+    const [dateFilterOpen, setDateFilterOpen] = useState(false);
+    const [paxFilterOpen, setPaxFilterOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+    const [selectedDate, setSelectedDate] = useState('');
+    const [minPax, setMinPax] = useState('');
+    const [maxPax, setMaxPax] = useState('');
+    const regions = [
+        '서울',
+        '경기북부',
+        '경기남부',
+        '인천',
+        '강원',
+        '대전',
+        '세종',
+        '충북',
+        '충남',
+        '광주',
+        '전북',
+        '전남',
+        '부산',
+        '대구',
+        '울산',
+        '경북',
+        '경남',
+        '제주',
+    ];
 
     useEffect(() => {
         loadData();
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'myBids') {
+        if (activeTab === 'contract') {
             loadData();
         }
     }, [activeTab]);
@@ -157,41 +185,49 @@ export default function CompanyDashboard() {
         }
     }
 
+    function filterTrips(list: Trip[]) {
+        return list.filter((trip) => {
+            if (selectedRegion && !trip.origin.includes(selectedRegion)) {
+                return false;
+            }
+            if (selectedDate) {
+                const tripDate = new Date(trip.dateTime)
+                    .toISOString()
+                    .slice(0, 10);
+                if (tripDate !== selectedDate) {
+                    return false;
+                }
+            }
+            if (minPax && trip.paxCount < Number(minPax)) {
+                return false;
+            }
+            if (maxPax && trip.paxCount > Number(maxPax)) {
+                return false;
+            }
+            return true;
+        });
+    }
+
     return (
-        <div className="min-h-screen bg-gray-50 p-8">
+        <>
+        <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
             <div className="max-w-6xl mx-auto">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold">버스 회사 대시보드</h1>
-                    <div className="flex gap-4 items-center">
-                        <Notifications />
-                        <span className="text-gray-600">{user?.email}</span>
-                        <Button onClick={handleLogout} variant="outline">
-                            로그아웃
+                <div className="relative flex items-center justify-center mb-6 rounded-md border border-orange-100 bg-orange-50 px-4 py-3">
+                    <div className="absolute left-0">
+                        <Button
+                            variant="outline"
+                            onClick={() => setMenuOpen(true)}
+                        >
+                            메뉴
                         </Button>
+                    </div>
+                    <span className="text-lg font-semibold">GOODBUS</span>
+                    <div className="absolute right-0 flex items-center gap-3">
+                        <Notifications />
                     </div>
                 </div>
 
-                {/* 탭 버튼 */}
-                <div className="flex gap-4 mb-6">
-                    <Button
-                        onClick={() => setActiveTab('available')}
-                        variant={
-                            activeTab === 'available' ? 'default' : 'outline'
-                        }
-                        className="w-full sm:w-auto"
-                    >
-                        가능한 여정
-                    </Button>
-                    <Button
-                        onClick={() => setActiveTab('myBids')}
-                        variant={activeTab === 'myBids' ? 'default' : 'outline'}
-                        className="w-full sm:w-auto"
-                    >
-                        내 입찰 및 낙찰
-                    </Button>
-                </div>
-
-                {activeTab === 'myBids' && (
+                {activeTab === 'contract' && (
                     <>
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold mb-4">
@@ -345,12 +381,54 @@ export default function CompanyDashboard() {
 
                 {activeTab === 'available' && (
                     <div>
-                        <h2 className="text-xl font-bold mb-4">
-                            가능한 여정
-                        </h2>
-                        <div className="grid gap-6">
-                            {trips.map((trip) => (
-                                <Card key={trip.id}>
+                        <div className="mb-6 flex justify-center w-full">
+                            <div className="flex flex-wrap gap-2 rounded-full border bg-white px-3 py-2 shadow-sm w-full justify-between sm:justify-center">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setRegionFilterOpen(true)}
+                                    className="rounded-full"
+                                >
+                                    {selectedRegion
+                                        ? `출발지역: ${selectedRegion}`
+                                        : '출발지역'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setDateFilterOpen(true)}
+                                    className="rounded-full"
+                                >
+                                    {selectedDate
+                                        ? `출발일: ${selectedDate}`
+                                        : '출발일'}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setPaxFilterOpen(true)}
+                                    className="rounded-full"
+                                >
+                                    {minPax || maxPax
+                                        ? `인원수: ${minPax || '0'}~${
+                                              maxPax || '∞'
+                                          }`
+                                        : '인원수'}
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setSelectedRegion(null);
+                                        setSelectedDate('');
+                                        setMinPax('');
+                                        setMaxPax('');
+                                    }}
+                                    className="rounded-full"
+                                >
+                                    필터 초기화
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="grid gap-4">
+                            {filterTrips(trips).map((trip) => (
+                                <Card key={trip.id} className="w-full">
                                     <CardHeader>
                                         <div className="flex justify-between">
                                             <div>
@@ -368,12 +446,12 @@ export default function CompanyDashboard() {
                                             <Badge>{trip.status === 'open' ? '진행중' : trip.status === 'awarded' ? '낙찰됨' : '취소됨'}</Badge>
                                         </div>
                                     </CardHeader>
-                                    <CardContent>
+                                    <CardContent className="space-y-2">
                                         <p>승객 수: {trip.paxCount}</p>
                                         <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
                                         <Dialog>
                                             <DialogTrigger asChild>
-                                                <Button className="mt-4">
+                                                <Button className="mt-2 w-full sm:w-auto">
                                                     입찰하기
                                                 </Button>
                                             </DialogTrigger>
@@ -453,7 +531,220 @@ export default function CompanyDashboard() {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'chat' && (
+                    <Card>
+                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
+                            낙찰된 승객과의 채팅 영역입니다. 실제 채팅 기능은
+                            추후 실시간 기능과 함께 추가됩니다.
+                            <Button className="mt-2 w-full sm:w-auto">
+                                채팅 열기
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {activeTab === 'support' && (
+                    <Card>
+                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
+                            고객센터 문의 영역입니다. 문의 유형별로 분류하고
+                            처리 상태를 추적하도록 확장할 수 있습니다.
+                            <Button className="mt-2 w-full sm:w-auto">
+                                문의하기
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
+        {menuOpen && (
+            <div className="fixed inset-0 z-40 bg-black/30">
+                <div className="absolute left-0 top-0 h-full w-72 bg-white shadow-lg p-6 space-y-6">
+                    <div>
+                        <p className="text-lg font-semibold">
+                            {user?.email}
+                        </p>
+                        <p className="text-sm text-gray-500">Bus Company</p>
+                    </div>
+                    <div className="space-y-2">
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                                setActiveTab('available');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            주문
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                                setActiveTab('contract');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            계약
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                                setActiveTab('chat');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            채팅
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                                setActiveTab('support');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            고객센터
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={handleLogout}
+                        >
+                            로그아웃
+                        </Button>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        className="w-full"
+                        onClick={() => setMenuOpen(false)}
+                    >
+                        닫기
+                    </Button>
+                </div>
+            </div>
+        )}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
+                <Button
+                    variant={activeTab === 'available' ? 'default' : 'ghost'}
+                    onClick={() => setActiveTab('available')}
+                    className="text-xs sm:text-sm"
+                >
+                    주문
+                </Button>
+                <Button
+                    variant={activeTab === 'contract' ? 'default' : 'ghost'}
+                    onClick={() => setActiveTab('contract')}
+                    className="text-xs sm:text-sm"
+                >
+                    계약
+                </Button>
+                <Button
+                    variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                    onClick={() => setActiveTab('chat')}
+                    className="text-xs sm:text-sm"
+                >
+                    채팅
+                </Button>
+                <Button
+                    variant={activeTab === 'support' ? 'default' : 'ghost'}
+                    onClick={() => setActiveTab('support')}
+                    className="text-xs sm:text-sm"
+                >
+                    고객센터
+                </Button>
+            </div>
+        </div>
+        <Dialog open={regionFilterOpen} onOpenChange={setRegionFilterOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>원하는 출발지를 모두 선택하세요</DialogTitle>
+                    <DialogDescription>
+                        지역을 선택하면 필터에 적용됩니다.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-3 gap-2">
+                    {regions.map((region) => (
+                        <Button
+                            key={region}
+                            variant={selectedRegion === region ? 'default' : 'outline'}
+                            onClick={() => setSelectedRegion(region)}
+                        >
+                            {region}
+                        </Button>
+                    ))}
+                </div>
+                <Button onClick={() => setRegionFilterOpen(false)}>확인</Button>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>원하는 출발일을 선택하세요</DialogTitle>
+                    <DialogDescription>
+                        날짜를 선택하면 필터에 적용됩니다.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                    />
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Button
+                            variant="outline"
+                            onClick={() => setSelectedDate('')}
+                        >
+                            초기화
+                        </Button>
+                        <Button onClick={() => setDateFilterOpen(false)}>확인</Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={paxFilterOpen} onOpenChange={setPaxFilterOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>인원수를 입력해주세요</DialogTitle>
+                    <DialogDescription>
+                        최소/최대 인원으로 필터링합니다.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        <Input
+                            type="number"
+                            placeholder="최소"
+                            value={minPax}
+                            onChange={(e) => setMinPax(e.target.value)}
+                        />
+                        <Input
+                            type="number"
+                            placeholder="최대"
+                            value={maxPax}
+                            onChange={(e) => setMaxPax(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setMinPax('');
+                                setMaxPax('');
+                            }}
+                        >
+                            초기화
+                        </Button>
+                        <Button onClick={() => setPaxFilterOpen(false)}>확인</Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 }

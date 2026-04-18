@@ -82,6 +82,10 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
+        if (user.status === 'Blocked') {
+            return res.status(403).json({ error: 'Account is blocked' });
+        }
+
         const isValidPassword = await bcrypt.compare(
             password,
             user.passwordHash
@@ -131,6 +135,7 @@ router.get('/me', requireAuth, async (req, res) => {
             id: true,
             email: true,
             role: true,
+                adminRole: true,
             createdAt: true,
         },
     });

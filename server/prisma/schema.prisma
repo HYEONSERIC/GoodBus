@@ -14,6 +14,19 @@ enum UserRole {
   Passenger
   Driver
   BusCompany
+  Admin
+}
+
+enum UserStatus {
+  Active
+  Blocked
+}
+
+enum AdminRole {
+  Super
+  CustomerSupport
+  Operations
+  Finance
 }
 
 enum BusSize {
@@ -40,6 +53,8 @@ model User {
   email       String   @unique
   passwordHash String
   role        UserRole
+  status      UserStatus @default(Active)
+  adminRole   AdminRole?
   createdAt   DateTime @default(now())
   
   tripsAsPassenger Trip[] @relation("PassengerTrips")

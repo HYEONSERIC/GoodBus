@@ -6,7 +6,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 
 ### Frontend
 
-- Next.js 14 (App Router)
+- Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS
 - shadcn/ui components
@@ -23,11 +23,15 @@ A full-stack web application connecting passengers with drivers and bus companie
 
 ## Features
 
-- **Role-based authentication**: Passenger, Driver, or Bus Company
+- **Role-based authentication**: Passenger, Driver, Bus Company, Admin
+- **Admin console**: Overview stats, user list, user activity, admin creation
+- **User status management**: Active/Blocked with admin controls
 - **Trip management**: Passengers can create trips
 - **Bidding system**: Drivers and bus companies can place bids on open trips
 - **Award flow**: Passengers can award trips to selected bidders
-- **Real-time updates**: Bid status tracking
+- **Notifications**: In-app alerts + email hooks for bid events
+- **Dashboard UX**: Unified top bar, side menu, bottom tabs (Korean UI)
+- **Kakao Places**: Address autocomplete for passenger trip creation
 
 ## Getting Started
 
@@ -67,6 +71,12 @@ npm install
 cd server
 cp .env.example .env
 cd ..
+```
+
+Add the Kakao REST API key to `server/.env`:
+
+```
+KAKAO_REST_API_KEY=YOUR_REST_API_KEY
 ```
 
 6. Start PostgreSQL with Docker Compose:
@@ -128,6 +138,7 @@ The seed script creates three test accounts (all with password: `password123`):
 - **Passenger**: passenger@example.com
 - **Driver**: driver@example.com
 - **Bus Company**: company@example.com
+- **Admin (Super)**: admin@example.com
 
 ## API Endpoints
 
@@ -144,6 +155,14 @@ The seed script creates three test accounts (all with password: `password123`):
 - `GET /trips/:id` - Get trip by ID
 - `POST /trips` - Create new trip (Passenger only)
 - `POST /trips/:id/award` - Award trip to bid (Passenger only)
+
+### Admin
+
+- `GET /admin/overview` - Admin dashboard stats
+- `GET /admin/users` - List/filter users
+- `PATCH /admin/users/:id/status` - Block/unblock users
+- `GET /admin/users/:id/activity` - User trip/bid activity
+- `POST /admin/admins` - Create admin (Super only)
 
 ### Bids
 
