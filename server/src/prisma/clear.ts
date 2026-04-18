@@ -6,15 +6,22 @@ async function main() {
     console.log('Clearing database...');
 
     // Delete in order to respect foreign key constraints
-    // 1. Delete notifications first (depends on User, Trip, Bid)
+    // 1. Delete notification history first (depends on User)
+    const deletedNotificationHistories =
+        await prisma.notificationHistory.deleteMany({});
+    console.log(
+        `Deleted ${deletedNotificationHistories.count} notification histories`
+    );
+
+    // 2. Delete notifications first (depends on User, Trip, Bid)
     const deletedNotifications = await prisma.notification.deleteMany({});
     console.log(`Deleted ${deletedNotifications.count} notifications`);
 
-    // 2. Delete bids (depends on Trip and User)
+    // 3. Delete bids (depends on Trip and User)
     const deletedBids = await prisma.bid.deleteMany({});
     console.log(`Deleted ${deletedBids.count} bids`);
 
-    // 3. Delete trips (depends on User)
+    // 4. Delete trips (depends on User)
     const deletedTrips = await prisma.trip.deleteMany({});
     console.log(`Deleted ${deletedTrips.count} trips`);
 
