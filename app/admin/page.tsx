@@ -65,6 +65,21 @@ interface AdminUserActivity {
     }>;
 }
 
+interface AdminBidRow {
+    id: string;
+    price: string;
+    status: string;
+    createdAt: string;
+    bidder: { id: string; email: string; role: string };
+    trip: {
+        id: string;
+        origin: string;
+        destination: string;
+        status: string;
+        passenger: { id: string; email: string };
+    };
+}
+
 export default function AdminPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -74,6 +89,7 @@ export default function AdminPage() {
     const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
     const [selectedUserActivity, setSelectedUserActivity] =
         useState<AdminUserActivity | null>(null);
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [adminFormOpen, setAdminFormOpen] = useState(false);
     const [adminForm, setAdminForm] = useState({
@@ -85,9 +101,20 @@ export default function AdminPage() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<
-        'overview' | 'users' | 'revenue' | 'faq'
+        'overview' | 'users' | 'bids' | 'revenue' | 'faq'
     >('overview');
     const [adminRole, setAdminRole] = useState<string | null>(null);
+    const [overviewTripLimit, setOverviewTripLimit] = useState(5);
+    const [overviewBidLimit, setOverviewBidLimit] = useState(5);
+    const [activityTake, setActivityTake] = useState(10);
+    const [bidSearch, setBidSearch] = useState('');
+    const [bidStatusFilter, setBidStatusFilter] = useState('');
+    const [tripStatusFilter, setTripStatusFilter] = useState('');
+    const [bidStartDate, setBidStartDate] = useState('');
+    const [bidEndDate, setBidEndDate] = useState('');
+    const [bidResults, setBidResults] = useState<AdminBidRow[]>([]);
+    const [bidLoading, setBidLoading] = useState(false);
+    const [bidError, setBidError] = useState('');
 
     useEffect(() => {
         async function loadData() {
@@ -114,6 +141,12 @@ export default function AdminPage() {
         loadData();
     }, [router]);
 
+    useEffect(() => {
+        if (activeTab === 'bids' && bidResults.length === 0 && !bidLoading) {
+            handleBidSearch();
+        }
+    }, [activeTab]);
+
     const handleLogout = async () => {
         await authAPI.logout();
         router.push('/login');
@@ -134,12 +167,13 @@ export default function AdminPage() {
         await handleFilter();
     };
 
-    const loadUserDetails = async (userId: string) => {
+    const loadUserDetails = async (userId: string, take = activityTake) => {
         setDetailLoading(true);
+        setSelectedUserId(userId);
         try {
             const [detailData, activityData] = await Promise.all([
                 adminAPI.getUserDetails(userId),
-                adminAPI.getUserActivity(userId),
+                adminAPI.getUserActivity(userId, take),
             ]);
             setSelectedUser(detailData.user);
             setSelectedUserActivity(activityData);
@@ -171,6 +205,32 @@ export default function AdminPage() {
         } catch (err: any) {
             setError(err.message || '관리자 생성에 실패했습니다.');
         }
+    };
+
+    const handleBidSearch = async () => {
+        setBidLoading(true);
+        setBidError('');
+        try {
+            const data = await adminAPI.getBids({
+                search: bidSearch.trim(),
+                bidStatus: bidStatusFilter || undefined,
+                tripStatus: tripStatusFilter || undefined,
+                startDate: bidStartDate || undefined,
+                endDate: bidEndDate || undefined,
+            });
+            setBidResults(data.bids || []);
+        } catch (err: any) {
+            setBidError(err.message || '입찰 검색에 실패했습니다.');
+        } finally {
+            setBidLoading(false);
+        }
+    };
+
+    const handleActivityMore = () => {
+        if (!selectedUserId) return;
+        const nextTake = activityTake + 10;
+        setActivityTake(nextTake);
+        loadUserDetails(selectedUserId, nextTake);
     };
 
     if (loading) {
@@ -209,6 +269,12 @@ export default function AdminPage() {
                     onClick={() => setActiveTab('users')}
                 >
                     사용자
+                </Button>
+                <Button
+                    variant={activeTab === 'bids' ? 'default' : 'outline'}
+                    onClick={() => setActiveTab('bids')}
+                >
+                    입찰/낙찰 관리
                 </Button>
                 {adminRole !== 'CustomerSupport' && (
                     <Button
@@ -252,38 +318,84 @@ export default function AdminPage() {
                     <div className="grid gap-6 lg:grid-cols-2">
                         <div className="rounded-lg border p-4">
                             <h2 className="text-lg font-semibold mb-3">최근 여정</h2>
-                            <div className="space-y-3 text-sm text-gray-700">
-                                {overview.recentTrips.map((trip) => (
-                                    <div key={trip.id} className="rounded border p-3">
-                                        <div className="font-medium">
-                                            {trip.origin} → {trip.destination}
+                            <div className="space-y-3 text-sm text-gray-700 max-h-80 overflow-y-auto">
+                                {overview.recentTrips
+                                    .slice(0, overviewTripLimit)
+                                    .map((trip) => (
+                                        <div
+                                            key={trip.id}
+                                            className="rounded border p-3"
+                                        >
+                                            <div className="font-medium">
+                                                {trip.origin} → {trip.destination}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                승객: {trip.passenger.email}
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-gray-500">
-                                            승객: {trip.passenger.email}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
                             </div>
+                            {overviewTripLimit < overview.recentTrips.length && (
+                                <div className="mt-3">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            setOverviewTripLimit((prev) =>
+                                                Math.min(
+                                                    prev + 5,
+                                                    overview.recentTrips.length
+                                                )
+                                            )
+                                        }
+                                    >
+                                        더보기
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="rounded-lg border p-4">
                             <h2 className="text-lg font-semibold mb-3">최근 입찰</h2>
-                            <div className="space-y-3 text-sm text-gray-700">
-                                {overview.recentBids.map((bid) => (
-                                    <div key={bid.id} className="rounded border p-3">
-                                        <div className="font-medium">
-                                            {bid.trip.origin} → {bid.trip.destination}
+                            <div className="space-y-3 text-sm text-gray-700 max-h-80 overflow-y-auto">
+                                {overview.recentBids
+                                    .slice(0, overviewBidLimit)
+                                    .map((bid) => (
+                                        <div
+                                            key={bid.id}
+                                            className="rounded border p-3"
+                                        >
+                                            <div className="font-medium">
+                                                {bid.trip.origin} → {bid.trip.destination}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                입찰자: {bid.bidder.email} (
+                                                {bid.bidder.role})
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                금액: {Number(bid.price).toLocaleString()}
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-gray-500">
-                                            입찰자: {bid.bidder.email} (
-                                            {bid.bidder.role})
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                            금액: {Number(bid.price).toLocaleString()}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))}
                             </div>
+                            {overviewBidLimit < overview.recentBids.length && (
+                                <div className="mt-3">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                            setOverviewBidLimit((prev) =>
+                                                Math.min(
+                                                    prev + 5,
+                                                    overview.recentBids.length
+                                                )
+                                            )
+                                        }
+                                    >
+                                        더보기
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>
@@ -347,7 +459,10 @@ export default function AdminPage() {
                                     <tr
                                         key={user.id}
                                         className="border-b cursor-pointer"
-                                        onClick={() => loadUserDetails(user.id)}
+                                        onClick={() => {
+                                            setActivityTake(10);
+                                            loadUserDetails(user.id, 10);
+                                        }}
                                     >
                                         <td className="py-2 pr-4">{user.email}</td>
                                         <td className="py-2 pr-4">{user.role}</td>
@@ -451,6 +566,17 @@ export default function AdminPage() {
                                                     )
                                                 )}
                                             </div>
+                                            {selectedUserActivity.trips.length >=
+                                                activityTake && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="mt-2"
+                                                    onClick={handleActivityMore}
+                                                >
+                                                    더보기
+                                                </Button>
+                                            )}
                                         </div>
                                         <div className="pt-2">
                                             <span className="font-medium">
@@ -480,6 +606,17 @@ export default function AdminPage() {
                                                     )
                                                 )}
                                             </div>
+                                            {selectedUserActivity.bids.length >=
+                                                activityTake && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="mt-2"
+                                                    onClick={handleActivityMore}
+                                                >
+                                                    더보기
+                                                </Button>
+                                            )}
                                         </div>
                                     </>
                                 )}
@@ -556,6 +693,143 @@ export default function AdminPage() {
                             )}
                         </div>
                     )}
+                </div>
+            )}
+
+            {activeTab === 'bids' && (
+                <div className="rounded-lg border p-4 space-y-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex flex-col gap-1">
+                            <Label>검색</Label>
+                            <Input
+                                value={bidSearch}
+                                onChange={(e) => setBidSearch(e.target.value)}
+                                placeholder="이메일/출발지/도착지"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>입찰 상태</Label>
+                            <select
+                                className="border rounded px-2 py-1"
+                                value={bidStatusFilter}
+                                onChange={(e) =>
+                                    setBidStatusFilter(e.target.value)
+                                }
+                            >
+                                <option value="">전체</option>
+                                <option value="open">open</option>
+                                <option value="withdrawn">withdrawn</option>
+                                <option value="awarded">awarded</option>
+                                <option value="lost">lost</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>여정 상태</Label>
+                            <select
+                                className="border rounded px-2 py-1"
+                                value={tripStatusFilter}
+                                onChange={(e) =>
+                                    setTripStatusFilter(e.target.value)
+                                }
+                            >
+                                <option value="">전체</option>
+                                <option value="open">open</option>
+                                <option value="awarded">awarded</option>
+                                <option value="cancelled">cancelled</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>시작일</Label>
+                            <Input
+                                type="date"
+                                value={bidStartDate}
+                                onChange={(e) => setBidStartDate(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>종료일</Label>
+                            <Input
+                                type="date"
+                                value={bidEndDate}
+                                onChange={(e) => setBidEndDate(e.target.value)}
+                            />
+                        </div>
+                        <Button variant="outline" onClick={handleBidSearch}>
+                            검색
+                        </Button>
+                    </div>
+
+                    {bidError && (
+                        <p className="text-sm text-red-500">{bidError}</p>
+                    )}
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b text-left">
+                                    <th className="py-2 pr-4">시간</th>
+                                    <th className="py-2 pr-4">여정</th>
+                                    <th className="py-2 pr-4">승객</th>
+                                    <th className="py-2 pr-4">입찰자</th>
+                                    <th className="py-2 pr-4">역할</th>
+                                    <th className="py-2 pr-4">입찰 상태</th>
+                                    <th className="py-2 pr-4">여정 상태</th>
+                                    <th className="py-2 pr-4">금액</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bidLoading && (
+                                    <tr>
+                                        <td
+                                            className="py-4 text-sm text-gray-500"
+                                            colSpan={8}
+                                        >
+                                            조회 중...
+                                        </td>
+                                    </tr>
+                                )}
+                                {!bidLoading && bidResults.length === 0 && (
+                                    <tr>
+                                        <td
+                                            className="py-4 text-sm text-gray-500"
+                                            colSpan={8}
+                                        >
+                                            검색 결과가 없습니다.
+                                        </td>
+                                    </tr>
+                                )}
+                                {bidResults.map((bid) => (
+                                    <tr key={bid.id} className="border-b">
+                                        <td className="py-2 pr-4">
+                                            {new Date(
+                                                bid.createdAt
+                                            ).toLocaleString()}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {bid.trip.origin} →{' '}
+                                            {bid.trip.destination}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {bid.trip.passenger.email}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {bid.bidder.email}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {bid.bidder.role}
+                                        </td>
+                                        <td className="py-2 pr-4">{bid.status}</td>
+                                        <td className="py-2 pr-4">
+                                            {bid.trip.status}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {Number(bid.price).toLocaleString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 

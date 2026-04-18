@@ -139,7 +139,8 @@ export const adminAPI = {
             body: JSON.stringify({ status }),
         }),
     getUserDetails: async (id: string) => fetchAPI(`/admin/users/${id}`),
-    getUserActivity: async (id: string) => fetchAPI(`/admin/users/${id}/activity`),
+    getUserActivity: async (id: string, take?: number) =>
+        fetchAPI(`/admin/users/${id}/activity${take ? `?take=${take}` : ''}`),
     createAdmin: async (data: {
         email: string;
         password: string;
@@ -149,4 +150,18 @@ export const adminAPI = {
             method: 'POST',
             body: JSON.stringify(data),
         }),
+    getBids: async (params?: {
+        search?: string;
+        bidStatus?: string;
+        tripStatus?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/bids${query}`);
+    },
 };

@@ -60,13 +60,6 @@ interface Bid {
     };
 }
 
-declare global {
-    interface Window {
-        kakao?: any;
-        __KAKAO_JS_KEY?: string;
-    }
-}
-
 interface KakaoPlace {
     id: string;
     place_name: string;
@@ -105,10 +98,6 @@ export default function PassengerDashboard() {
         paxCount: 1,
         busSize: 'small' as 'small' | 'medium' | 'large',
     });
-    const [kakaoReady, setKakaoReady] = useState(false);
-    const [kakaoLoadError, setKakaoLoadError] = useState('');
-    const [kakaoKeyMissing, setKakaoKeyMissing] = useState(false);
-    const [kakaoKeyPreview, setKakaoKeyPreview] = useState('');
     const [kakaoStatusMessage, setKakaoStatusMessage] = useState('');
     const [originResults, setOriginResults] = useState<KakaoPlace[]>([]);
     const [destinationResults, setDestinationResults] = useState<KakaoPlace[]>(
@@ -119,65 +108,6 @@ export default function PassengerDashboard() {
         loadData();
     }, []);
 
-    useEffect(() => {
-        const kakaoKey =
-            process.env.NEXT_PUBLIC_KAKAO_JS_KEY ||
-            process.env.NEXT_PUBLIC_KAKAO_MAPS_KEY ||
-            window.__KAKAO_JS_KEY ||
-            '0e65aead6268e1312dfed1ed972c289d';
-        if (!kakaoKey) {
-            setKakaoKeyMissing(true);
-            return;
-        }
-        setKakaoKeyMissing(false);
-        setKakaoKeyPreview(kakaoKey.slice(-4));
-
-        if (window.kakao?.maps?.services) {
-            setKakaoReady(true);
-            setKakaoStatusMessage('Kakao SDK 준비 완료');
-            return;
-        }
-
-        const handleKakaoReady = () => {
-            if (window.kakao?.maps?.load) {
-                window.kakao.maps.load(() => {
-                    setKakaoReady(true);
-                    setKakaoStatusMessage('Kakao SDK 준비 완료');
-                });
-            } else if (window.kakao?.maps?.services) {
-                setKakaoReady(true);
-                setKakaoStatusMessage('Kakao SDK 준비 완료');
-            }
-        };
-
-        if (window.kakao) {
-            handleKakaoReady();
-            return;
-        }
-
-        const script = document.querySelector<HTMLScriptElement>(
-            'script[src*="dapi.kakao.com/v2/maps/sdk.js"]'
-        );
-
-        if (!script) {
-            setKakaoLoadError('Kakao SDK 로드 실패');
-            return;
-        }
-
-        const handleLoad = () => {
-            setKakaoLoadError('');
-            handleKakaoReady();
-        };
-        const handleError = () => setKakaoLoadError('Kakao SDK 로드 실패');
-
-        script.addEventListener('load', handleLoad);
-        script.addEventListener('error', handleError);
-
-        return () => {
-            script.removeEventListener('load', handleLoad);
-            script.removeEventListener('error', handleError);
-        };
-    }, []);
 
     async function loadData() {
         try {
@@ -314,42 +244,42 @@ export default function PassengerDashboard() {
         query: string,
         setResults: (data: KakaoPlace[]) => void,
     ) {
-        if (!kakaoReady || !window.kakao?.maps?.services || !query.trim()) {
+        if (!query.trim()) {
             setResults([]);
-            if (!query.trim()) {
-                setKakaoStatusMessage('');
-            } else if (!kakaoReady) {
-                setKakaoStatusMessage('Kakao SDK 준비 중');
-            } else {
-                setKakaoStatusMessage('Kakao 서비스가 준비되지 않았습니다');
-            }
+            setKakaoStatusMessage('');
             return;
         }
 
-        const places = new window.kakao.maps.services.Places();
-        places.keywordSearch(query, (data: KakaoPlace[], status: string) => {
-            if (status === window.kakao.maps.services.Status.OK) {
-                setResults(data.slice(0, 5));
-                setKakaoStatusMessage(`${data.length}건 조회됨`);
-            } else {
-                if (status !== window.kakao.maps.services.Status.ZERO_RESULT) {
-                    console.warn('Kakao search status:', status);
+        setKakaoStatusMessage('검색 중...');
+        fetch(`/api/kakao/places?query=${encodeURIComponent(query)}`)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Kakao API error');
                 }
-                if (status === window.kakao.maps.services.Status.ZERO_RESULT) {
+                return response.json();
+            })
+            .then((data) => {
+                const places = (data.places || []) as KakaoPlace[];
+                setResults(places);
+                if (places.length === 0) {
                     setKakaoStatusMessage('검색 결과 없음');
                 } else {
-                    setKakaoStatusMessage(`검색 오류: ${status}`);
+                    setKakaoStatusMessage(`${places.length}건 조회됨`);
                 }
+            })
+            .catch((error) => {
+                console.error('Kakao places error:', error);
                 setResults([]);
-            }
-        });
+                setKakaoStatusMessage('검색 오류');
+            });
     }
 
     const awardedTrips = trips.filter((trip) => trip.status === 'awarded');
 
     return (
         <div className="min-h-screen bg-gray-50">
-            <div className="border-b bg-white">
+            <div className="border-b border-orange-100 bg-orange-50">
                 <div className="max-w-6xl mx-auto relative flex items-center justify-center px-4 sm:px-6 py-4">
                     <div className="absolute left-4 sm:left-6">
                         <Button
@@ -488,28 +418,9 @@ export default function PassengerDashboard() {
                         <div className="space-y-4 py-4">
                             <div>
                                 <Label>출발지</Label>
-                                {kakaoKeyMissing && (
-                                    <p className="text-xs text-red-500 mt-1">
-                                        Kakao JS 키가 없습니다. `.env.local`에
-                                        `NEXT_PUBLIC_KAKAO_JS_KEY`를
-                                        설정해주세요.
-                                    </p>
-                                )}
-                                {!kakaoKeyMissing && kakaoKeyPreview && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Kakao JS 키 로드됨 (끝 4자리:{' '}
-                                        {kakaoKeyPreview})
-                                    </p>
-                                )}
                                 {kakaoStatusMessage && (
                                     <p className="text-xs text-gray-500 mt-1">
                                         {kakaoStatusMessage}
-                                    </p>
-                                )}
-                                {kakaoLoadError && (
-                                    <p className="text-xs text-red-500 mt-1">
-                                        {kakaoLoadError} - 도메인/키 설정을
-                                        확인해주세요.
                                     </p>
                                 )}
                                 <Input
@@ -942,7 +853,8 @@ export default function PassengerDashboard() {
                                                     </Dialog>
                                                 )}
                                             <Button
-                                                variant="destructive"
+                                                variant="outline"
+                                                className="border-orange-200 text-orange-700 hover:bg-orange-50"
                                                 onClick={() =>
                                                     cancelTrip(trip.id)
                                                 }

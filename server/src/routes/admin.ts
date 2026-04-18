@@ -13,7 +13,7 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
     ]);
 
     const recentTrips = await prisma.trip.findMany({
-        take: 5,
+        take: 20,
         orderBy: { createdAt: 'desc' },
         include: {
             passenger: {
@@ -26,7 +26,7 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
     });
 
     const recentBids = await prisma.bid.findMany({
-        take: 5,
+        take: 20,
         orderBy: { createdAt: 'desc' },
         include: {
             trip: {
@@ -150,11 +150,12 @@ router.get(
     requireRole(UserRole.Admin),
     async (req, res) => {
         const userId = req.params.id;
+        const take = Math.min(Number(req.query.take) || 10, 50);
 
         const trips = await prisma.trip.findMany({
             where: { passengerId: userId },
             orderBy: { createdAt: 'desc' },
-            take: 10,
+            take,
             select: {
                 id: true,
                 origin: true,
@@ -167,7 +168,7 @@ router.get(
         const bids = await prisma.bid.findMany({
             where: { bidderId: userId },
             orderBy: { createdAt: 'desc' },
-            take: 10,
+            take,
             include: {
                 trip: {
                     select: {
@@ -180,6 +181,101 @@ router.get(
         });
 
         res.json({ trips, bids });
+    }
+);
+
+router.get(
+    '/bids',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        const search = String(req.query.search || '').trim();
+        const bidStatus = String(req.query.bidStatus || '').trim();
+        const tripStatus = String(req.query.tripStatus || '').trim();
+        const startDate = String(req.query.startDate || '').trim();
+        const endDate = String(req.query.endDate || '').trim();
+
+        const createdAt: { gte?: Date; lte?: Date } = {};
+        if (startDate) {
+            createdAt.gte = new Date(startDate);
+        }
+        if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            createdAt.lte = end;
+        }
+
+        const bids = await prisma.bid.findMany({
+            where: {
+                status: bidStatus ? (bidStatus as any) : undefined,
+                createdAt: Object.keys(createdAt).length ? createdAt : undefined,
+                trip: tripStatus
+                    ? {
+                          status: tripStatus as any,
+                      }
+                    : undefined,
+                ...(search
+                    ? {
+                          OR: [
+                              {
+                                  bidder: {
+                                      email: {
+                                          contains: search,
+                                          mode: 'insensitive',
+                                      },
+                                  },
+                              },
+                              {
+                                  trip: {
+                                      passenger: {
+                                          email: {
+                                              contains: search,
+                                              mode: 'insensitive',
+                                          },
+                                      },
+                                  },
+                              },
+                              {
+                                  trip: {
+                                      origin: {
+                                          contains: search,
+                                          mode: 'insensitive',
+                                      },
+                                  },
+                              },
+                              {
+                                  trip: {
+                                      destination: {
+                                          contains: search,
+                                          mode: 'insensitive',
+                                      },
+                                  },
+                              },
+                          ],
+                      }
+                    : {}),
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+            include: {
+                bidder: {
+                    select: { id: true, email: true, role: true },
+                },
+                trip: {
+                    select: {
+                        id: true,
+                        origin: true,
+                        destination: true,
+                        status: true,
+                        passenger: {
+                            select: { id: true, email: true },
+                        },
+                    },
+                },
+            },
+        });
+
+        res.json({ bids });
     }
 );
 

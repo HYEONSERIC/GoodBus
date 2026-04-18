@@ -214,7 +214,7 @@ export default function DriverDashboard() {
         <>
         <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
             <div className="max-w-6xl mx-auto">
-                <div className="relative flex items-center justify-center mb-6">
+                <div className="relative flex items-center justify-center mb-6 rounded-md border border-orange-100 bg-orange-50 px-4 py-3">
                     <div className="absolute left-0">
                         <Button
                             variant="outline"
