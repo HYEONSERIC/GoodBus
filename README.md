@@ -25,6 +25,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 
 - **Role-based authentication**: Passenger, Driver, Bus Company, Admin
 - **Admin console**: Overview stats, user list, user activity, admin creation
+- **Admin bid management**: Search/filter bids by user, route, status, date
 - **User status management**: Active/Blocked with admin controls
 - **Trip management**: Passengers can create trips
 - **Bidding system**: Drivers and bus companies can place bids on open trips
@@ -32,6 +33,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Notifications**: In-app alerts + email hooks for bid events
 - **Dashboard UX**: Unified top bar, side menu, bottom tabs (Korean UI)
 - **Kakao Places**: Address autocomplete for passenger trip creation
+- **Kakao Places (REST)**: Server-side proxy using REST API key
 
 ## Getting Started
 
@@ -162,6 +164,7 @@ The seed script creates three test accounts (all with password: `password123`):
 - `GET /admin/users` - List/filter users
 - `PATCH /admin/users/:id/status` - Block/unblock users
 - `GET /admin/users/:id/activity` - User trip/bid activity
+- `GET /admin/bids` - Bid search/filter dashboard
 - `POST /admin/admins` - Create admin (Super only)
 
 ### Bids

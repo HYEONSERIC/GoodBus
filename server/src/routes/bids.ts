@@ -21,6 +21,39 @@ router.post(
         try {
             const { tripId, price, note } = createBidSchema.parse(req.body);
 
+            const bidder = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: {
+                    role: true,
+                    driverLicenseStatus: true,
+                    companyRegistrationStatus: true,
+                },
+            });
+
+            if (!bidder) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (
+                bidder.role === UserRole.Driver &&
+                bidder.driverLicenseStatus !== 'approved'
+            ) {
+                return res.status(403).json({
+                    error: 'Driver verification required',
+                    status: bidder.driverLicenseStatus,
+                });
+            }
+
+            if (
+                bidder.role === UserRole.BusCompany &&
+                bidder.companyRegistrationStatus !== 'approved'
+            ) {
+                return res.status(403).json({
+                    error: 'Company verification required',
+                    status: bidder.companyRegistrationStatus,
+                });
+            }
+
             const trip = await prisma.trip.findUnique({
                 where: { id: tripId },
             });

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, tripsAPI, bidsAPI } from '@/lib/api';
+import { authAPI, tripsAPI, bidsAPI, verificationAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import {
     Dialog,
@@ -49,6 +49,12 @@ export default function DriverDashboard() {
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
     const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
     const [bidData, setBidData] = useState({ price: 0, note: '' });
+    const [verification, setVerification] = useState<any>(null);
+    const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+    const [verificationFile, setVerificationFile] = useState<File | null>(null);
+    const [verificationUploading, setVerificationUploading] = useState(false);
+    const uploadBaseUrl =
+        process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     const [activeTab, setActiveTab] = useState<
         'available' | 'contract' | 'chat' | 'support'
     >('available');
@@ -95,6 +101,12 @@ export default function DriverDashboard() {
         try {
             const userData = await authAPI.getMe();
             setUser(userData.user);
+            try {
+                const verificationData = await verificationAPI.getMe();
+                setVerification(verificationData.verification);
+            } catch (verificationError) {
+                console.warn('Verification load failed:', verificationError);
+            }
             const tripData = await tripsAPI.getAll('open');
             const allTrips = tripData.trips || [];
 
@@ -158,6 +170,10 @@ export default function DriverDashboard() {
         }
 
         try {
+            if (verification?.driverLicenseStatus !== 'approved') {
+                setVerificationDialogOpen(true);
+                return;
+            }
             await bidsAPI.create(tripId, bidData.price, bidData.note);
             setSelectedTrip(null);
             setBidData({ price: 0, note: '' });
@@ -165,6 +181,26 @@ export default function DriverDashboard() {
         } catch (error) {
             console.error('Error creating bid:', error);
             alert('입찰 생성에 실패했습니다');
+        }
+    }
+
+    async function handleVerificationUpload() {
+        if (!verificationFile) {
+            alert('파일을 선택해주세요');
+            return;
+        }
+        setVerificationUploading(true);
+        try {
+            const data = await verificationAPI.upload(verificationFile);
+            setVerification(data.verification);
+            setVerificationFile(null);
+            alert('업로드가 완료되었습니다. 승인 대기 중입니다.');
+            setVerificationDialogOpen(false);
+        } catch (error) {
+            console.error('Verification upload error:', error);
+            alert('업로드에 실패했습니다');
+        } finally {
+            setVerificationUploading(false);
         }
     }
 
@@ -228,6 +264,58 @@ export default function DriverDashboard() {
                         <Notifications />
                     </div>
                 </div>
+
+                <Dialog
+                    open={verificationDialogOpen}
+                    onOpenChange={setVerificationDialogOpen}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>버스운전자격증 등록</DialogTitle>
+                            <DialogDescription>
+                                입찰을 진행하려면 버스운전자격증을 등록하고
+                                승인을 받아야 합니다.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-3">
+                            {verification?.driverLicenseStatus && (
+                                <p className="text-sm text-gray-600">
+                                    현재 상태: {verification.driverLicenseStatus}
+                                </p>
+                            )}
+                            {verification?.driverLicenseNote && (
+                                <p className="text-sm text-gray-600">
+                                    반려 사유: {verification.driverLicenseNote}
+                                </p>
+                            )}
+                            {verification?.driverLicenseUrl && (
+                                <img
+                                    src={`${uploadBaseUrl}${verification.driverLicenseUrl}`}
+                                    alt="운전자격증"
+                                    className="max-h-56 w-full rounded border object-contain bg-white"
+                                />
+                            )}
+                            <div className="space-y-2">
+                                <Label>자격증 이미지</Label>
+                                <Input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                        setVerificationFile(
+                                            e.target.files?.[0] || null
+                                        )
+                                    }
+                                />
+                            </div>
+                            <Button
+                                onClick={handleVerificationUpload}
+                                disabled={verificationUploading}
+                            >
+                                {verificationUploading ? '업로드 중...' : '업로드'}
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
 
                 {activeTab === 'contract' && (
                     <>

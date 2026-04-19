@@ -13,7 +13,7 @@ A full-stack charter bus bidding platform with role-based access control and adm
     -   `/auth` - signup, login, logout, get current user
     -   `/trips` - create, list, get by ID, award trips
     -   `/bids` - create bids, withdraw bids
--   `/admin` - overview stats, user list, block/unblock, user activity, admin creation
+-   `/admin` - overview stats, user list, block/unblock, user activity, bid search, admin creation
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
 
@@ -29,7 +29,7 @@ A full-stack charter bus bidding platform with role-based access control and adm
     -   Passenger Dashboard (`/dashboard/passenger`) - Create trips, view bids, award trips + Kakao autocomplete
     -   Driver Dashboard (`/dashboard/driver`) - Browse trips, place bids
     -   Company Dashboard (`/dashboard/company`) - Browse trips, place bids
-    -   Admin Console (`/admin`) - Overview, users, activity, admin creation
+-   Admin Console (`/admin`) - Overview, users, activity, bid search, admin creation
 -   **API Client**: Centralized API wrapper in `lib/api.ts`
 
 ### Features Implemented
@@ -43,6 +43,7 @@ A full-stack charter bus bidding platform with role-based access control and adm
 ✅ Bid withdrawal (bid owner only)  
 ✅ User status (Active/Blocked) with admin controls  
 ✅ Admin dashboard + user activity views  
+✅ Bid search dashboard (status/date/user filters)  
 ✅ JWT-based authentication with secure cookies  
 ✅ Role-based authorization on all protected routes  
 ✅ Prisma schema with proper relationships  
@@ -111,7 +112,7 @@ goodbus/
 
 ### Frontend
 
--   **Framework**: Next.js 14 (App Router)
+-   **Framework**: Next.js 16 (App Router)
 -   **Language**: TypeScript
 -   **Styling**: Tailwind CSS
 -   **Components**: shadcn/ui (Radix UI + Tailwind)

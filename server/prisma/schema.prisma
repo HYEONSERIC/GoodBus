@@ -29,6 +29,13 @@ enum AdminRole {
   Finance
 }
 
+enum VerificationStatus {
+  none
+  pending
+  approved
+  rejected
+}
+
 enum BusSize {
   small
   medium
@@ -55,6 +62,12 @@ model User {
   role        UserRole
   status      UserStatus @default(Active)
   adminRole   AdminRole?
+  driverLicenseUrl String?
+  driverLicenseStatus VerificationStatus @default(none)
+  driverLicenseNote String?
+  companyRegistrationUrl String?
+  companyRegistrationStatus VerificationStatus @default(none)
+  companyRegistrationNote String?
   createdAt   DateTime @default(now())
   
   tripsAsPassenger Trip[] @relation("PassengerTrips")
@@ -95,6 +108,8 @@ model Bid {
 enum NotificationType {
   BID_RECEIVED
   BID_AWARDED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
 }
 
 model Notification {

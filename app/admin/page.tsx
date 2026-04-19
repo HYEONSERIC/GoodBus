@@ -6,6 +6,13 @@ import { adminAPI, authAPI } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface OverviewResponse {
     counts: {
@@ -42,6 +49,12 @@ interface AdminUserDetail extends AdminUser {
         tripsAsPassenger: number;
         bids: number;
     };
+    driverLicenseUrl?: string | null;
+    driverLicenseStatus?: string | null;
+    driverLicenseNote?: string | null;
+    companyRegistrationUrl?: string | null;
+    companyRegistrationStatus?: string | null;
+    companyRegistrationNote?: string | null;
 }
 
 interface AdminUserActivity {
@@ -80,6 +93,19 @@ interface AdminBidRow {
     };
 }
 
+interface VerificationRow {
+    id: string;
+    email: string;
+    role: string;
+    driverLicenseUrl?: string | null;
+    driverLicenseStatus?: string | null;
+    driverLicenseNote?: string | null;
+    companyRegistrationUrl?: string | null;
+    companyRegistrationStatus?: string | null;
+    companyRegistrationNote?: string | null;
+    createdAt: string;
+}
+
 export default function AdminPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -101,7 +127,7 @@ export default function AdminPage() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<
-        'overview' | 'users' | 'bids' | 'revenue' | 'faq'
+        'overview' | 'users' | 'bids' | 'verification' | 'revenue' | 'faq'
     >('overview');
     const [adminRole, setAdminRole] = useState<string | null>(null);
     const [overviewTripLimit, setOverviewTripLimit] = useState(5);
@@ -115,6 +141,20 @@ export default function AdminPage() {
     const [bidResults, setBidResults] = useState<AdminBidRow[]>([]);
     const [bidLoading, setBidLoading] = useState(false);
     const [bidError, setBidError] = useState('');
+    const [verificationType, setVerificationType] = useState<'driver' | 'company'>(
+        'driver'
+    );
+    const [verificationStatus, setVerificationStatus] = useState('pending');
+    const [verificationList, setVerificationList] = useState<VerificationRow[]>(
+        []
+    );
+    const [verificationLoading, setVerificationLoading] = useState(false);
+    const [verificationReason, setVerificationReason] = useState<{
+        [key: string]: string;
+    }>({});
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const uploadBaseUrl =
+        process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
     useEffect(() => {
         async function loadData() {
@@ -145,7 +185,16 @@ export default function AdminPage() {
         if (activeTab === 'bids' && bidResults.length === 0 && !bidLoading) {
             handleBidSearch();
         }
+        if (activeTab === 'verification' && !verificationLoading) {
+            loadVerifications();
+        }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'verification') {
+            loadVerifications();
+        }
+    }, [verificationType, verificationStatus]);
 
     const handleLogout = async () => {
         await authAPI.logout();
@@ -233,6 +282,35 @@ export default function AdminPage() {
         loadUserDetails(selectedUserId, nextTake);
     };
 
+    const loadVerifications = async () => {
+        setVerificationLoading(true);
+        try {
+            const data = await adminAPI.getVerifications({
+                type: verificationType,
+                status: verificationStatus,
+            });
+            setVerificationList(data.users || []);
+        } catch (err: any) {
+            setError(err.message || '승인 목록을 불러오지 못했습니다.');
+        } finally {
+            setVerificationLoading(false);
+        }
+    };
+
+    const updateVerificationStatus = async (
+        userId: string,
+        status: 'approved' | 'rejected'
+    ) => {
+        await adminAPI.updateVerification(
+            userId,
+            verificationType,
+            status,
+            verificationReason[userId]
+        );
+        setVerificationReason((prev) => ({ ...prev, [userId]: '' }));
+        await loadVerifications();
+    };
+
     if (loading) {
         return <div className="p-8">Loading admin dashboard...</div>;
     }
@@ -275,6 +353,12 @@ export default function AdminPage() {
                     onClick={() => setActiveTab('bids')}
                 >
                     입찰/낙찰 관리
+                </Button>
+                <Button
+                    variant={activeTab === 'verification' ? 'default' : 'outline'}
+                    onClick={() => setActiveTab('verification')}
+                >
+                    기사 승인
                 </Button>
                 {adminRole !== 'CustomerSupport' && (
                     <Button
@@ -539,6 +623,88 @@ export default function AdminPage() {
                                     <span className="font-medium">입찰 수:</span>{' '}
                                     {selectedUser._count.bids}
                                 </div>
+                                {selectedUser.role === 'Driver' && (
+                                    <div className="pt-2 space-y-2">
+                                        <span className="font-medium">
+                                            운전자격증
+                                        </span>
+                                        <p className="text-xs text-gray-500">
+                                            상태: {selectedUser.driverLicenseStatus || '없음'}
+                                        </p>
+                                        {selectedUser.driverLicenseNote && (
+                                            <p className="text-xs text-gray-500">
+                                                사유: {selectedUser.driverLicenseNote}
+                                            </p>
+                                        )}
+                                        {selectedUser.driverLicenseUrl ? (
+                                            <div className="space-y-2">
+                                                <img
+                                                    src={`${uploadBaseUrl}${selectedUser.driverLicenseUrl}`}
+                                                    alt="운전자격증"
+                                                    className="max-h-56 w-full rounded border object-contain bg-white cursor-pointer"
+                                                    onClick={() =>
+                                                        setPreviewUrl(
+                                                            `${uploadBaseUrl}${selectedUser.driverLicenseUrl}`
+                                                        )
+                                                    }
+                                                />
+                                                <a
+                                                    href={`/api/admin/verifications/${selectedUser.id}/download?type=driver`}
+                                                    download
+                                                    className="text-sm text-blue-600 hover:underline"
+                                                >
+                                                    파일 다운로드
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-gray-500">
+                                                등록된 파일이 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {selectedUser.role === 'BusCompany' && (
+                                    <div className="pt-2 space-y-2">
+                                        <span className="font-medium">
+                                            사업자등록증
+                                        </span>
+                                        <p className="text-xs text-gray-500">
+                                            상태:{' '}
+                                            {selectedUser.companyRegistrationStatus ||
+                                                '없음'}
+                                        </p>
+                                        {selectedUser.companyRegistrationNote && (
+                                            <p className="text-xs text-gray-500">
+                                                사유: {selectedUser.companyRegistrationNote}
+                                            </p>
+                                        )}
+                                        {selectedUser.companyRegistrationUrl ? (
+                                            <div className="space-y-2">
+                                                <img
+                                                    src={`${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`}
+                                                    alt="사업자등록증"
+                                                    className="max-h-56 w-full rounded border object-contain bg-white cursor-pointer"
+                                                    onClick={() =>
+                                                        setPreviewUrl(
+                                                            `${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`
+                                                        )
+                                                    }
+                                                />
+                                                <a
+                                                    href={`/api/admin/verifications/${selectedUser.id}/download?type=company`}
+                                                    download
+                                                    className="text-sm text-blue-600 hover:underline"
+                                                >
+                                                    파일 다운로드
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-gray-500">
+                                                등록된 파일이 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                                 {selectedUserActivity && (
                                     <>
                                         <div className="pt-2">
@@ -832,6 +998,200 @@ export default function AdminPage() {
                     </div>
                 </div>
             )}
+
+            {activeTab === 'verification' && (
+                <div className="rounded-lg border p-4 space-y-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex flex-col gap-1">
+                            <Label>구분</Label>
+                            <select
+                                className="border rounded px-2 py-1"
+                                value={verificationType}
+                                onChange={(e) =>
+                                    setVerificationType(
+                                        e.target.value === 'company'
+                                            ? 'company'
+                                            : 'driver'
+                                    )
+                                }
+                            >
+                                <option value="driver">기사</option>
+                                <option value="company">버스회사</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>상태</Label>
+                            <select
+                                className="border rounded px-2 py-1"
+                                value={verificationStatus}
+                                onChange={(e) =>
+                                    setVerificationStatus(e.target.value)
+                                }
+                            >
+                                <option value="pending">pending</option>
+                                <option value="approved">approved</option>
+                                <option value="rejected">rejected</option>
+                            </select>
+                        </div>
+                        <Button variant="outline" onClick={loadVerifications}>
+                            새로고침
+                        </Button>
+                    </div>
+
+                    {verificationLoading ? (
+                        <p className="text-sm text-gray-500">불러오는 중...</p>
+                    ) : verificationList.length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                            해당 상태의 요청이 없습니다.
+                        </p>
+                    ) : (
+                        <div className="grid gap-4">
+                            {verificationList.map((user) => {
+                                const imagePath =
+                                    verificationType === 'driver'
+                                        ? user.driverLicenseUrl
+                                        : user.companyRegistrationUrl;
+                                const status =
+                                    verificationType === 'driver'
+                                        ? user.driverLicenseStatus
+                                        : user.companyRegistrationStatus;
+                                const note =
+                                    verificationType === 'driver'
+                                        ? user.driverLicenseNote
+                                        : user.companyRegistrationNote;
+                                return (
+                                    <div
+                                        key={user.id}
+                                        className="rounded-lg border p-4 space-y-4"
+                                    >
+                                        <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-medium">
+                                                            {user.email}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            상태: {status}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                updateVerificationStatus(
+                                                                    user.id,
+                                                                    'approved'
+                                                                )
+                                                            }
+                                                        >
+                                                            승인
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                updateVerificationStatus(
+                                                                    user.id,
+                                                                    'rejected'
+                                                                )
+                                                            }
+                                                        >
+                                                            반려
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="grid gap-2">
+                                                    <Label>반려 사유</Label>
+                                                    <Input
+                                                        value={
+                                                            verificationReason[user.id] ||
+                                                            ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setVerificationReason(
+                                                                (prev) => ({
+                                                                    ...prev,
+                                                                    [user.id]:
+                                                                        e.target.value,
+                                                                })
+                                                            )
+                                                        }
+                                                        placeholder="반려 사유를 입력하세요"
+                                                    />
+                                                    {note && (
+                                                        <p className="text-xs text-gray-500">
+                                                            이전 사유: {note}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {imagePath ? (
+                                                    <>
+                                                        <div className="rounded border bg-white p-2">
+                                                            <img
+                                                                src={`${uploadBaseUrl}${imagePath}`}
+                                                                alt="인증 이미지"
+                                                                className="h-56 w-full object-contain"
+                                                                onClick={() =>
+                                                                    setPreviewUrl(
+                                                                        `${uploadBaseUrl}${imagePath}`
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-gray-500">
+                                                                클릭하면 확대됩니다.
+                                                            </span>
+                                                            <a
+                                                                href={`/api/admin/verifications/${user.id}/download?type=${verificationType}`}
+                                                                download
+                                                                className="text-blue-600 hover:underline"
+                                                            >
+                                                                파일 다운로드
+                                                            </a>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500">
+                                                        업로드된 이미지가 없습니다.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <Dialog
+                open={Boolean(previewUrl)}
+                onOpenChange={(open) => {
+                    if (!open) setPreviewUrl(null);
+                }}
+            >
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>이미지 미리보기</DialogTitle>
+                        <DialogDescription>
+                            클릭한 이미지를 크게 확인합니다.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {previewUrl && (
+                        <img
+                            src={previewUrl}
+                            alt="미리보기"
+                            className="max-h-[70vh] w-full rounded border object-contain bg-white"
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
 
             {activeTab === 'revenue' && adminRole !== 'CustomerSupport' && (
                 <div className="rounded-lg border p-6 space-y-4">
