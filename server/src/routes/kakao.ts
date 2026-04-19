@@ -35,7 +35,7 @@ router.get('/places', async (req, res) => {
             });
         }
 
-        const data = await response.json();
+        const data: any = await response.json();
         const places = (data.documents || []).map((doc: any) => ({
             id: doc.id,
             place_name: doc.place_name,

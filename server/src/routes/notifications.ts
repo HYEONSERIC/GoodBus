@@ -10,16 +10,37 @@ router.get('/', requireAuth, async (req, res) => {
         const notifications = await prisma.notification.findMany({
             where: {
                 userId: req.user!.userId,
+                read: false,
             },
             orderBy: {
                 createdAt: 'desc',
             },
-            take: 50, // Limit to 50 most recent notifications
+            take: 50,
         });
 
         res.json({ notifications });
     } catch (error) {
         console.error('Get notifications error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get archived notification history for the current user
+router.get('/history', requireAuth, async (req, res) => {
+    try {
+        const history = await prisma.notificationHistory.findMany({
+            where: {
+                userId: req.user!.userId,
+            },
+            orderBy: {
+                readAt: 'desc',
+            },
+            take: 100,
+        });
+
+        res.json({ history });
+    } catch (error) {
+        console.error('Get notification history error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -56,12 +77,25 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'Not your notification' });
         }
 
-        const updated = await prisma.notification.update({
-            where: { id: req.params.id },
-            data: { read: true },
+        await prisma.$transaction(async (tx) => {
+            await tx.notificationHistory.create({
+                data: {
+                    userId: notification.userId,
+                    type: notification.type,
+                    title: notification.title,
+                    message: notification.message,
+                    tripId: notification.tripId,
+                    bidId: notification.bidId,
+                    notificationCreatedAt: notification.createdAt,
+                },
+            });
+
+            await tx.notification.delete({
+                where: { id: req.params.id },
+            });
         });
 
-        res.json({ notification: updated });
+        res.json({ message: 'Notification archived' });
     } catch (error) {
         console.error('Mark notification as read error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -71,15 +105,40 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
 // Mark all notifications as read
 router.patch('/read-all', requireAuth, async (req, res) => {
     try {
-        await prisma.notification.updateMany({
+        const notifications = await prisma.notification.findMany({
             where: {
                 userId: req.user!.userId,
                 read: false,
             },
-            data: { read: true },
         });
 
-        res.json({ message: 'All notifications marked as read' });
+        if (notifications.length === 0) {
+            return res.json({ message: 'No unread notifications' });
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.notificationHistory.createMany({
+                data: notifications.map((notification) => ({
+                    userId: notification.userId,
+                    type: notification.type,
+                    title: notification.title,
+                    message: notification.message,
+                    tripId: notification.tripId,
+                    bidId: notification.bidId,
+                    notificationCreatedAt: notification.createdAt,
+                })),
+            });
+
+            await tx.notification.deleteMany({
+                where: {
+                    id: {
+                        in: notifications.map((notification) => notification.id),
+                    },
+                },
+            });
+        });
+
+        res.json({ message: 'All notifications archived' });
     } catch (error) {
         console.error('Mark all as read error:', error);
         res.status(500).json({ error: 'Internal server error' });

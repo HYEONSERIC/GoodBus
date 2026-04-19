@@ -108,6 +108,7 @@ export const bidsAPI = {
 
 export const notificationsAPI = {
     getAll: async () => fetchAPI('/notifications'),
+    getHistory: async () => fetchAPI('/notifications/history'),
     getUnreadCount: async () => fetchAPI('/notifications/unread-count'),
     markAsRead: async (id: string) =>
         fetchAPI(`/notifications/${id}/read`, {

@@ -26,19 +26,36 @@ interface Notification {
     createdAt: string;
 }
 
+interface NotificationHistory {
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    tripId?: string;
+    bidId?: string;
+    notificationCreatedAt: string;
+    readAt: string;
+}
+
 export function Notifications() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [history, setHistory] = useState<NotificationHistory[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [activeView, setActiveView] = useState<'current' | 'history'>(
+        'current'
+    );
 
     useEffect(() => {
         loadNotifications();
+        loadHistory();
         loadUnreadCount();
 
         // Poll for new notifications every 30 seconds
         const interval = setInterval(() => {
             loadNotifications();
+            loadHistory();
             loadUnreadCount();
         }, 30000);
 
@@ -54,6 +71,16 @@ export function Notifications() {
             console.error('Error loading notifications:', error);
             // Set empty array on error to prevent UI issues
             setNotifications([]);
+        }
+    }
+
+    async function loadHistory() {
+        try {
+            const data = await notificationsAPI.getHistory();
+            setHistory(data.history || []);
+        } catch (error: any) {
+            console.error('Error loading notification history:', error);
+            setHistory([]);
         }
     }
 
@@ -73,6 +100,7 @@ export function Notifications() {
         try {
             await notificationsAPI.markAsRead(id);
             await loadNotifications();
+            await loadHistory();
             await loadUnreadCount();
         } catch (error) {
             console.error('Error marking notification as read:', error);
@@ -84,6 +112,7 @@ export function Notifications() {
             setLoading(true);
             await notificationsAPI.markAllAsRead();
             await loadNotifications();
+            await loadHistory();
             await loadUnreadCount();
         } catch (error) {
             console.error('Error marking all as read:', error);
@@ -132,12 +161,34 @@ export function Notifications() {
                         )}
                     </div>
                 </DialogHeader>
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                    <Button
+                        variant={activeView === 'current' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                            setActiveView('current');
+                            loadNotifications();
+                        }}
+                    >
+                        New
+                    </Button>
+                    <Button
+                        variant={activeView === 'history' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                            setActiveView('history');
+                            loadHistory();
+                        }}
+                    >
+                        History
+                    </Button>
+                </div>
                 <div className="space-y-2 mt-4">
-                    {notifications.length === 0 ? (
+                    {activeView === 'current' && notifications.length === 0 ? (
                         <p className="text-center text-gray-500 py-8">
                             알림이 없습니다
                         </p>
-                    ) : (
+                    ) : activeView === 'current' ? (
                         notifications.map((notification) => (
                             <div
                                 key={notification.id}
@@ -171,6 +222,46 @@ export function Notifications() {
                                                 'MMM d, yyyy h:mm a'
                                             )}
                                         </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    ) : history.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            No history yet
+                        </p>
+                    ) : (
+                        history.map((item) => (
+                            <div
+                                key={item.id}
+                                className="p-3 rounded-lg border bg-gray-50 border-gray-200"
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <p className="font-semibold text-sm">
+                                            {item.title}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            {item.message}
+                                        </p>
+                                        <div className="space-y-1 mt-2 text-xs text-gray-400">
+                                            <p>
+                                                Received:{' '}
+                                                {format(
+                                                    new Date(
+                                                        item.notificationCreatedAt
+                                                    ),
+                                                    'MMM d, yyyy h:mm a'
+                                                )}
+                                            </p>
+                                            <p>
+                                                Read:{' '}
+                                                {format(
+                                                    new Date(item.readAt),
+                                                    'MMM d, yyyy h:mm a'
+                                                )}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
