@@ -1,6 +1,13 @@
 import express from 'express';
 import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
+import {
+    attachNotificationHistoryDetails,
+    buildReadAtFilter,
+    deleteExpiredNotificationHistory,
+    parseNotificationType,
+    parsePagination,
+} from '../utils/notificationHistory';
 
 const router = express.Router();
 
@@ -28,19 +35,88 @@ router.get('/', requireAuth, async (req, res) => {
 // Get archived notification history for the current user
 router.get('/history', requireAuth, async (req, res) => {
     try {
-        const history = await prisma.notificationHistory.findMany({
+        await deleteExpiredNotificationHistory();
+
+        const { page, pageSize, skip, take } = parsePagination(req.query);
+        const type = parseNotificationType(req.query.type);
+        const readAt = buildReadAtFilter(req.query.startDate, req.query.endDate);
+        const where = {
+            userId: req.user!.userId,
+            type,
+            readAt,
+        };
+
+        const [rows, total] = await Promise.all([
+            prisma.notificationHistory.findMany({
+                where,
+                orderBy: {
+                    readAt: 'desc',
+                },
+                skip,
+                take,
+            }),
+            prisma.notificationHistory.count({ where }),
+        ]);
+
+        const history = await attachNotificationHistoryDetails(rows);
+
+        res.json({
+            history,
+            pagination: {
+                page,
+                pageSize,
+                total,
+                totalPages: Math.ceil(total / pageSize),
+            },
+        });
+    } catch (error) {
+        console.error('Get notification history error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete one archived notification history row for the current user
+router.delete('/history/:id', requireAuth, async (req, res) => {
+    try {
+        const history = await prisma.notificationHistory.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, userId: true },
+        });
+
+        if (!history) {
+            return res.json({ message: 'Notification history already deleted' });
+        }
+
+        if (history.userId !== req.user!.userId) {
+            return res.status(403).json({ error: 'Not your notification history' });
+        }
+
+        await prisma.notificationHistory.delete({
+            where: { id: req.params.id },
+        });
+
+        res.json({ message: 'Notification history deleted' });
+    } catch (error) {
+        console.error('Delete notification history error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Delete all archived notification history rows for the current user
+router.delete('/history', requireAuth, async (req, res) => {
+    try {
+        const result = await prisma.notificationHistory.deleteMany({
             where: {
                 userId: req.user!.userId,
             },
-            orderBy: {
-                readAt: 'desc',
-            },
-            take: 100,
         });
 
-        res.json({ history });
+        res.json({
+            message: 'Notification history cleared',
+            count: result.count,
+        });
     } catch (error) {
-        console.error('Get notification history error:', error);
+        console.error('Clear notification history error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -70,7 +146,7 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
         });
 
         if (!notification) {
-            return res.status(404).json({ error: 'Notification not found' });
+            return res.json({ message: 'Notification already archived' });
         }
 
         if (notification.userId !== req.user!.userId) {
@@ -78,6 +154,8 @@ router.patch('/:id/read', requireAuth, async (req, res) => {
         }
 
         await prisma.$transaction(async (tx) => {
+            await deleteExpiredNotificationHistory(tx);
+
             await tx.notificationHistory.create({
                 data: {
                     userId: notification.userId,
@@ -117,6 +195,8 @@ router.patch('/read-all', requireAuth, async (req, res) => {
         }
 
         await prisma.$transaction(async (tx) => {
+            await deleteExpiredNotificationHistory(tx);
+
             await tx.notificationHistory.createMany({
                 data: notifications.map((notification) => ({
                     userId: notification.userId,

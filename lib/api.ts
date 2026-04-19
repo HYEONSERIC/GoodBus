@@ -37,12 +37,24 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
 
         const data = await response.json();
         return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             throw new Error('Cannot connect to server. Please check if the backend server is running.');
         }
         throw error;
     }
+}
+
+function toQuery(params?: Record<string, string | number | undefined>) {
+    if (!params) return '';
+
+    const query = new URLSearchParams(
+        Object.entries(params)
+            .filter(([, value]) => value !== undefined && value !== '')
+            .map(([key, value]) => [key, String(value)])
+    ).toString();
+
+    return query ? `?${query}` : '';
 }
 
 export const authAPI = {
@@ -73,7 +85,7 @@ export const tripsAPI = {
         return fetchAPI(`/trips${query}`);
     },
     getById: async (id: string) => fetchAPI(`/trips/${id}`),
-    create: async (data: any) =>
+    create: async (data: Record<string, unknown>) =>
         fetchAPI('/trips', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -87,7 +99,7 @@ export const tripsAPI = {
         fetchAPI(`/trips/${tripId}/cancel`, {
             method: 'PATCH',
         }),
-    update: async (tripId: string, data: any) =>
+    update: async (tripId: string, data: Record<string, unknown>) =>
         fetchAPI(`/trips/${tripId}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
@@ -106,9 +118,30 @@ export const bidsAPI = {
         }),
 };
 
+export const chatsAPI = {
+    getRooms: async () => fetchAPI('/chats/rooms'),
+    getMessages: async (roomId: string, params?: { after?: string }) =>
+        fetchAPI(`/chats/rooms/${roomId}/messages${toQuery(params)}`),
+    sendMessage: async (roomId: string, message: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ message }),
+        }),
+    markRead: async (roomId: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/read`, {
+            method: 'PATCH',
+        }),
+};
+
 export const notificationsAPI = {
     getAll: async () => fetchAPI('/notifications'),
-    getHistory: async () => fetchAPI('/notifications/history'),
+    getHistory: async (params?: {
+        page?: number;
+        pageSize?: number;
+        type?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => fetchAPI(`/notifications/history${toQuery(params)}`),
     getUnreadCount: async () => fetchAPI('/notifications/unread-count'),
     markAsRead: async (id: string) =>
         fetchAPI(`/notifications/${id}/read`, {
@@ -117,6 +150,14 @@ export const notificationsAPI = {
     markAllAsRead: async () =>
         fetchAPI('/notifications/read-all', {
             method: 'PATCH',
+        }),
+    deleteHistory: async (id: string) =>
+        fetchAPI(`/notifications/history/${id}`, {
+            method: 'DELETE',
+        }),
+    clearHistory: async () =>
+        fetchAPI('/notifications/history', {
+            method: 'DELETE',
         }),
 };
 
@@ -165,4 +206,13 @@ export const adminAPI = {
             : '';
         return fetchAPI(`/admin/bids${query}`);
     },
+    getNotificationHistory: async (params?: {
+        page?: number;
+        pageSize?: number;
+        type?: string;
+        startDate?: string;
+        endDate?: string;
+        search?: string;
+        userId?: string;
+    }) => fetchAPI(`/admin/notification-history${toQuery(params)}`),
 };

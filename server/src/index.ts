@@ -8,6 +8,7 @@ import bidsRoutes from './routes/bids';
 import notificationsRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
 import kakaoRoutes from './routes/kakao';
+import chatsRoutes from './routes/chats';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/bids', bidsRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/admin', adminRoutes);
 app.use('/kakao', kakaoRoutes);
+app.use('/chats', chatsRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

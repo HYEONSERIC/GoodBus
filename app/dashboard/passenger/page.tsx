@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { authAPI, tripsAPI, bidsAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
+import { ChatPanel } from '@/components/ChatPanel';
 import {
     Dialog,
     DialogContent,
@@ -254,8 +255,8 @@ export default function PassengerDashboard() {
         fetch(`/api/kakao/places?query=${encodeURIComponent(query)}`)
             .then(async (response) => {
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || 'Kakao API error');
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.error || 'Kakao API error');
                 }
                 return response.json();
             })
@@ -269,7 +270,6 @@ export default function PassengerDashboard() {
                 }
             })
             .catch((error) => {
-                console.error('Kakao places error:', error);
                 setResults([]);
                 setKakaoStatusMessage('검색 오류');
             });
@@ -912,11 +912,12 @@ export default function PassengerDashboard() {
                 {activeTab === 'chat' && (
                     <Card>
                         <CardContent className="p-6 space-y-4">
-                            <p className="text-sm text-gray-600">
+                            <ChatPanel />
+                            <p className="hidden">
                                 낙찰된 버스기사와의 채팅 영역입니다. 실제 채팅
                                 기능은 향후 실시간 기능과 함께 추가됩니다.
                             </p>
-                            <Button onClick={() => setChatOpen(true)}>
+                            <Button className="hidden" onClick={() => setChatOpen(true)}>
                                 채팅 열기
                             </Button>
                         </CardContent>
@@ -977,14 +978,15 @@ export default function PassengerDashboard() {
             </div>
 
             <Dialog open={chatOpen} onOpenChange={setChatOpen}>
-                <DialogContent>
+                <DialogContent className="w-[95vw] max-w-5xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>채팅</DialogTitle>
                         <DialogDescription>
                             낙찰된 기사와 연결되는 대화창입니다.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-3 text-sm text-gray-700">
+                    <ChatPanel />
+                    <div className="hidden">
                         <div className="rounded border p-3">
                             안녕하세요. 일정 확인을 위해 연락드립니다.
                         </div>

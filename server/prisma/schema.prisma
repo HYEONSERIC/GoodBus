@@ -61,6 +61,9 @@ model User {
   bids            Bid[]
   notifications   Notification[] @relation("UserNotifications")
   notificationHistories NotificationHistory[] @relation("UserNotificationHistories")
+  chatRoomsAsPassenger ChatRoom[] @relation("PassengerChatRooms")
+  chatRoomsAsBidder    ChatRoom[] @relation("BidderChatRooms")
+  chatMessages         ChatMessage[] @relation("ChatMessageSender")
 }
 
 model Trip {
@@ -76,6 +79,7 @@ model Trip {
   createdAt   DateTime   @default(now())
   
   bids Bid[]
+  chatRoom ChatRoom?
 }
 
 model Bid {
@@ -127,6 +131,38 @@ model NotificationHistory {
   readAt                DateTime         @default(now())
   
   @@index([userId])
+  @@index([readAt])
+}
+
+model ChatRoom {
+  id          String   @id @default(cuid())
+  tripId      String   @unique
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerId String
+  passenger   User     @relation("PassengerChatRooms", fields: [passengerId], references: [id], onDelete: Cascade)
+  bidderId    String
+  bidder      User     @relation("BidderChatRooms", fields: [bidderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([passengerId])
+  @@index([bidderId])
+}
+
+model ChatMessage {
+  id        String    @id @default(cuid())
+  roomId    String
+  room      ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User      @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  message   String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([roomId])
+  @@index([senderId])
   @@index([readAt])
 }
 
