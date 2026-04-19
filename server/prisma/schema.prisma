@@ -73,6 +73,7 @@ model User {
   tripsAsPassenger Trip[] @relation("PassengerTrips")
   bids            Bid[]
   notifications   Notification[] @relation("UserNotifications")
+  notificationHistories NotificationHistory[] @relation("UserNotificationHistories")
 }
 
 model Trip {
@@ -126,6 +127,22 @@ model Notification {
   
   @@index([userId])
   @@index([read])
+}
+
+model NotificationHistory {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation("UserNotificationHistories", fields: [userId], references: [id], onDelete: Cascade)
+  type                  NotificationType
+  title                 String
+  message               String
+  tripId                String?
+  bidId                 String?
+  notificationCreatedAt DateTime
+  readAt                DateTime         @default(now())
+  
+  @@index([userId])
+  @@index([readAt])
 }
 
 generator erd {
