@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole, AdminRole } from '@prisma/client';
@@ -126,6 +127,12 @@ router.get(
                 role: true,
                 status: true,
                 adminRole: true,
+                driverLicenseUrl: true,
+                driverLicenseStatus: true,
+                driverLicenseNote: true,
+                companyRegistrationUrl: true,
+                companyRegistrationStatus: true,
+                companyRegistrationNote: true,
                 createdAt: true,
                 _count: {
                     select: {
@@ -181,6 +188,145 @@ router.get(
         });
 
         res.json({ trips, bids });
+    }
+);
+
+router.get(
+    '/verifications',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        const type = String(req.query.type || 'driver');
+        const status = String(req.query.status || 'pending');
+
+        const isDriver = type === 'driver';
+        const roleFilter = isDriver ? UserRole.Driver : UserRole.BusCompany;
+
+        const users = await prisma.user.findMany({
+            where: {
+                role: roleFilter,
+                ...(isDriver
+                    ? { driverLicenseStatus: status as any }
+                    : { companyRegistrationStatus: status as any }),
+            },
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                driverLicenseUrl: true,
+                driverLicenseStatus: true,
+                driverLicenseNote: true,
+                companyRegistrationUrl: true,
+                companyRegistrationStatus: true,
+                companyRegistrationNote: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        res.json({ users });
+    }
+);
+
+router.get(
+    '/verifications/:id/download',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        const type = String(req.query.type || 'driver');
+        const user = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            select: {
+                driverLicenseUrl: true,
+                companyRegistrationUrl: true,
+                email: true,
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const filePath =
+            type === 'company'
+                ? user.companyRegistrationUrl
+                : user.driverLicenseUrl;
+
+        if (!filePath) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        const uploadRoot = path.join(process.cwd(), 'uploads');
+        const relative = filePath.replace(/^\/uploads\//, '');
+        const absolutePath = path.normalize(path.join(uploadRoot, relative));
+
+        if (!absolutePath.startsWith(uploadRoot)) {
+            return res.status(400).json({ error: 'Invalid file path' });
+        }
+
+        const ext = path.extname(absolutePath) || '.jpg';
+        const safeEmail = user.email?.replace(/[^a-zA-Z0-9.-]/g, '_') || 'user';
+        return res.download(absolutePath, `${type}-${safeEmail}${ext}`);
+    }
+);
+
+router.patch(
+    '/verifications/:id',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        const type = String(req.query.type || 'driver');
+        const { status, reason } = req.body as {
+            status?: 'approved' | 'rejected';
+            reason?: string;
+        };
+
+        if (!status || !['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const data =
+            type === 'company'
+                ? {
+                      companyRegistrationStatus: status as any,
+                      companyRegistrationNote: reason || null,
+                  }
+                : {
+                      driverLicenseStatus: status as any,
+                      driverLicenseNote: reason || null,
+                  };
+
+        const user = await prisma.user.update({
+            where: { id: req.params.id },
+            data,
+            select: {
+                id: true,
+                email: true,
+                role: true,
+                driverLicenseStatus: true,
+                companyRegistrationStatus: true,
+            },
+        });
+
+        await prisma.notification.create({
+            data: {
+                userId: user.id,
+                type:
+                    status === 'approved'
+                        ? 'VERIFICATION_APPROVED'
+                        : 'VERIFICATION_REJECTED',
+                title:
+                    status === 'approved'
+                        ? '인증 승인 완료'
+                        : '인증 반려',
+                message:
+                    status === 'approved'
+                        ? '제출한 서류가 승인되었습니다.'
+                        : `인증이 반려되었습니다. 사유: ${reason || '사유 없음'}`,
+            },
+        });
+
+        res.json({ user });
     }
 );
 
