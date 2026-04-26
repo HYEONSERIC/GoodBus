@@ -7,11 +7,13 @@ const API_BASE_URL =
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
     try {
+        const isFormData =
+            typeof FormData !== 'undefined' && options?.body instanceof FormData;
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             credentials: 'include',
             headers: {
-                'Content-Type': 'application/json',
+                ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
                 ...options?.headers,
             },
         });
@@ -215,4 +217,35 @@ export const adminAPI = {
         search?: string;
         userId?: string;
     }) => fetchAPI(`/admin/notification-history${toQuery(params)}`),
+    getVerifications: async (params?: { type?: string; status?: string }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/verifications${query}`);
+    },
+    updateVerification: async (
+        id: string,
+        type: 'driver' | 'company',
+        status: 'approved' | 'rejected',
+        reason?: string
+    ) =>
+        fetchAPI(`/admin/verifications/${id}?type=${type}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, reason }),
+        }),
+};
+
+export const verificationAPI = {
+    getMe: async () => fetchAPI('/verification/me'),
+    upload: async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return fetchAPI('/verification/upload', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        });
+    },
 };
