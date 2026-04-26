@@ -93,6 +93,46 @@ interface AdminBidRow {
     };
 }
 
+interface AdminNotificationHistoryRow {
+    id: string;
+    type: string;
+    title: string;
+    readAt: string;
+    user: { id: string; email: string; role: string };
+    trip?: {
+        id: string;
+        origin: string;
+        destination: string;
+        dateTime: string;
+    } | null;
+    bid?: {
+        id: string;
+        price: string;
+        status: string;
+        trip?: {
+            id: string;
+            origin: string;
+            destination: string;
+            dateTime: string;
+        } | null;
+    } | null;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+}
+
+function formatNotificationResult(item: AdminNotificationHistoryRow) {
+    if (item.bid?.status === 'awarded' || item.type === 'BID_AWARDED') {
+        return '입찰 성공';
+    }
+    if (['lost', 'withdrawn'].includes(item.bid?.status || '')) {
+        return '입찰 실패';
+    }
+    if (item.title.toLowerCase().includes('cancel')) {
+        return '입찰 실패';
+    }
+    return '입찰 대기';
 interface VerificationRow {
     id: string;
     email: string;
@@ -127,6 +167,7 @@ export default function AdminPage() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<
+        'overview' | 'users' | 'bids' | 'notifications' | 'revenue' | 'faq'
         'overview' | 'users' | 'bids' | 'verification' | 'revenue' | 'faq'
     >('overview');
     const [adminRole, setAdminRole] = useState<string | null>(null);
@@ -141,6 +182,17 @@ export default function AdminPage() {
     const [bidResults, setBidResults] = useState<AdminBidRow[]>([]);
     const [bidLoading, setBidLoading] = useState(false);
     const [bidError, setBidError] = useState('');
+    const [notificationHistory, setNotificationHistory] = useState<
+        AdminNotificationHistoryRow[]
+    >([]);
+    const [notificationSearch, setNotificationSearch] = useState('');
+    const [notificationTypeFilter, setNotificationTypeFilter] = useState('');
+    const [notificationStartDate, setNotificationStartDate] = useState('');
+    const [notificationEndDate, setNotificationEndDate] = useState('');
+    const [notificationPage, setNotificationPage] = useState(1);
+    const [notificationTotalPages, setNotificationTotalPages] = useState(1);
+    const [notificationLoading, setNotificationLoading] = useState(false);
+    const [notificationError, setNotificationError] = useState('');
     const [verificationType, setVerificationType] = useState<'driver' | 'company'>(
         'driver'
     );
@@ -171,8 +223,8 @@ export default function AdminPage() {
                 ]);
                 setOverview(overviewData);
                 setUsers(usersData.users);
-            } catch (err: any) {
-                setError(err.message || 'Failed to load admin data');
+            } catch (err: unknown) {
+                setError(getErrorMessage(err, 'Failed to load admin data'));
             } finally {
                 setLoading(false);
             }
@@ -185,6 +237,12 @@ export default function AdminPage() {
         if (activeTab === 'bids' && bidResults.length === 0 && !bidLoading) {
             handleBidSearch();
         }
+        if (
+            activeTab === 'notifications' &&
+            notificationHistory.length === 0 &&
+            !notificationLoading
+        ) {
+            handleNotificationHistorySearch(1);
         if (activeTab === 'verification' && !verificationLoading) {
             loadVerifications();
         }
@@ -226,8 +284,8 @@ export default function AdminPage() {
             ]);
             setSelectedUser(detailData.user);
             setSelectedUserActivity(activityData);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load user details');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, 'Failed to load user details'));
         } finally {
             setDetailLoading(false);
         }
@@ -251,8 +309,8 @@ export default function AdminPage() {
             setAdminForm({ email: '', password: '', adminRole: 'CustomerSupport' });
             setAdminFormOpen(false);
             await handleFilter();
-        } catch (err: any) {
-            setError(err.message || '관리자 생성에 실패했습니다.');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, '관리자 생성에 실패했습니다.'));
         }
     };
 
@@ -268,10 +326,34 @@ export default function AdminPage() {
                 endDate: bidEndDate || undefined,
             });
             setBidResults(data.bids || []);
-        } catch (err: any) {
-            setBidError(err.message || '입찰 검색에 실패했습니다.');
+        } catch (err: unknown) {
+            setBidError(getErrorMessage(err, '입찰 검색에 실패했습니다.'));
         } finally {
             setBidLoading(false);
+        }
+    };
+
+    const handleNotificationHistorySearch = async (page = notificationPage) => {
+        setNotificationLoading(true);
+        setNotificationError('');
+        try {
+            const data = await adminAPI.getNotificationHistory({
+                page,
+                pageSize: 10,
+                search: notificationSearch.trim(),
+                type: notificationTypeFilter || undefined,
+                startDate: notificationStartDate || undefined,
+                endDate: notificationEndDate || undefined,
+            });
+            setNotificationHistory(data.history || []);
+            setNotificationPage(data.pagination?.page || page);
+            setNotificationTotalPages(data.pagination?.totalPages || 1);
+        } catch (err: unknown) {
+            setNotificationError(
+                getErrorMessage(err, '알림 히스토리 조회에 실패했습니다.')
+            );
+        } finally {
+            setNotificationLoading(false);
         }
     };
 
@@ -355,6 +437,10 @@ export default function AdminPage() {
                     입찰/낙찰 관리
                 </Button>
                 <Button
+                    variant={activeTab === 'notifications' ? 'default' : 'outline'}
+                    onClick={() => setActiveTab('notifications')}
+                >
+                    알림 히스토리
                     variant={activeTab === 'verification' ? 'default' : 'outline'}
                     onClick={() => setActiveTab('verification')}
                 >
@@ -995,6 +1081,166 @@ export default function AdminPage() {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'notifications' && (
+                <div className="rounded-lg border p-4 space-y-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex flex-col gap-1">
+                            <Label>사용자/메시지 검색</Label>
+                            <Input
+                                value={notificationSearch}
+                                onChange={(e) =>
+                                    setNotificationSearch(e.target.value)
+                                }
+                                placeholder="email, title, message"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>타입</Label>
+                            <select
+                                className="border rounded px-2 py-1"
+                                value={notificationTypeFilter}
+                                onChange={(e) =>
+                                    setNotificationTypeFilter(e.target.value)
+                                }
+                            >
+                                <option value="">전체</option>
+                                <option value="BID_RECEIVED">입찰 도착</option>
+                                <option value="BID_AWARDED">입찰 완료</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>시작일</Label>
+                            <Input
+                                type="date"
+                                value={notificationStartDate}
+                                onChange={(e) =>
+                                    setNotificationStartDate(e.target.value)
+                                }
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <Label>종료일</Label>
+                            <Input
+                                type="date"
+                                value={notificationEndDate}
+                                onChange={(e) =>
+                                    setNotificationEndDate(e.target.value)
+                                }
+                            />
+                        </div>
+                        <Button
+                            variant="outline"
+                            onClick={() => handleNotificationHistorySearch(1)}
+                        >
+                            검색
+                        </Button>
+                    </div>
+
+                    {notificationError && (
+                        <p className="text-sm text-red-500">
+                            {notificationError}
+                        </p>
+                    )}
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b text-left">
+                                    <th className="py-2 pr-4">날짜</th>
+                                    <th className="py-2 pr-4">사용자</th>
+                                    <th className="py-2 pr-4">여정</th>
+                                    <th className="py-2 pr-4">가격</th>
+                                    <th className="py-2 pr-4">타입</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {notificationLoading && (
+                                    <tr>
+                                        <td
+                                            className="py-4 text-sm text-gray-500"
+                                            colSpan={5}
+                                        >
+                                            조회 중...
+                                        </td>
+                                    </tr>
+                                )}
+                                {!notificationLoading &&
+                                    notificationHistory.length === 0 && (
+                                        <tr>
+                                            <td
+                                                className="py-4 text-sm text-gray-500"
+                                                colSpan={5}
+                                            >
+                                                검색 결과가 없습니다.
+                                            </td>
+                                        </tr>
+                                    )}
+                                {notificationHistory.map((item) => (
+                                    <tr key={item.id} className="border-b">
+                                        <td className="py-2 pr-4 whitespace-nowrap">
+                                            {new Date(item.readAt).toLocaleString()}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {item.user.email}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {item.trip || item.bid?.trip
+                                                ? `${(item.trip || item.bid?.trip)!.origin} -> ${(item.trip || item.bid?.trip)!.destination}`
+                                                : '-'}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {item.bid?.price
+                                                ? Number(
+                                                      item.bid.price
+                                                  ).toLocaleString()
+                                                : '-'}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            {formatNotificationResult(item)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm">
+                        <span>
+                            {notificationPage} /{' '}
+                            {Math.max(notificationTotalPages, 1)}
+                        </span>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={notificationPage <= 1}
+                                onClick={() =>
+                                    handleNotificationHistorySearch(
+                                        notificationPage - 1
+                                    )
+                                }
+                            >
+                                이전
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    notificationPage >= notificationTotalPages
+                                }
+                                onClick={() =>
+                                    handleNotificationHistorySearch(
+                                        notificationPage + 1
+                                    )
+                                }
+                            >
+                                다음
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -3,6 +3,13 @@ import path from 'path';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole, AdminRole } from '@prisma/client';
+import {
+    attachNotificationHistoryDetails,
+    buildReadAtFilter,
+    deleteExpiredNotificationHistory,
+    parseNotificationType,
+    parsePagination,
+} from '../utils/notificationHistory';
 
 const router = express.Router();
 
@@ -85,6 +92,92 @@ router.get('/users', requireAuth, requireRole(UserRole.Admin), async (req, res) 
 
     res.json({ users });
 });
+
+router.get(
+    '/notification-history',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            await deleteExpiredNotificationHistory();
+
+            const { page, pageSize, skip, take } = parsePagination(req.query);
+            const search = String(req.query.search || '').trim();
+            const userId = String(req.query.userId || '').trim();
+            const type = parseNotificationType(req.query.type);
+            const readAt = buildReadAtFilter(
+                req.query.startDate,
+                req.query.endDate
+            );
+
+            const where = {
+                type,
+                readAt,
+                userId: userId || undefined,
+                ...(search
+                    ? {
+                          OR: [
+                              {
+                                  user: {
+                                      email: {
+                                          contains: search,
+                                          mode: 'insensitive' as const,
+                                      },
+                                  },
+                              },
+                              {
+                                  title: {
+                                      contains: search,
+                                      mode: 'insensitive' as const,
+                                  },
+                              },
+                              {
+                                  message: {
+                                      contains: search,
+                                      mode: 'insensitive' as const,
+                                  },
+                              },
+                          ],
+                      }
+                    : {}),
+            };
+
+            const [rows, total] = await Promise.all([
+                prisma.notificationHistory.findMany({
+                    where,
+                    orderBy: { readAt: 'desc' },
+                    skip,
+                    take,
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                email: true,
+                                role: true,
+                            },
+                        },
+                    },
+                }),
+                prisma.notificationHistory.count({ where }),
+            ]);
+
+            const history = await attachNotificationHistoryDetails(rows);
+
+            res.json({
+                history,
+                pagination: {
+                    page,
+                    pageSize,
+                    total,
+                    totalPages: Math.ceil(total / pageSize),
+                },
+            });
+        } catch (error) {
+            console.error('Get admin notification history error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+);
 
 router.patch(
     '/users/:id/status',

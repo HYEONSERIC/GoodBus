@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { authAPI, tripsAPI, bidsAPI, verificationAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
+import { ChatPanel } from '@/components/ChatPanel';
 import {
     Dialog,
     DialogContent,
@@ -177,10 +178,10 @@ export default function DriverDashboard() {
             await bidsAPI.create(tripId, bidData.price, bidData.note);
             setSelectedTrip(null);
             setBidData({ price: 0, note: '' });
-            loadData();
-        } catch (error) {
-            console.error('Error creating bid:', error);
-            alert('입찰 생성에 실패했습니다');
+            await loadData();
+        } catch (error: any) {
+            await loadData();
+            alert(error?.message || '입찰 생성에 실패했습니다');
         }
     }
 
@@ -625,11 +626,7 @@ export default function DriverDashboard() {
                 {activeTab === 'chat' && (
                     <Card>
                         <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            낙찰된 승객과의 채팅 영역입니다. 실제 채팅 기능은
-                            추후 실시간 기능과 함께 추가됩니다.
-                            <Button className="mt-2 w-full sm:w-auto">
-                                채팅 열기
-                            </Button>
+                            <ChatPanel />
                         </CardContent>
                     </Card>
                 )}
