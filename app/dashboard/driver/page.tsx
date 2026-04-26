@@ -45,6 +45,7 @@ interface Bid {
 
 export default function DriverDashboard() {
     const [user, setUser] = useState<any>(null);
+    const [membershipPlan, setMembershipPlan] = useState<any>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
@@ -57,7 +58,7 @@ export default function DriverDashboard() {
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     const [activeTab, setActiveTab] = useState<
-        'available' | 'contract' | 'chat' | 'support'
+        'available' | 'contract' | 'chat' | 'support' | 'membership'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -87,6 +88,56 @@ export default function DriverDashboard() {
         '경남',
         '제주',
     ];
+    const membershipPlans = [
+        {
+            id: 'basic',
+            name: '베이직',
+            price: '무료',
+            features: ['20건의 주문에 동시 입찰 가능'],
+        },
+        {
+            id: 'plus',
+            name: '플러스',
+            price: '29,900원/월',
+            features: [
+                '40건의 주문에 동시 입찰 가능',
+                '모든 예약주문 평균 입찰가 열람 가능',
+                '멤버십 전용 주문 추가 입찰 가능',
+            ],
+        },
+        {
+            id: 'premium',
+            name: '프리미엄',
+            price: '49,900원/월',
+            features: [
+                '60건의 주문에 동시 입찰 가능',
+                '모든 예약주문 평균 입찰가 열람 가능',
+                '멤버십 전용 주문 추가 입찰 가능',
+                '입찰 후 고객님께 먼저 말걸기 가능',
+            ],
+        },
+        {
+            id: 'business',
+            name: '비즈니스',
+            price: '99,900원/월',
+            features: [
+                '80건의 주문에 동시 입찰 가능',
+                '모든 예약주문 평균 입찰가 열람 가능',
+                '멤버십 전용 주문 추가 입찰 가능',
+                '입찰 후 고객님께 먼저 말걸기 가능',
+                '운행일이 같은 여러 주문 중복낙찰 가능',
+            ],
+        },
+    ];
+    const membershipNameMap: Record<string, string> = {
+        Basic: '베이직',
+        Plus: '플러스',
+        Premium: '프리미엄',
+        Business: '비즈니스',
+    };
+    const currentMembershipLabel =
+        membershipNameMap[membershipPlan?.name] || '베이직';
+    const [openMembership, setOpenMembership] = useState<string | null>(null);
 
     useEffect(() => {
         loadData();
@@ -102,6 +153,7 @@ export default function DriverDashboard() {
         try {
             const userData = await authAPI.getMe();
             setUser(userData.user);
+            setMembershipPlan(userData.user?.membershipPlan || null);
             try {
                 const verificationData = await verificationAPI.getMe();
                 setVerification(verificationData.verification);
@@ -642,6 +694,69 @@ export default function DriverDashboard() {
                         </CardContent>
                     </Card>
                 )}
+
+                {activeTab === 'membership' && (
+                    <div className="space-y-4">
+                        <div>
+                            <h2 className="text-2xl font-bold">콜버스 멤버십</h2>
+                            <p className="text-sm text-gray-600">
+                                뿌린대로 거두리라
+                            </p>
+                        </div>
+                        <div className="space-y-3">
+                            {membershipPlans.map((plan) => (
+                                <div
+                                    key={plan.id}
+                                    className="rounded-lg border bg-white"
+                                >
+                                    <button
+                                        type="button"
+                                        className="w-full flex items-center justify-between px-4 py-3"
+                                        onClick={() =>
+                                            setOpenMembership(
+                                                openMembership === plan.id
+                                                    ? null
+                                                    : plan.id
+                                            )
+                                        }
+                                    >
+                                        <span className="font-semibold">
+                                            {plan.name}
+                                        </span>
+                                        <span className="text-sm text-gray-600">
+                                            {plan.price}
+                                        </span>
+                                    </button>
+                                    {openMembership === plan.id && (
+                                        <div className="border-t px-4 py-4 space-y-3">
+                                            <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                                                {plan.features.map((feature) => (
+                                                    <li key={feature}>
+                                                        {feature}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <Button
+                                                className="w-full"
+                                                onClick={() =>
+                                                    alert(
+                                                        '결제 기능 구현 전입니다.'
+                                                    )
+                                                }
+                                            >
+                                                멤버십 선택
+                                            </Button>
+                                            <p className="text-xs text-gray-500 text-center">
+                                                월 정기결제 상품이며 언제든 취소
+                                                가능합니다.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
         {menuOpen && (
@@ -653,54 +768,67 @@ export default function DriverDashboard() {
                         </p>
                         <p className="text-sm text-gray-500">Driver</p>
                     </div>
-                    <div className="space-y-2">
-                        <Button
-                            variant="outline"
-                            className="w-full"
+                    <div className="divide-y border-y">
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
                                 setActiveTab('available');
                                 setMenuOpen(false);
                             }}
                         >
                             주문
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full"
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
                                 setActiveTab('contract');
                                 setMenuOpen(false);
                             }}
                         >
                             계약
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full"
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
                                 setActiveTab('chat');
                                 setMenuOpen(false);
                             }}
                         >
                             채팅
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full"
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
                                 setActiveTab('support');
                                 setMenuOpen(false);
                             }}
                         >
                             고객센터
-                        </Button>
-                        <Button
-                            variant="outline"
-                            className="w-full"
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full flex items-center justify-between px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                            onClick={() => {
+                                setActiveTab('membership');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            <span>멤버십</span>
+                            <span className="text-xs text-gray-500">
+                                {currentMembershipLabel}
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={handleLogout}
                         >
                             로그아웃
-                        </Button>
+                        </button>
                     </div>
                     <Button
                         variant="ghost"

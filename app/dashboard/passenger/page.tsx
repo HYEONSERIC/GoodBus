@@ -305,30 +305,30 @@ export default function PassengerDashboard() {
                             </p>
                             <p className="text-sm text-gray-500">Passenger</p>
                         </div>
-                        <div className="space-y-2">
-                            <Button
-                                variant="outline"
-                                className="w-full"
+                        <div className="divide-y border-y">
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                                 onClick={() => {
                                     setActiveTab('quote');
                                     setMenuOpen(false);
                                 }}
                             >
                                 견적
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="w-full"
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                                 onClick={() => {
                                     setActiveTab('booking');
                                     setMenuOpen(false);
                                 }}
                             >
                                 예약
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="w-full"
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                                 onClick={() => {
                                     setSupportOpen(true);
                                     setSupportStep('menu');
@@ -336,14 +336,14 @@ export default function PassengerDashboard() {
                                 }}
                             >
                                 문의하기
-                            </Button>
-                            <Button
-                                variant="outline"
-                                className="w-full"
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                                 onClick={handleLogout}
                             >
                                 로그아웃
-                            </Button>
+                            </button>
                         </div>
                         <Button
                             variant="ghost"
