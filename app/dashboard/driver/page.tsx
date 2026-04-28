@@ -73,6 +73,9 @@ export default function DriverDashboard() {
         | 'profile'
         | 'profileEdit'
     >('available');
+    const [membershipPrevTab, setMembershipPrevTab] = useState<
+        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+    >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
     const [paxFilterOpen, setPaxFilterOpen] = useState(false);
@@ -161,19 +164,32 @@ export default function DriverDashboard() {
     const [profileForm, setProfileForm] = useState({
         name: '',
         company: '',
+        phone: '',
         garage: '',
         busNumber: '',
         busType: '',
         busYear: '',
         capacity: '',
+        driverComment: '',
     });
+    const [profileSection, setProfileSection] = useState<'details' | 'review'>(
+        'details'
+    );
     const [garageResults, setGarageResults] = useState<KakaoPlace[]>([]);
     const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 기사';
     const bannerUrl = vehiclePhotos[0] || null;
+    const [galleryOpen, setGalleryOpen] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(0);
     const driverLicenseUrl =
         verification?.driverLicenseUrl || user?.driverLicenseUrl || null;
-    const vehicleLabel = profileForm.busType || '미등록';
+    const vehicleTypeLabel = profileForm.busType || '미등록';
+    const vehicleCapacityLabel = profileForm.capacity
+        ? `${profileForm.capacity}인승`
+        : null;
+    const vehicleYearLabel = profileForm.busYear
+        ? `(${profileForm.busYear}년식)`
+        : null;
     const insuranceLabel =
         verification?.driverLicenseStatus === 'approved' ? '인증완료' : '미인증';
     const companyLabel = profileForm.company || '미등록';
@@ -237,6 +253,25 @@ export default function DriverDashboard() {
         setVehiclePhotos((prev) => [...prev, ...previews]);
     };
 
+    const openGallery = (index: number) => {
+        if (vehiclePhotos.length === 0) return;
+        const safeIndex = Math.max(0, Math.min(index, vehiclePhotos.length - 1));
+        setGalleryIndex(safeIndex);
+        setGalleryOpen(true);
+    };
+
+    const showPrevPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === 0 ? vehiclePhotos.length - 1 : prev - 1
+        );
+    };
+
+    const showNextPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === vehiclePhotos.length - 1 ? 0 : prev + 1
+        );
+    };
+
     useEffect(() => {
         loadData();
     }, []);
@@ -255,6 +290,7 @@ export default function DriverDashboard() {
             setProfileForm({
                 name: userData.user?.displayName || '',
                 company: userData.user?.companyName || '',
+                phone: userData.user?.phoneNumber || '',
                 garage: userData.user?.garageAddress || '',
                 busNumber: userData.user?.busNumber || '',
                 busType: userData.user?.busType || '',
@@ -262,6 +298,7 @@ export default function DriverDashboard() {
                 capacity: userData.user?.capacity
                     ? String(userData.user.capacity)
                     : '',
+                driverComment: userData.user?.driverComment || '',
             });
             setProfilePhoto(resolveMediaUrl(userData.user?.profileImageUrl));
             const persisted = (userData.user?.vehicleImageUrls || []).slice(0, 4);
@@ -400,11 +437,13 @@ export default function DriverDashboard() {
             const formData = new FormData();
             formData.append('name', profileForm.name);
             formData.append('company', profileForm.company);
+            formData.append('phone', profileForm.phone);
             formData.append('garage', profileForm.garage);
             formData.append('busNumber', profileForm.busNumber);
             formData.append('busType', profileForm.busType);
             formData.append('busYear', profileForm.busYear);
             formData.append('capacity', profileForm.capacity);
+            formData.append('driverComment', profileForm.driverComment);
 
             if (profilePhotoFile) {
                 formData.append('profilePhoto', profilePhotoFile);
@@ -478,20 +517,50 @@ export default function DriverDashboard() {
             {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
                 <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
                     <div className="relative flex w-full items-center justify-center px-3 sm:px-4 py-4">
-                        <div className="absolute left-3 sm:left-4">
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
-                                onClick={() => setMenuOpen(true)}
-                            >
-                                <span className="text-base leading-none">☰</span>
-                                <span>메뉴</span>
-                            </button>
-                        </div>
-                        <span className="text-lg font-semibold">GOODBUS</span>
-                        <div className="absolute right-3 sm:right-4 flex items-center gap-3">
-                            <Notifications />
-                        </div>
+                        {activeTab === 'membership' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab(membershipPrevTab)}
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
+                                        onClick={() => setMenuOpen(true)}
+                                    >
+                                        <span className="text-base leading-none">
+                                            ☰
+                                        </span>
+                                        <span>메뉴</span>
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    GOODBUS
+                                </span>
+                                <div className="absolute right-3 sm:right-4 flex items-center gap-3">
+                                    <Notifications />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -934,14 +1003,20 @@ export default function DriverDashboard() {
                         </div>
 
                         <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
-                            <div className="rounded-2xl overflow-hidden border bg-white">
-                                <div className="h-40 bg-gray-200">
+                            <div className="overflow-hidden border bg-white">
+                                <div className="h-48 bg-gray-200">
                                     {bannerUrl ? (
-                                        <img
-                                            src={bannerUrl}
-                                            alt="배너"
-                                            className="h-full w-full object-cover"
-                                        />
+                                        <button
+                                            type="button"
+                                            className="h-full w-full"
+                                            onClick={() => openGallery(0)}
+                                        >
+                                            <img
+                                                src={bannerUrl}
+                                                alt="배너"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        </button>
                                     ) : null}
                                 </div>
                                 <div className="px-6 pb-6">
@@ -966,7 +1041,13 @@ export default function DriverDashboard() {
                                                 <p className="font-semibold text-gray-900">
                                                     차종
                                                 </p>
-                                                <p>{vehicleLabel}</p>
+                                                <p>{vehicleTypeLabel}</p>
+                                                {vehicleCapacityLabel && (
+                                                    <p>{vehicleCapacityLabel}</p>
+                                                )}
+                                                {vehicleYearLabel && (
+                                                    <p>{vehicleYearLabel}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <p className="font-semibold text-gray-900">
@@ -982,11 +1063,104 @@ export default function DriverDashboard() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="mt-6 space-y-4">
-                                        <h3 className="text-sm font-semibold">리뷰</h3>
-                                        <div className="rounded-lg border p-4 text-sm text-gray-600">
-                                            아직 등록된 리뷰가 없습니다.
+                                    <div className="mt-6">
+                                        <div className="grid grid-cols-2 border-b text-sm">
+                                            <button
+                                                type="button"
+                                                className={`py-2 ${
+                                                    profileSection === 'details'
+                                                        ? 'border-b-2 border-black font-semibold text-black'
+                                                        : 'text-gray-500'
+                                                }`}
+                                                onClick={() =>
+                                                    setProfileSection('details')
+                                                }
+                                            >
+                                                상세내역
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`py-2 ${
+                                                    profileSection === 'review'
+                                                        ? 'border-b-2 border-black font-semibold text-black'
+                                                        : 'text-gray-500'
+                                                }`}
+                                                onClick={() =>
+                                                    setProfileSection('review')
+                                                }
+                                            >
+                                                후기
+                                            </button>
                                         </div>
+                                        {profileSection === 'details' ? (
+                                            <div className="space-y-4 py-4 text-sm text-gray-700">
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        등록 차량
+                                                    </p>
+                                                    {vehiclePhotos.length > 0 ? (
+                                                        <div className="grid grid-cols-4 gap-2">
+                                                            {vehiclePhotos.map(
+                                                                (photo, idx) => (
+                                                                    <img
+                                                                        key={
+                                                                            photo +
+                                                                            idx
+                                                                        }
+                                                                        src={photo}
+                                                                        alt="등록 차량"
+                                                                        className="aspect-square w-full cursor-pointer rounded-md object-cover"
+                                                                        onClick={() =>
+                                                                            openGallery(
+                                                                                idx
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-gray-500">
+                                                            등록된 차량 사진이
+                                                            없습니다.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        차량 정보
+                                                    </p>
+                                                    <div className="rounded-md border bg-gray-50 p-3 text-gray-700">
+                                                        <p>{vehicleTypeLabel}</p>
+                                                        {vehicleCapacityLabel && (
+                                                            <p>
+                                                                {
+                                                                    vehicleCapacityLabel
+                                                                }
+                                                            </p>
+                                                        )}
+                                                        {vehicleYearLabel && (
+                                                            <p>{vehicleYearLabel}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        기사님의 한마디
+                                                    </p>
+                                                    <div className="rounded-md border bg-gray-50 p-3 text-gray-700">
+                                                        {profileForm.driverComment ||
+                                                            '아직 작성된 한마디가 없습니다.'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="py-4">
+                                                <div className="rounded-lg border p-4 text-sm text-gray-600">
+                                                    아직 등록된 리뷰가 없습니다.
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1000,6 +1174,46 @@ export default function DriverDashboard() {
                                 정보 수정하기
                             </Button>
                         </div>
+
+                        <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+                            <DialogContent className="max-w-3xl bg-black/95 p-3">
+                                <DialogHeader>
+                                    <DialogTitle className="sr-only">
+                                        차량 사진 크게 보기
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <div className="relative">
+                                    {vehiclePhotos[galleryIndex] ? (
+                                        <img
+                                            src={vehiclePhotos[galleryIndex]}
+                                            alt={`차량 사진 ${galleryIndex + 1}`}
+                                            className="max-h-[70vh] w-full rounded-md object-contain"
+                                        />
+                                    ) : null}
+                                    {vehiclePhotos.length > 1 && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showPrevPhoto}
+                                            >
+                                                ‹
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showNextPhoto}
+                                            >
+                                                ›
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                <p className="text-center text-xs text-gray-300">
+                                    {galleryIndex + 1} / {vehiclePhotos.length}
+                                </p>
+                            </DialogContent>
+                        </Dialog>
                     </>
                 )}
 
@@ -1096,6 +1310,22 @@ export default function DriverDashboard() {
                                                         company: e.target.value,
                                                     }))
                                                 }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                휴대전화번호
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.phone}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        phone: e.target.value,
+                                                    }))
+                                                }
+                                                placeholder="010-1234-5678"
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -1277,6 +1507,23 @@ export default function DriverDashboard() {
                                             </p>
                                         )}
                                     </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-gray-700">
+                                            기사님의 한마디
+                                        </Label>
+                                        <Textarea
+                                            className="min-h-24 border-gray-200"
+                                            placeholder="예) 안전하고 친절한 운행으로 모시겠습니다."
+                                            value={profileForm.driverComment}
+                                            onChange={(e) =>
+                                                setProfileForm((prev) => ({
+                                                    ...prev,
+                                                    driverComment:
+                                                        e.target.value,
+                                                }))
+                                            }
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1386,6 +1633,11 @@ export default function DriverDashboard() {
                             type="button"
                             className="w-full flex items-center justify-between px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
+                                setMembershipPrevTab(
+                                    activeTab === 'membership'
+                                        ? 'available'
+                                        : activeTab
+                                );
                                 setActiveTab('membership');
                                 setMenuOpen(false);
                             }}

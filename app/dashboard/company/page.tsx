@@ -72,6 +72,9 @@ export default function CompanyDashboard() {
         | 'profile'
         | 'profileEdit'
     >('available');
+    const [membershipPrevTab, setMembershipPrevTab] = useState<
+        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+    >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
     const [paxFilterOpen, setPaxFilterOpen] = useState(false);
@@ -160,6 +163,7 @@ export default function CompanyDashboard() {
     const [profileForm, setProfileForm] = useState({
         name: '',
         company: '',
+        phone: '',
         garage: '',
         busNumber: '',
         busType: '',
@@ -170,9 +174,17 @@ export default function CompanyDashboard() {
     const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 회사';
     const bannerUrl = vehiclePhotos[0] || null;
+    const [galleryOpen, setGalleryOpen] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(0);
     const companyRegistrationUrl =
         verification?.companyRegistrationUrl || user?.companyRegistrationUrl || null;
-    const vehicleLabel = profileForm.busType || '미등록';
+    const vehicleTypeLabel = profileForm.busType || '미등록';
+    const vehicleCapacityLabel = profileForm.capacity
+        ? `${profileForm.capacity}인승`
+        : null;
+    const vehicleYearLabel = profileForm.busYear
+        ? `(${profileForm.busYear}년식)`
+        : null;
     const insuranceLabel =
         verification?.companyRegistrationStatus === 'approved' ? '인증완료' : '미인증';
     const companyLabel = profileForm.company || '미등록';
@@ -236,6 +248,25 @@ export default function CompanyDashboard() {
         setVehiclePhotos((prev) => [...prev, ...previews]);
     };
 
+    const openGallery = (index: number) => {
+        if (vehiclePhotos.length === 0) return;
+        const safeIndex = Math.max(0, Math.min(index, vehiclePhotos.length - 1));
+        setGalleryIndex(safeIndex);
+        setGalleryOpen(true);
+    };
+
+    const showPrevPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === 0 ? vehiclePhotos.length - 1 : prev - 1
+        );
+    };
+
+    const showNextPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === vehiclePhotos.length - 1 ? 0 : prev + 1
+        );
+    };
+
     useEffect(() => {
         loadData();
     }, []);
@@ -254,6 +285,7 @@ export default function CompanyDashboard() {
             setProfileForm({
                 name: userData.user?.displayName || '',
                 company: userData.user?.companyName || '',
+                phone: userData.user?.phoneNumber || '',
                 garage: userData.user?.garageAddress || '',
                 busNumber: userData.user?.busNumber || '',
                 busType: userData.user?.busType || '',
@@ -379,6 +411,7 @@ export default function CompanyDashboard() {
             const formData = new FormData();
             formData.append('name', profileForm.name);
             formData.append('company', profileForm.company);
+            formData.append('phone', profileForm.phone);
             formData.append('garage', profileForm.garage);
             formData.append('busNumber', profileForm.busNumber);
             formData.append('busType', profileForm.busType);
@@ -457,20 +490,50 @@ export default function CompanyDashboard() {
             {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
                 <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
                     <div className="relative flex w-full items-center justify-center px-3 sm:px-4 py-4">
-                        <div className="absolute left-3 sm:left-4">
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
-                                onClick={() => setMenuOpen(true)}
-                            >
-                                <span className="text-base leading-none">☰</span>
-                                <span>메뉴</span>
-                            </button>
-                        </div>
-                        <span className="text-lg font-semibold">GOODBUS</span>
-                        <div className="absolute right-3 sm:right-4 flex items-center gap-3">
-                            <Notifications />
-                        </div>
+                        {activeTab === 'membership' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab(membershipPrevTab)}
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
+                                        onClick={() => setMenuOpen(true)}
+                                    >
+                                        <span className="text-base leading-none">
+                                            ☰
+                                        </span>
+                                        <span>메뉴</span>
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    GOODBUS
+                                </span>
+                                <div className="absolute right-3 sm:right-4 flex items-center gap-3">
+                                    <Notifications />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
@@ -892,11 +955,17 @@ export default function CompanyDashboard() {
                             <div className="rounded-2xl overflow-hidden border bg-white">
                                 <div className="h-40 bg-gray-200">
                                     {bannerUrl ? (
-                                        <img
-                                            src={bannerUrl}
-                                            alt="배너"
-                                            className="h-full w-full object-cover"
-                                        />
+                                        <button
+                                            type="button"
+                                            className="h-full w-full"
+                                            onClick={() => openGallery(0)}
+                                        >
+                                            <img
+                                                src={bannerUrl}
+                                                alt="배너"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        </button>
                                     ) : null}
                                 </div>
                                 <div className="px-6 pb-6">
@@ -921,7 +990,13 @@ export default function CompanyDashboard() {
                                                 <p className="font-semibold text-gray-900">
                                                     차종
                                                 </p>
-                                                <p>{vehicleLabel}</p>
+                                                <p>{vehicleTypeLabel}</p>
+                                                {vehicleCapacityLabel && (
+                                                    <p>{vehicleCapacityLabel}</p>
+                                                )}
+                                                {vehicleYearLabel && (
+                                                    <p>{vehicleYearLabel}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <p className="font-semibold text-gray-900">
@@ -938,9 +1013,17 @@ export default function CompanyDashboard() {
                                         </div>
                                     </div>
                                     <div className="mt-6 space-y-4">
-                                        <h3 className="text-sm font-semibold">리뷰</h3>
-                                        <div className="rounded-lg border p-4 text-sm text-gray-600">
-                                            아직 등록된 리뷰가 없습니다.
+                                        <h3 className="text-sm font-semibold">
+                                            상세내역
+                                        </h3>
+                                        <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-700">
+                                            <p>{vehicleTypeLabel}</p>
+                                            {vehicleCapacityLabel && (
+                                                <p>{vehicleCapacityLabel}</p>
+                                            )}
+                                            {vehicleYearLabel && (
+                                                <p>{vehicleYearLabel}</p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -955,6 +1038,46 @@ export default function CompanyDashboard() {
                                 정보 수정하기
                             </Button>
                         </div>
+
+                        <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+                            <DialogContent className="max-w-3xl bg-black/95 p-3">
+                                <DialogHeader>
+                                    <DialogTitle className="sr-only">
+                                        차량 사진 크게 보기
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <div className="relative">
+                                    {vehiclePhotos[galleryIndex] ? (
+                                        <img
+                                            src={vehiclePhotos[galleryIndex]}
+                                            alt={`차량 사진 ${galleryIndex + 1}`}
+                                            className="max-h-[70vh] w-full rounded-md object-contain"
+                                        />
+                                    ) : null}
+                                    {vehiclePhotos.length > 1 && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showPrevPhoto}
+                                            >
+                                                ‹
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showNextPhoto}
+                                            >
+                                                ›
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                <p className="text-center text-xs text-gray-300">
+                                    {galleryIndex + 1} / {vehiclePhotos.length}
+                                </p>
+                            </DialogContent>
+                        </Dialog>
                     </>
                 )}
 
@@ -1051,6 +1174,22 @@ export default function CompanyDashboard() {
                                                         company: e.target.value,
                                                     }))
                                                 }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                휴대전화번호
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.phone}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        phone: e.target.value,
+                                                    }))
+                                                }
+                                                placeholder="010-1234-5678"
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -1345,6 +1484,11 @@ export default function CompanyDashboard() {
                             type="button"
                             className="w-full flex items-center justify-between px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
+                                setMembershipPrevTab(
+                                    activeTab === 'membership'
+                                        ? 'available'
+                                        : activeTab
+                                );
                                 setActiveTab('membership');
                                 setMenuOpen(false);
                             }}

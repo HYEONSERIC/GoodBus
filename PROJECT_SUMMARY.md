@@ -13,7 +13,10 @@ A full-stack charter bus bidding platform with role-based access control and adm
     -   `/auth` - signup, login, logout, get current user
     -   `/trips` - create, list, get by ID, award trips
     -   `/bids` - create bids, withdraw bids
--   `/admin` - overview stats, user list, block/unblock, user activity, bid search, admin creation
+-   `/profile` - my profile read/update (multipart uploads)
+-   `/verification` - document upload and status read
+-   `/admin` - overview stats, user list, block/unblock, user activity, bid search, admin creation, verification moderation
+-   `/kakao` - places search proxy for autocomplete
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
 
@@ -44,6 +47,11 @@ A full-stack charter bus bidding platform with role-based access control and adm
 ✅ User status (Active/Blocked) with admin controls  
 ✅ Admin dashboard + user activity views  
 ✅ Bid search dashboard (status/date/user filters)  
+✅ Driver/Company profile edit with photo uploads and persistence  
+✅ Vehicle photo multi-upload (up to 4) with keep/append flow  
+✅ Verification upload + pending/approved/rejected UX flow  
+✅ Garage address autocomplete via Kakao Places (Passenger + Driver/Company)  
+✅ Admin user detail expanded with garage/vehicle/profile/contact data  
 ✅ JWT-based authentication with secure cookies  
 ✅ Role-based authorization on all protected routes  
 ✅ Prisma schema with proper relationships  
@@ -134,7 +142,7 @@ goodbus/
 
 ### User
 
--   id, email (unique), passwordHash, role (Passenger|Driver|BusCompany|Admin), status (Active|Blocked), adminRole (Super|CustomerSupport|Operations|Finance), createdAt
+-   id, email (unique), passwordHash, role (Passenger|Driver|BusCompany|Admin), status (Active|Blocked), adminRole (Super|CustomerSupport|Operations|Finance), displayName, companyName, phoneNumber, garageAddress, busNumber, busType, busYear, capacity, driverComment, profileImageUrl, vehicleImageUrls[], driverLicenseUrl/status, companyRegistrationUrl/status, createdAt
 
 ### Trip
 

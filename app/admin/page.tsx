@@ -51,6 +51,7 @@ interface AdminUserDetail extends AdminUser {
     };
     displayName?: string | null;
     companyName?: string | null;
+    phoneNumber?: string | null;
     garageAddress?: string | null;
     busNumber?: string | null;
     busType?: string | null;
@@ -713,6 +714,7 @@ export default function AdminPage() {
                                 </div>
                                 {(selectedUser.displayName ||
                                     selectedUser.companyName ||
+                                    selectedUser.phoneNumber ||
                                     selectedUser.garageAddress ||
                                     selectedUser.busNumber ||
                                     selectedUser.busType ||
@@ -734,6 +736,14 @@ export default function AdminPage() {
                                                         소속:
                                                     </span>{' '}
                                                     {selectedUser.companyName}
+                                                </div>
+                                            )}
+                                            {selectedUser.phoneNumber && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        휴대전화:
+                                                    </span>{' '}
+                                                    {selectedUser.phoneNumber}
                                                 </div>
                                             )}
                                             {selectedUser.garageAddress && (

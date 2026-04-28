@@ -222,6 +222,7 @@ router.get(
                 adminRole: true,
                 displayName: true,
                 companyName: true,
+                phoneNumber: true,
                 garageAddress: true,
                 busNumber: true,
                 busType: true,

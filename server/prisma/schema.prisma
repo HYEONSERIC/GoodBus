@@ -64,11 +64,13 @@ model User {
   adminRole   AdminRole?
   displayName String?
   companyName String?
+  phoneNumber String?
   garageAddress String?
   busNumber   String?
   busType     String?
   busYear     String?
   capacity    Int?
+  driverComment String?
   profileImageUrl String?
   vehicleImageUrls String[] @default([])
   driverLicenseUrl String?
