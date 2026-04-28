@@ -135,8 +135,17 @@ router.get('/me', requireAuth, async (req, res) => {
             id: true,
             email: true,
             role: true,
-                adminRole: true,
+            adminRole: true,
             createdAt: true,
+            displayName: true,
+            companyName: true,
+            garageAddress: true,
+            busNumber: true,
+            busType: true,
+            busYear: true,
+            capacity: true,
+            profileImageUrl: true,
+            vehicleImageUrls: true,
         },
     });
 

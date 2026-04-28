@@ -11,6 +11,7 @@ import adminRoutes from './routes/admin';
 import kakaoRoutes from './routes/kakao';
 import chatsRoutes from './routes/chats';
 import verificationRoutes from './routes/verification';
+import profileRoutes from './routes/profile';
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use('/admin', adminRoutes);
 app.use('/kakao', kakaoRoutes);
 app.use('/chats', chatsRoutes);
 app.use('/verification', verificationRoutes);
+app.use('/profile', profileRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

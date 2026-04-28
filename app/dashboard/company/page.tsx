@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, tripsAPI, bidsAPI, verificationAPI } from '@/lib/api';
+import { authAPI, tripsAPI, bidsAPI, verificationAPI, profileAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -41,6 +41,13 @@ interface Bid {
         email: string;
         role: string;
     };
+}
+
+interface KakaoPlace {
+    id: string;
+    place_name: string;
+    address_name: string;
+    road_address_name: string;
 }
 
 export default function CompanyDashboard() {
@@ -144,7 +151,12 @@ export default function CompanyDashboard() {
         membershipNameMap[membershipPlan?.name] || '베이직';
     const [openMembership, setOpenMembership] = useState<string | null>(null);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
     const [vehiclePhotos, setVehiclePhotos] = useState<string[]>([]);
+    const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
+    const [vehiclePersistedUrls, setVehiclePersistedUrls] = useState<string[]>(
+        []
+    );
     const [profileForm, setProfileForm] = useState({
         name: '',
         company: '',
@@ -154,6 +166,8 @@ export default function CompanyDashboard() {
         busYear: '',
         capacity: '',
     });
+    const [garageResults, setGarageResults] = useState<KakaoPlace[]>([]);
+    const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 회사';
     const bannerUrl = vehiclePhotos[0] || null;
     const companyRegistrationUrl =
@@ -162,12 +176,63 @@ export default function CompanyDashboard() {
     const insuranceLabel =
         verification?.companyRegistrationStatus === 'approved' ? '인증완료' : '미인증';
     const companyLabel = profileForm.company || '미등록';
+    const resolveMediaUrl = (url?: string | null) =>
+        url
+            ? url.startsWith('/uploads')
+                ? `${uploadBaseUrl}${url}`
+                : url
+            : null;
+
+    function searchGaragePlaces(query: string) {
+        if (!query.trim()) {
+            setGarageResults([]);
+            setGarageStatusMessage('');
+            return;
+        }
+
+        setGarageStatusMessage('검색 중...');
+        fetch(`/api/kakao/places?query=${encodeURIComponent(query)}`)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.error || 'Kakao API error');
+                }
+                return response.json();
+            })
+            .then((data) => {
+                const places = (data.places || []) as KakaoPlace[];
+                setGarageResults(places);
+                if (places.length === 0) {
+                    setGarageStatusMessage('검색 결과 없음');
+                } else {
+                    setGarageStatusMessage(`${places.length}건 조회됨`);
+                }
+            })
+            .catch(() => {
+                setGarageResults([]);
+                setGarageStatusMessage('검색 오류');
+            });
+    }
 
     const addVehiclePhotos = (files: FileList | null) => {
         if (!files) return;
-        const previews = Array.from(files).map((file) =>
-            URL.createObjectURL(file)
+        const incoming = Array.from(files);
+        const remainingSlots = Math.max(
+            0,
+            4 - (vehiclePersistedUrls.length + vehiclePhotoFiles.length)
         );
+        if (remainingSlots === 0) {
+            alert('차량 사진은 최대 4장까지 등록할 수 있습니다.');
+            return;
+        }
+
+        const accepted = incoming.slice(0, remainingSlots);
+        if (incoming.length > accepted.length) {
+            alert('차량 사진은 최대 4장까지 등록할 수 있습니다.');
+        }
+
+        const previews = accepted.map((file) => URL.createObjectURL(file));
+        setVehiclePhotoFiles((prev) => [...prev, ...accepted]);
         setVehiclePhotos((prev) => [...prev, ...previews]);
     };
 
@@ -186,6 +251,27 @@ export default function CompanyDashboard() {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             setMembershipPlan(userData.user?.membershipPlan || null);
+            setProfileForm({
+                name: userData.user?.displayName || '',
+                company: userData.user?.companyName || '',
+                garage: userData.user?.garageAddress || '',
+                busNumber: userData.user?.busNumber || '',
+                busType: userData.user?.busType || '',
+                busYear: userData.user?.busYear || '',
+                capacity: userData.user?.capacity
+                    ? String(userData.user.capacity)
+                    : '',
+            });
+            setProfilePhoto(resolveMediaUrl(userData.user?.profileImageUrl));
+            const persisted = (userData.user?.vehicleImageUrls || []).slice(0, 4);
+            setVehiclePersistedUrls(persisted);
+            setVehiclePhotos(
+                persisted
+                    .map((url: string) => resolveMediaUrl(url))
+                    .filter(Boolean) as string[]
+            );
+            setProfilePhotoFile(null);
+            setVehiclePhotoFiles([]);
             try {
                 const verificationData = await verificationAPI.getMe();
                 setVerification(verificationData.verification);
@@ -285,6 +371,41 @@ export default function CompanyDashboard() {
             alert('업로드에 실패했습니다');
         } finally {
             setVerificationUploading(false);
+        }
+    }
+
+    async function handleProfileSave() {
+        try {
+            const formData = new FormData();
+            formData.append('name', profileForm.name);
+            formData.append('company', profileForm.company);
+            formData.append('garage', profileForm.garage);
+            formData.append('busNumber', profileForm.busNumber);
+            formData.append('busType', profileForm.busType);
+            formData.append('busYear', profileForm.busYear);
+            formData.append('capacity', profileForm.capacity);
+
+            if (profilePhotoFile) {
+                formData.append('profilePhoto', profilePhotoFile);
+            }
+
+            formData.append(
+                'keepVehicleImageUrls',
+                JSON.stringify(vehiclePersistedUrls.slice(0, 4))
+            );
+
+            const remaining = Math.max(0, 4 - vehiclePersistedUrls.length);
+            vehiclePhotoFiles.slice(0, remaining).forEach((file) => {
+                formData.append('vehiclePhotos', file);
+            });
+
+            await profileAPI.update(formData);
+            await loadData();
+            setActiveTab('profile');
+            alert('정보 수정 완료');
+        } catch (error) {
+            console.error('Profile update error:', error);
+            alert('정보 수정에 실패했습니다.');
         }
     }
 
@@ -859,155 +980,269 @@ export default function CompanyDashboard() {
                             </div>
                         </div>
                         <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
-                        <div className="rounded-2xl border bg-white p-6 space-y-4">
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>프로필 사진</Label>
-                                <Input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setProfilePhoto(
-                                            e.target.files?.[0]
-                                                ? URL.createObjectURL(
-                                                      e.target.files[0]
-                                                  )
-                                                : null
-                                        )
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>이름</Label>
-                                <Input
-                                    value={profileForm.name}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            name: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>소속</Label>
-                                <Input
-                                    value={profileForm.company}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            company: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>차고지 주소</Label>
-                                <Input
-                                    value={profileForm.garage}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            garage: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>차량 번호</Label>
-                                <Input
-                                    value={profileForm.busNumber}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            busNumber: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="space-y-2">
-                                    <Label>차량 종류</Label>
-                                    <Input
-                                        value={profileForm.busType}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                busType: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>연식</Label>
-                                    <Input
-                                        value={profileForm.busYear}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                busYear: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>탑승 정원</Label>
-                                    <Input
-                                        value={profileForm.capacity}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                capacity: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>차량 사진 등록</Label>
-                                <Input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) =>
-                                        addVehiclePhotos(e.target.files)
-                                    }
-                                />
-                                {vehiclePhotos.length > 0 && (
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {vehiclePhotos.map((photo, idx) => (
-                                            <img
-                                                key={photo + idx}
-                                                src={photo}
-                                                alt="차량"
-                                                className="h-16 w-full rounded object-cover"
-                                            />
-                                        ))}
+                            <div className="bg-white px-6 py-8 sm:px-10">
+                                <div className="space-y-8">
+                                    <div className="flex flex-col items-center text-center">
+                                        <div className="h-24 w-24 overflow-hidden rounded-full bg-gray-200">
+                                            {profilePhoto ? (
+                                                <img
+                                                    src={profilePhoto}
+                                                    alt="프로필"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : null}
+                                        </div>
+                                        <p className="mt-4 text-sm text-gray-500">
+                                            고객님에게 보이는 대표 사진입니다.
+                                        </p>
+                                        <p className="text-sm text-gray-500">
+                                            회사나 기사 이미지가 잘 보이게 등록해주세요.
+                                        </p>
+                                        <input
+                                            id="company-profile-photo"
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file =
+                                                    e.target.files?.[0] || null;
+                                                setProfilePhotoFile(file);
+                                                setProfilePhoto(
+                                                    file
+                                                        ? URL.createObjectURL(file)
+                                                        : null
+                                                );
+                                            }}
+                                        />
+                                        <label
+                                            htmlFor="company-profile-photo"
+                                            className="mt-4 inline-flex h-11 cursor-pointer items-center justify-center rounded-sm bg-[#4a4a4a] px-8 text-sm font-medium text-white transition hover:bg-[#3f3f3f]"
+                                        >
+                                            사진 등록
+                                        </label>
                                     </div>
-                                )}
+
+                                    <div className="space-y-5">
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                이름
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.name}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        name: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                소속
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.company}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        company: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                차고지 주소
+                                            </Label>
+                                            {garageStatusMessage && (
+                                                <p className="text-xs text-gray-400">
+                                                    {garageStatusMessage}
+                                                </p>
+                                            )}
+                                            <div className="relative">
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                    value={profileForm.garage}
+                                                    onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            garage: value,
+                                                        }));
+                                                        searchGaragePlaces(value);
+                                                    }}
+                                                />
+                                                {garageResults.length > 0 && (
+                                                    <div className="absolute left-0 right-0 top-full z-10 mt-2 overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-black/5">
+                                                        {garageResults.map((place) => (
+                                                            <button
+                                                                key={place.id}
+                                                                type="button"
+                                                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                                                onClick={() => {
+                                                                    setProfileForm(
+                                                                        (prev) => ({
+                                                                            ...prev,
+                                                                            garage:
+                                                                                place.road_address_name ||
+                                                                                place.address_name ||
+                                                                                place.place_name,
+                                                                        })
+                                                                    );
+                                                                    setGarageResults(
+                                                                        []
+                                                                    );
+                                                                }}
+                                                            >
+                                                                <div className="font-medium text-gray-900">
+                                                                    {place.place_name}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {place.road_address_name ||
+                                                                        place.address_name}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                차량 번호
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.busNumber}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        busNumber: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                        <div className="grid gap-5 sm:grid-cols-3">
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    차량 종류
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                    value={profileForm.busType}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            busType: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    연식
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                    value={profileForm.busYear}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            busYear: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    탑승 정원
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 text-right shadow-none focus-visible:ring-0"
+                                                    value={profileForm.capacity}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            capacity: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-sm text-gray-700">
+                                                차량 사진
+                                            </Label>
+                                            <input
+                                                id="company-vehicle-photos"
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                className="hidden"
+                                                onChange={(e) =>
+                                                    addVehiclePhotos(
+                                                        e.target.files
+                                                    )
+                                                }
+                                            />
+                                            <label
+                                                htmlFor="company-vehicle-photos"
+                                                className="cursor-pointer text-sm text-gray-500 underline underline-offset-4"
+                                            >
+                                                사진 추가
+                                            </label>
+                                        </div>
+                                        {vehiclePhotos.length > 0 ? (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {vehiclePhotos.map((photo, idx) => (
+                                                    <img
+                                                        key={photo + idx}
+                                                        src={photo}
+                                                        alt="차량"
+                                                        className="aspect-square w-full rounded-md object-cover"
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-400">
+                                                등록된 차량 사진이 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-sm text-gray-700">
+                                            사업자 등록증
+                                        </Label>
+                                        {companyRegistrationUrl ? (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                <div className="aspect-square overflow-hidden rounded-md bg-gray-50">
+                                                    <img
+                                                        src={`${uploadBaseUrl}${companyRegistrationUrl}`}
+                                                        alt="사업자 등록증"
+                                                        className="h-full w-full object-contain"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-400">
+                                                등록된 서류가 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>사업자 등록증</Label>
-                                {companyRegistrationUrl ? (
-                                    <img
-                                        src={`${uploadBaseUrl}${companyRegistrationUrl}`}
-                                        alt="사업자 등록증"
-                                        className="max-h-48 w-full rounded border object-contain bg-white"
-                                    />
-                                ) : (
-                                    <p className="text-xs text-gray-500">
-                                        등록된 서류가 없습니다.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
                         </div>
                         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-black">
                             <Button
                                 className="h-12 w-full rounded-none bg-black text-white hover:bg-black/90"
-                                onClick={() => {
-                                    setActiveTab('profile');
-                                    alert('정보 수정 완료');
-                                }}
+                                onClick={handleProfileSave}
                             >
                                 정보 수정 완료
                             </Button>

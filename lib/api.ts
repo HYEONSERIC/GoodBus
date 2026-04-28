@@ -249,3 +249,13 @@ export const verificationAPI = {
         });
     },
 };
+
+export const profileAPI = {
+    getMe: async () => fetchAPI('/profile/me'),
+    update: async (formData: FormData) =>
+        fetchAPI('/profile/me', {
+            method: 'PATCH',
+            body: formData,
+            headers: {},
+        }),
+};
