@@ -278,19 +278,21 @@ export default function PassengerDashboard() {
     const awardedTrips = trips.filter((trip) => trip.status === 'awarded');
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="border-b border-orange-100 bg-orange-50">
-                <div className="max-w-6xl mx-auto relative flex items-center justify-center px-4 sm:px-6 py-4">
-                    <div className="absolute left-4 sm:left-6">
-                        <Button
-                            variant="outline"
+        <div className="min-h-screen bg-[#f3f3f5]">
+            <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
+                <div className="relative flex w-full items-center justify-center px-3 sm:px-4 py-4">
+                    <div className="absolute left-3 sm:left-4">
+                        <button
+                            type="button"
+                            className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
                             onClick={() => setMenuOpen(true)}
                         >
-                            메뉴
-                        </Button>
+                            <span className="text-base leading-none">☰</span>
+                            <span>메뉴</span>
+                        </button>
                     </div>
                     <span className="text-lg font-semibold">GOODBUS</span>
-                    <div className="absolute right-4 sm:right-6 flex items-center gap-3">
+                    <div className="absolute right-3 sm:right-4 flex items-center gap-3">
                         <Notifications />
                     </div>
                 </div>
@@ -306,26 +308,6 @@ export default function PassengerDashboard() {
                             <p className="text-sm text-gray-500">Passenger</p>
                         </div>
                         <div className="divide-y border-y">
-                            <button
-                                type="button"
-                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
-                                onClick={() => {
-                                    setActiveTab('quote');
-                                    setMenuOpen(false);
-                                }}
-                            >
-                                견적
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
-                                onClick={() => {
-                                    setActiveTab('booking');
-                                    setMenuOpen(false);
-                                }}
-                            >
-                                예약
-                            </button>
                             <button
                                 type="button"
                                 className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
@@ -358,7 +340,7 @@ export default function PassengerDashboard() {
 
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardHeader>
                             <CardTitle className="text-sm text-gray-500">
                                 회원등급
@@ -368,7 +350,7 @@ export default function PassengerDashboard() {
                             일반회원
                         </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardHeader>
                             <CardTitle className="text-sm text-gray-500">
                                 적립금
@@ -378,7 +360,7 @@ export default function PassengerDashboard() {
                             0원
                         </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardHeader>
                             <CardTitle className="text-sm text-gray-500">
                                 추천 혜택
@@ -390,7 +372,7 @@ export default function PassengerDashboard() {
                     </Card>
                 </div>
 
-                <Card>
+                <Card className="border-gray-200 shadow-sm">
                     <CardHeader className="text-center">
                         <CardTitle>
                             굿버스에서 가격비교 하고 적립금도 받아가세요.
@@ -671,7 +653,7 @@ export default function PassengerDashboard() {
                 {activeTab === 'quote' && (
                     <div className="grid gap-6">
                         {trips.map((trip) => (
-                            <Card key={trip.id}>
+                            <Card key={trip.id} className="border-gray-200 shadow-sm">
                                 <CardHeader>
                                     <div className="flex justify-between">
                                         <div>
@@ -879,7 +861,7 @@ export default function PassengerDashboard() {
                             </Card>
                         ) : (
                             awardedTrips.map((trip) => (
-                                <Card key={trip.id}>
+                                <Card key={trip.id} className="border-gray-200 shadow-sm">
                                     <CardHeader>
                                         <CardTitle>
                                             {trip.origin} → {trip.destination}
@@ -910,7 +892,7 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'chat' && (
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-4">
                             <ChatPanel />
                             <p className="hidden">
@@ -925,7 +907,7 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-4">
                             <p className="text-sm text-gray-600">
                                 문의는 버튼을 눌러 진행해주세요. 상담 기록은
@@ -944,7 +926,7 @@ export default function PassengerDashboard() {
                 )}
             </div>
 
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
+            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
                     <Button
                         variant={activeTab === 'quote' ? 'default' : 'ghost'}

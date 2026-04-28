@@ -5,19 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { authAPI } from '@/lib/api';
+import { AuthScaffold } from '@/components/auth/AuthScaffold';
 
 export default function LoginPage() {
     const router = useRouter();
+    const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -29,21 +25,46 @@ export default function LoginPage() {
         try {
             await authAPI.login(email, password);
             router.push('/dashboard');
-        } catch (err: any) {
-            setError(err.message || '로그인에 실패했습니다');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : '로그인에 실패했습니다');
         } finally {
             setLoading(false);
         }
     };
 
+    const handlePhoneRequest = () => {
+        alert('아직 기능 구현 전입니다.');
+    };
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <Card className="w-full max-w-md">
-                <CardHeader>
-                    <CardTitle>굿버스에 오신 것을 환영합니다</CardTitle>
-                    <CardDescription>계정에 로그인하세요</CardDescription>
-                </CardHeader>
-                <CardContent>
+        <AuthScaffold title="로그인">
+            <div className="mx-auto w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+                <div className="mb-6 grid grid-cols-2 gap-2 rounded-full bg-gray-100 p-1">
+                    <button
+                        type="button"
+                        className={`rounded-full px-3 py-2 text-sm font-semibold ${
+                            loginMethod === 'email'
+                                ? 'bg-[#e85b4f] text-white'
+                                : 'text-gray-700'
+                        }`}
+                        onClick={() => setLoginMethod('email')}
+                    >
+                        이메일로 로그인
+                    </button>
+                    <button
+                        type="button"
+                        className={`rounded-full px-3 py-2 text-sm font-semibold ${
+                            loginMethod === 'phone'
+                                ? 'bg-[#e85b4f] text-white'
+                                : 'text-gray-700'
+                        }`}
+                        onClick={() => setLoginMethod('phone')}
+                    >
+                        휴대전화로 로그인
+                    </button>
+                </div>
+
+                {loginMethod === 'email' ? (
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="email">이메일</Label>
@@ -52,6 +73,7 @@ export default function LoginPage() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                                placeholder="이메일을 입력하세요"
                                 required
                             />
                         </div>
@@ -67,30 +89,46 @@ export default function LoginPage() {
                             />
                         </div>
 
-                        {error && (
-                            <p className="text-sm text-red-500">{error}</p>
-                        )}
+                        {error && <p className="text-sm text-red-500">{error}</p>}
 
                         <Button
                             type="submit"
-                            className="w-full"
+                            className="h-11 w-full bg-[#e85b4f] hover:bg-[#d85045]"
                             disabled={loading}
                         >
                             {loading ? '로그인 중...' : '로그인'}
                         </Button>
-
-                        <p className="text-sm text-center text-gray-600">
-                            계정이 없으신가요?{' '}
-                            <a
-                                href="/signup"
-                                className="text-blue-600 hover:underline"
-                            >
-                                회원가입
-                            </a>
-                        </p>
                     </form>
-                </CardContent>
-            </Card>
-        </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="phoneNumber">휴대전화 번호</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    id="phoneNumber"
+                                    value={phoneNumber}
+                                    onChange={(e) => setPhoneNumber(e.target.value)}
+                                    placeholder="연락받으실 휴대전화번호"
+                                />
+                                <Button
+                                    type="button"
+                                    className="whitespace-nowrap bg-[#e85b4f] hover:bg-[#d85045]"
+                                    onClick={handlePhoneRequest}
+                                >
+                                    인증 요청
+                                </Button>
+                            </div>
+                        </div>
+                        <Button
+                            type="button"
+                            className="h-11 w-full bg-[#e85b4f] hover:bg-[#d85045]"
+                            onClick={handlePhoneRequest}
+                        >
+                            로그인
+                        </Button>
+                    </div>
+                )}
+            </div>
+        </AuthScaffold>
     );
 }

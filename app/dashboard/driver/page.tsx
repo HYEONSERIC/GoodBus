@@ -13,7 +13,6 @@ import {
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,12 +52,19 @@ export default function DriverDashboard() {
     const [bidData, setBidData] = useState({ price: 0, note: '' });
     const [verification, setVerification] = useState<any>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+    const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
     const [verificationFile, setVerificationFile] = useState<File | null>(null);
     const [verificationUploading, setVerificationUploading] = useState(false);
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     const [activeTab, setActiveTab] = useState<
-        'available' | 'contract' | 'chat' | 'support' | 'membership'
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'profile'
+        | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -138,6 +144,33 @@ export default function DriverDashboard() {
     const currentMembershipLabel =
         membershipNameMap[membershipPlan?.name] || '베이직';
     const [openMembership, setOpenMembership] = useState<string | null>(null);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [vehiclePhotos, setVehiclePhotos] = useState<string[]>([]);
+    const [profileForm, setProfileForm] = useState({
+        name: '',
+        company: '',
+        garage: '',
+        busNumber: '',
+        busType: '',
+        busYear: '',
+        capacity: '',
+    });
+    const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 기사';
+    const bannerUrl = vehiclePhotos[0] || null;
+    const driverLicenseUrl =
+        verification?.driverLicenseUrl || user?.driverLicenseUrl || null;
+    const vehicleLabel = profileForm.busType || '미등록';
+    const insuranceLabel =
+        verification?.driverLicenseStatus === 'approved' ? '인증완료' : '미인증';
+    const companyLabel = profileForm.company || '미등록';
+
+    const addVehiclePhotos = (files: FileList | null) => {
+        if (!files) return;
+        const previews = Array.from(files).map((file) =>
+            URL.createObjectURL(file)
+        );
+        setVehiclePhotos((prev) => [...prev, ...previews]);
+    };
 
     useEffect(() => {
         loadData();
@@ -223,7 +256,12 @@ export default function DriverDashboard() {
         }
 
         try {
-            if (verification?.driverLicenseStatus !== 'approved') {
+            const licenseStatus = verification?.driverLicenseStatus;
+            if (licenseStatus === 'pending') {
+                setPendingDialogOpen(true);
+                return;
+            }
+            if (licenseStatus !== 'approved') {
                 setVerificationDialogOpen(true);
                 return;
             }
@@ -235,6 +273,20 @@ export default function DriverDashboard() {
             await loadData();
             alert(error?.message || '입찰 생성에 실패했습니다');
         }
+    }
+
+    function handleBidButtonClick(trip: Trip) {
+        const licenseStatus = verification?.driverLicenseStatus;
+        if (licenseStatus === 'pending') {
+            setPendingDialogOpen(true);
+            return;
+        }
+        if (licenseStatus !== 'approved') {
+            setVerificationDialogOpen(true);
+            return;
+        }
+        setSelectedTrip(trip);
+        setBidData({ price: 0, note: '' });
     }
 
     async function handleVerificationUpload() {
@@ -301,22 +353,29 @@ export default function DriverDashboard() {
 
     return (
         <>
-        <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
-            <div className="max-w-6xl mx-auto">
-                <div className="relative flex items-center justify-center mb-6 rounded-md border border-orange-100 bg-orange-50 px-4 py-3">
-                    <div className="absolute left-0">
-                        <Button
-                            variant="outline"
-                            onClick={() => setMenuOpen(true)}
-                        >
-                            메뉴
-                        </Button>
-                    </div>
-                    <span className="text-lg font-semibold">GOODBUS</span>
-                    <div className="absolute right-0 flex items-center gap-3">
-                        <Notifications />
+        <div className="min-h-screen bg-[#f3f3f5]">
+            {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+                <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
+                    <div className="relative flex w-full items-center justify-center px-3 sm:px-4 py-4">
+                        <div className="absolute left-3 sm:left-4">
+                            <button
+                                type="button"
+                                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
+                                onClick={() => setMenuOpen(true)}
+                            >
+                                <span className="text-base leading-none">☰</span>
+                                <span>메뉴</span>
+                            </button>
+                        </div>
+                        <span className="text-lg font-semibold">GOODBUS</span>
+                        <div className="absolute right-3 sm:right-4 flex items-center gap-3">
+                            <Notifications />
+                        </div>
                     </div>
                 </div>
+            )}
+
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
                 <Dialog
                     open={verificationDialogOpen}
@@ -370,157 +429,20 @@ export default function DriverDashboard() {
                     </DialogContent>
                 </Dialog>
 
-                {activeTab === 'contract' && (
-                    <>
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold mb-4">
-                                낙찰된 여정
-                            </h2>
-                            {awardedTrips.length > 0 ? (
-                                <div className="grid gap-6">
-                                    {awardedTrips.map((trip) => {
-                                        const myBid = trip.bids.find(
-                                            (bid: Bid) =>
-                                                bid.bidder.id === user?.id &&
-                                                bid.status === 'awarded'
-                                        );
-                                        return (
-                                            <Card
-                                                key={trip.id}
-                                                className="border-green-500"
-                                            >
-                                                <CardHeader>
-                                                    <div className="flex justify-between">
-                                                        <div>
-                                                            <CardTitle>
-                                                                {trip.origin} →{' '}
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                            <p className="text-sm text-gray-600">
-                                                                {format(
-                                                                    new Date(
-                                                                        trip.dateTime
-                                                                    ),
-                                                                    'PPP p'
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <Badge className="bg-green-500">
-                                                            낙찰됨
-                                                        </Badge>
-                                                    </div>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p>
-                                                        승객 수: {trip.paxCount}
-                                                    </p>
-                                                    <p>
-                                                        버스 크기:{' '}
-                                                        {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}
-                                                    </p>
-                                                    <div className="mt-4 p-3 bg-green-100 rounded">
-                                                        <p className="font-bold text-green-800">
-                                                            🎉 낙찰가: $
-                                                            {myBid?.price}
-                                                        </p>
-                                                        {myBid?.note && (
-                                                            <p className="text-sm text-gray-600 mt-1">
-                                                                {myBid.note}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">
-                                    낙찰된 여정이 없습니다
-                                </p>
-                            )}
-                        </div>
-
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold mb-4">
-                                내 입찰
-                            </h2>
-                            {myBids.length > 0 ? (
-                                <div className="grid gap-6">
-                                    {myBids.map((trip) => {
-                                        const myBid = trip.bids.find(
-                                            (bid: Bid) =>
-                                                bid.bidder.id === user?.id &&
-                                                bid.status === 'open'
-                                        );
-                                        return (
-                                            <Card key={trip.id}>
-                                                <CardHeader>
-                                                    <div className="flex justify-between">
-                                                        <div>
-                                                            <CardTitle>
-                                                                {trip.origin} →{' '}
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                            <p className="text-sm text-gray-600">
-                                                                {format(
-                                                                    new Date(
-                                                                        trip.dateTime
-                                                                    ),
-                                                                    'PPP p'
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <Badge>입찰 완료</Badge>
-                                                    </div>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p>
-                                                        승객 수: {trip.paxCount}
-                                                    </p>
-                                                    <p>
-                                                        버스 크기:{' '}
-                                                        {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}
-                                                    </p>
-                                                    <div className="mt-4 p-3 bg-green-50 rounded">
-                                                        <p className="font-semibold text-green-700">
-                                                            내 입찰가: $
-                                                            {myBid?.price}
-                                                        </p>
-                                                        {myBid?.note && (
-                                                            <p className="text-sm text-gray-600 mt-1">
-                                                                {myBid.note}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <Button
-                                                        variant="destructive"
-                                                        className="mt-4"
-                                                        onClick={() =>
-                                                            handleWithdrawBid(
-                                                                trip
-                                                            )
-                                                        }
-                                                    >
-                                                        입찰 철회
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">
-                                    입찰한 내역이 없습니다
-                                </p>
-                            )}
-                        </div>
-                    </>
-                )}
+                <Dialog open={pendingDialogOpen} onOpenChange={setPendingDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>승인 대기중입니다</DialogTitle>
+                            <DialogDescription>
+                                운전자격증이 아직 승인되지 않았습니다. 관리자 승인 후
+                                입찰할 수 있습니다.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Button onClick={() => setPendingDialogOpen(false)}>
+                            확인
+                        </Button>
+                    </DialogContent>
+                </Dialog>
 
                 {activeTab === 'available' && (
                     <div>
@@ -571,7 +493,7 @@ export default function DriverDashboard() {
                         </div>
                         <div className="grid gap-4">
                             {filterTrips(trips).map((trip) => (
-                                <Card key={trip.id} className="w-full">
+                                <Card key={trip.id} className="w-full border-gray-200 shadow-sm">
                                     <CardHeader>
                                         <div className="flex justify-between">
                                             <div>
@@ -592,12 +514,22 @@ export default function DriverDashboard() {
                                     <CardContent className="space-y-2">
                                         <p>승객 수: {trip.paxCount}</p>
                                         <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
-                                        <Dialog>
-                                            <DialogTrigger asChild>
-                                                <Button className="mt-2 w-full sm:w-auto">
-                                                    입찰하기
-                                                </Button>
-                                            </DialogTrigger>
+                                        <Dialog
+                                            open={selectedTrip?.id === trip.id}
+                                            onOpenChange={(open) => {
+                                                if (!open) {
+                                                    setSelectedTrip(null);
+                                                }
+                                            }}
+                                        >
+                                            <Button
+                                                className="mt-2 w-full sm:w-auto"
+                                                onClick={() =>
+                                                    handleBidButtonClick(trip)
+                                                }
+                                            >
+                                                입찰하기
+                                            </Button>
                                             <DialogContent>
                                                 <DialogHeader>
                                                     <DialogTitle>
@@ -675,8 +607,170 @@ export default function DriverDashboard() {
                     </div>
                 )}
 
+                {activeTab === 'contract' && (
+                    <>
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-bold mb-4">
+                                낙찰된 여정
+                            </h2>
+                            {awardedTrips.length > 0 ? (
+                                <div className="grid gap-6">
+                                    {awardedTrips.map((trip) => {
+                                        const myBid = trip.bids.find(
+                                            (bid: Bid) =>
+                                                bid.bidder.id === user?.id &&
+                                                bid.status === 'awarded'
+                                        );
+                                        return (
+                                            <Card
+                                                key={trip.id}
+                                                className="border-green-500"
+                                            >
+                                                <CardHeader>
+                                                    <div className="flex justify-between">
+                                                        <div>
+                                                            <CardTitle>
+                                                                {trip.origin} →{' '}
+                                                                {
+                                                                    trip.destination
+                                                                }
+                                                            </CardTitle>
+                                                            <p className="text-sm text-gray-600">
+                                                                {format(
+                                                                    new Date(
+                                                                        trip.dateTime
+                                                                    ),
+                                                                    'PPP p'
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                        <Badge className="bg-green-500">
+                                                            낙찰됨
+                                                        </Badge>
+                                                    </div>
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <p>
+                                                        승객 수: {trip.paxCount}
+                                                    </p>
+                                                    <p>
+                                                        버스 크기:{' '}
+                                                        {trip.busSize === 'small'
+                                                            ? '소형'
+                                                            : trip.busSize ===
+                                                                'medium'
+                                                              ? '중형'
+                                                              : '대형'}
+                                                    </p>
+                                                    <div className="mt-4 p-3 bg-green-100 rounded">
+                                                        <p className="font-bold text-green-800">
+                                                            🎉 낙찰가: $
+                                                            {myBid?.price}
+                                                        </p>
+                                                        {myBid?.note && (
+                                                            <p className="text-sm text-gray-600 mt-1">
+                                                                {myBid.note}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 text-center py-8">
+                                    낙찰된 여정이 없습니다
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="mb-6">
+                            <h2 className="text-2xl font-bold mb-4">
+                                내 입찰
+                            </h2>
+                            {myBids.length > 0 ? (
+                                <div className="grid gap-6">
+                                    {myBids.map((trip) => {
+                                        const myBid = trip.bids.find(
+                                            (bid: Bid) =>
+                                                bid.bidder.id === user?.id &&
+                                                bid.status === 'open'
+                                        );
+                                        return (
+                                            <Card key={trip.id} className="border-gray-200 shadow-sm">
+                                                <CardHeader>
+                                                    <div className="flex justify-between">
+                                                        <div>
+                                                            <CardTitle>
+                                                                {trip.origin} →{' '}
+                                                                {
+                                                                    trip.destination
+                                                                }
+                                                            </CardTitle>
+                                                            <p className="text-sm text-gray-600">
+                                                                {format(
+                                                                    new Date(
+                                                                        trip.dateTime
+                                                                    ),
+                                                                    'PPP p'
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                        <Badge>입찰 완료</Badge>
+                                                    </div>
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <p>
+                                                        승객 수: {trip.paxCount}
+                                                    </p>
+                                                    <p>
+                                                        버스 크기:{' '}
+                                                        {trip.busSize === 'small'
+                                                            ? '소형'
+                                                            : trip.busSize ===
+                                                                'medium'
+                                                              ? '중형'
+                                                              : '대형'}
+                                                    </p>
+                                                    <div className="mt-4 p-3 bg-green-50 rounded">
+                                                        <p className="font-semibold text-green-700">
+                                                            내 입찰가: $
+                                                            {myBid?.price}
+                                                        </p>
+                                                        {myBid?.note && (
+                                                            <p className="text-sm text-gray-600 mt-1">
+                                                                {myBid.note}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <Button
+                                                        variant="destructive"
+                                                        className="mt-4"
+                                                        onClick={() =>
+                                                            handleWithdrawBid(
+                                                                trip
+                                                            )
+                                                        }
+                                                    >
+                                                        입찰 철회
+                                                    </Button>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 text-center py-8">
+                                    입찰한 내역이 없습니다
+                                </p>
+                            )}
+                        </div>
+                    </>
+                )}
+
                 {activeTab === 'chat' && (
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-3 text-sm text-gray-600">
                             <ChatPanel />
                         </CardContent>
@@ -684,7 +778,7 @@ export default function DriverDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card>
+                    <Card className="border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-3 text-sm text-gray-600">
                             고객센터 문의 영역입니다. 문의 유형별로 분류하고
                             처리 상태를 추적하도록 확장할 수 있습니다.
@@ -693,6 +787,277 @@ export default function DriverDashboard() {
                             </Button>
                         </CardContent>
                     </Card>
+                )}
+
+
+                {activeTab === 'profile' && (
+                    <>
+                        <div className="fixed inset-x-0 top-0 z-30 border-b bg-white/95 backdrop-blur">
+                            <div className="relative flex w-full items-center justify-center px-4 py-3 text-sm">
+                                <button
+                                    type="button"
+                                    className="absolute left-4 text-gray-600"
+                                    onClick={() => setActiveTab('available')}
+                                >
+                                    ←
+                                </button>
+                                <span className="font-semibold">나의 정보</span>
+                                <button
+                                    type="button"
+                                    className="absolute right-4 text-gray-600"
+                                    onClick={() => setActiveTab('available')}
+                                >
+                                    ⌂
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
+                            <div className="rounded-2xl overflow-hidden border bg-white">
+                                <div className="h-40 bg-gray-200">
+                                    {bannerUrl ? (
+                                        <img
+                                            src={bannerUrl}
+                                            alt="배너"
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : null}
+                                </div>
+                                <div className="px-6 pb-6">
+                                    <div className="-mt-10 flex flex-col items-center text-center">
+                                        <div className="h-20 w-20 rounded-full bg-gray-200 border-4 border-white overflow-hidden">
+                                            {profilePhoto ? (
+                                                <img
+                                                    src={profilePhoto}
+                                                    alt="프로필"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : null}
+                                        </div>
+                                        <p className="mt-3 text-lg font-semibold">
+                                            {displayName}
+                                        </p>
+                                        <p className="text-sm text-gray-500">
+                                            ★★★★☆ (4.9)
+                                        </p>
+                                        <div className="mt-4 grid grid-cols-3 gap-4 text-xs text-gray-600">
+                                            <div>
+                                                <p className="font-semibold text-gray-900">
+                                                    차종
+                                                </p>
+                                                <p>{vehicleLabel}</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-gray-900">
+                                                    보험
+                                                </p>
+                                                <p>{insuranceLabel}</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-gray-900">
+                                                    소속
+                                                </p>
+                                                <p>{companyLabel}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-6 space-y-4">
+                                        <h3 className="text-sm font-semibold">리뷰</h3>
+                                        <div className="rounded-lg border p-4 text-sm text-gray-600">
+                                            아직 등록된 리뷰가 없습니다.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-black">
+                            <Button
+                                className="h-12 w-full rounded-none bg-black text-white hover:bg-black/90"
+                                onClick={() => setActiveTab('profileEdit')}
+                            >
+                                정보 수정하기
+                            </Button>
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'profileEdit' && (
+                    <>
+                        <div className="fixed inset-x-0 top-0 z-30 border-b bg-white/95 backdrop-blur">
+                            <div className="relative flex w-full items-center justify-center px-4 py-3 text-sm">
+                                <button
+                                    type="button"
+                                    className="absolute left-4 text-gray-600"
+                                    onClick={() => setActiveTab('profile')}
+                                >
+                                    ←
+                                </button>
+                                <span className="font-semibold">정보 수정</span>
+                                <button
+                                    type="button"
+                                    className="absolute right-4 text-gray-600"
+                                    onClick={() => setActiveTab('available')}
+                                >
+                                    ⌂
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
+                        <div className="rounded-2xl border bg-white p-6 space-y-4">
+                            <div className="space-y-2 text-sm text-gray-600">
+                                <Label>프로필 사진</Label>
+                                <Input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) =>
+                                        setProfilePhoto(
+                                            e.target.files?.[0]
+                                                ? URL.createObjectURL(
+                                                      e.target.files[0]
+                                                  )
+                                                : null
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>이름</Label>
+                                <Input
+                                    value={profileForm.name}
+                                    onChange={(e) =>
+                                        setProfileForm((prev) => ({
+                                            ...prev,
+                                            name: e.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>소속</Label>
+                                <Input
+                                    value={profileForm.company}
+                                    onChange={(e) =>
+                                        setProfileForm((prev) => ({
+                                            ...prev,
+                                            company: e.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>차고지 주소</Label>
+                                <Input
+                                    value={profileForm.garage}
+                                    onChange={(e) =>
+                                        setProfileForm((prev) => ({
+                                            ...prev,
+                                            garage: e.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>차량 번호</Label>
+                                <Input
+                                    value={profileForm.busNumber}
+                                    onChange={(e) =>
+                                        setProfileForm((prev) => ({
+                                            ...prev,
+                                            busNumber: e.target.value,
+                                        }))
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                <div className="space-y-2">
+                                    <Label>차량 종류</Label>
+                                    <Input
+                                        value={profileForm.busType}
+                                        onChange={(e) =>
+                                            setProfileForm((prev) => ({
+                                                ...prev,
+                                                busType: e.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>연식</Label>
+                                    <Input
+                                        value={profileForm.busYear}
+                                        onChange={(e) =>
+                                            setProfileForm((prev) => ({
+                                                ...prev,
+                                                busYear: e.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>탑승 정원</Label>
+                                    <Input
+                                        value={profileForm.capacity}
+                                        onChange={(e) =>
+                                            setProfileForm((prev) => ({
+                                                ...prev,
+                                                capacity: e.target.value,
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2 text-sm text-gray-600">
+                                <Label>차량 사진 등록</Label>
+                                <Input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) =>
+                                        addVehiclePhotos(e.target.files)
+                                    }
+                                />
+                                {vehiclePhotos.length > 0 && (
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {vehiclePhotos.map((photo, idx) => (
+                                            <img
+                                                key={photo + idx}
+                                                src={photo}
+                                                alt="차량"
+                                                className="h-16 w-full rounded object-cover"
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="space-y-2 text-sm text-gray-600">
+                                <Label>버스 운전 자격증</Label>
+                                {driverLicenseUrl ? (
+                                    <img
+                                        src={`${uploadBaseUrl}${driverLicenseUrl}`}
+                                        alt="운전자격증"
+                                        className="max-h-48 w-full rounded border object-contain bg-white"
+                                    />
+                                ) : (
+                                    <p className="text-xs text-gray-500">
+                                        등록된 자격증이 없습니다.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        </div>
+                        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-black">
+                            <Button
+                                className="h-12 w-full rounded-none bg-black text-white hover:bg-black/90"
+                                onClick={() => {
+                                    setActiveTab('profile');
+                                    alert('정보 수정 완료');
+                                }}
+                            >
+                                정보 수정 완료
+                            </Button>
+                        </div>
+                    </>
                 )}
 
                 {activeTab === 'membership' && (
@@ -762,52 +1127,29 @@ export default function DriverDashboard() {
         {menuOpen && (
             <div className="fixed inset-0 z-40 bg-black/30">
                 <div className="absolute left-0 top-0 h-full w-72 bg-white shadow-lg p-6 space-y-6">
-                    <div>
-                        <p className="text-lg font-semibold">
-                            {user?.email}
-                        </p>
-                        <p className="text-sm text-gray-500">Driver</p>
+                    <div className="flex flex-col items-center text-center">
+                        <div className="h-20 w-20 rounded-full bg-gray-200 overflow-hidden">
+                            {profilePhoto ? (
+                                <img
+                                    src={profilePhoto}
+                                    alt="프로필"
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : null}
+                        </div>
+                        <p className="mt-3 text-lg font-semibold">{displayName}</p>
+                        <p className="text-xs text-gray-500">★★★★☆</p>
                     </div>
                     <div className="divide-y border-y">
                         <button
                             type="button"
                             className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
-                                setActiveTab('available');
+                                setActiveTab('profile');
                                 setMenuOpen(false);
                             }}
                         >
-                            주문
-                        </button>
-                        <button
-                            type="button"
-                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
-                            onClick={() => {
-                                setActiveTab('contract');
-                                setMenuOpen(false);
-                            }}
-                        >
-                            계약
-                        </button>
-                        <button
-                            type="button"
-                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
-                            onClick={() => {
-                                setActiveTab('chat');
-                                setMenuOpen(false);
-                            }}
-                        >
-                            채팅
-                        </button>
-                        <button
-                            type="button"
-                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
-                            onClick={() => {
-                                setActiveTab('support');
-                                setMenuOpen(false);
-                            }}
-                        >
-                            고객센터
+                            나의 정보
                         </button>
                         <button
                             type="button"
@@ -840,38 +1182,40 @@ export default function DriverDashboard() {
                 </div>
             </div>
         )}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
-                <Button
-                    variant={activeTab === 'available' ? 'default' : 'ghost'}
-                    onClick={() => setActiveTab('available')}
-                    className="text-xs sm:text-sm"
-                >
-                    주문
-                </Button>
-                <Button
-                    variant={activeTab === 'contract' ? 'default' : 'ghost'}
-                    onClick={() => setActiveTab('contract')}
-                    className="text-xs sm:text-sm"
-                >
-                    계약
-                </Button>
-                <Button
-                    variant={activeTab === 'chat' ? 'default' : 'ghost'}
-                    onClick={() => setActiveTab('chat')}
-                    className="text-xs sm:text-sm"
-                >
-                    채팅
-                </Button>
-                <Button
-                    variant={activeTab === 'support' ? 'default' : 'ghost'}
-                    onClick={() => setActiveTab('support')}
-                    className="text-xs sm:text-sm"
-                >
-                    고객센터
-                </Button>
+        {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
+                    <Button
+                        variant={activeTab === 'available' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('available')}
+                        className="text-xs sm:text-sm"
+                    >
+                        주문
+                    </Button>
+                    <Button
+                        variant={activeTab === 'contract' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('contract')}
+                        className="text-xs sm:text-sm"
+                    >
+                        계약
+                    </Button>
+                    <Button
+                        variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('chat')}
+                        className="text-xs sm:text-sm"
+                    >
+                        채팅
+                    </Button>
+                    <Button
+                        variant={activeTab === 'support' ? 'default' : 'ghost'}
+                        onClick={() => setActiveTab('support')}
+                        className="text-xs sm:text-sm"
+                    >
+                        고객센터
+                    </Button>
+                </div>
             </div>
-        </div>
+        )}
         <Dialog open={regionFilterOpen} onOpenChange={setRegionFilterOpen}>
             <DialogContent>
                 <DialogHeader>

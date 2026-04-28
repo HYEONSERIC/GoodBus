@@ -133,6 +133,8 @@ function formatNotificationResult(item: AdminNotificationHistoryRow) {
         return '입찰 실패';
     }
     return '입찰 대기';
+}
+
 interface VerificationRow {
     id: string;
     email: string;
@@ -157,7 +159,6 @@ export default function AdminPage() {
         useState<AdminUserActivity | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    const [adminFormOpen, setAdminFormOpen] = useState(false);
     const [adminForm, setAdminForm] = useState({
         email: '',
         password: '',
@@ -167,8 +168,14 @@ export default function AdminPage() {
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState<
-        'overview' | 'users' | 'bids' | 'notifications' | 'revenue' | 'faq'
-        'overview' | 'users' | 'bids' | 'verification' | 'revenue' | 'faq'
+        | 'overview'
+        | 'users'
+        | 'bids'
+        | 'notifications'
+        | 'verification'
+        | 'revenue'
+        | 'faq'
+        | 'adminCreate'
     >('overview');
     const [adminRole, setAdminRole] = useState<string | null>(null);
     const [overviewTripLimit, setOverviewTripLimit] = useState(5);
@@ -243,6 +250,7 @@ export default function AdminPage() {
             !notificationLoading
         ) {
             handleNotificationHistorySearch(1);
+        }
         if (activeTab === 'verification' && !verificationLoading) {
             loadVerifications();
         }
@@ -307,7 +315,6 @@ export default function AdminPage() {
                     | 'Finance',
             });
             setAdminForm({ email: '', password: '', adminRole: 'CustomerSupport' });
-            setAdminFormOpen(false);
             await handleFilter();
         } catch (err: unknown) {
             setError(getErrorMessage(err, '관리자 생성에 실패했습니다.'));
@@ -372,8 +379,8 @@ export default function AdminPage() {
                 status: verificationStatus,
             });
             setVerificationList(data.users || []);
-        } catch (err: any) {
-            setError(err.message || '승인 목록을 불러오지 못했습니다.');
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, '승인 목록을 불러오지 못했습니다.'));
         } finally {
             setVerificationLoading(false);
         }
@@ -441,6 +448,8 @@ export default function AdminPage() {
                     onClick={() => setActiveTab('notifications')}
                 >
                     알림 히스토리
+                </Button>
+                <Button
                     variant={activeTab === 'verification' ? 'default' : 'outline'}
                     onClick={() => setActiveTab('verification')}
                 >
@@ -460,6 +469,14 @@ export default function AdminPage() {
                 >
                     FAQ/문의
                 </Button>
+                {adminRole === 'Super' && (
+                    <Button
+                        variant={activeTab === 'adminCreate' ? 'default' : 'outline'}
+                        onClick={() => setActiveTab('adminCreate')}
+                    >
+                        관리자 계정 생성
+                    </Button>
+                )}
             </div>
 
             {activeTab === 'overview' && (
@@ -876,75 +893,6 @@ export default function AdminPage() {
                         )}
                     </div>
 
-                    {adminRole === 'Super' && (
-                        <div className="rounded-lg border p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold">
-                                    관리자 계정 생성
-                                </h3>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setAdminFormOpen((prev) => !prev)}
-                                >
-                                    {adminFormOpen ? '닫기' : '열기'}
-                                </Button>
-                            </div>
-                            {adminFormOpen && (
-                                <div className="space-y-3">
-                                    <div>
-                                        <Label>이메일</Label>
-                                        <Input
-                                            value={adminForm.email}
-                                            onChange={(e) =>
-                                                setAdminForm((prev) => ({
-                                                    ...prev,
-                                                    email: e.target.value,
-                                                }))
-                                            }
-                                            placeholder="admin2@example.com"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>비밀번호</Label>
-                                        <Input
-                                            type="password"
-                                            value={adminForm.password}
-                                            onChange={(e) =>
-                                                setAdminForm((prev) => ({
-                                                    ...prev,
-                                                    password: e.target.value,
-                                                }))
-                                            }
-                                            placeholder="비밀번호"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>관리자 역할</Label>
-                                        <select
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={adminForm.adminRole}
-                                            onChange={(e) =>
-                                                setAdminForm((prev) => ({
-                                                    ...prev,
-                                                    adminRole: e.target.value,
-                                                }))
-                                            }
-                                        >
-                                            <option value="CustomerSupport">
-                                                고객지원
-                                            </option>
-                                            <option value="Operations">운영</option>
-                                            <option value="Finance">재무</option>
-                                        </select>
-                                    </div>
-                                    <Button onClick={handleCreateAdmin}>
-                                        관리자 생성
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -1484,6 +1432,62 @@ export default function AdminPage() {
                     </div>
                     <div className="rounded-lg border border-dashed p-6 text-sm text-gray-500">
                         문의 리스트/상세/답변 UI가 들어올 자리입니다.
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'adminCreate' && adminRole === 'Super' && (
+                <div className="rounded-lg border p-6 space-y-4">
+                    <h2 className="text-lg font-semibold">관리자 계정 생성</h2>
+                    <p className="text-sm text-gray-600">
+                        운영/고객지원/재무 관리자 계정을 생성합니다.
+                    </p>
+                    <div className="space-y-3">
+                        <div>
+                            <Label>이메일</Label>
+                            <Input
+                                value={adminForm.email}
+                                onChange={(e) =>
+                                    setAdminForm((prev) => ({
+                                        ...prev,
+                                        email: e.target.value,
+                                    }))
+                                }
+                                placeholder="admin2@example.com"
+                            />
+                        </div>
+                        <div>
+                            <Label>비밀번호</Label>
+                            <Input
+                                type="password"
+                                value={adminForm.password}
+                                onChange={(e) =>
+                                    setAdminForm((prev) => ({
+                                        ...prev,
+                                        password: e.target.value,
+                                    }))
+                                }
+                                placeholder="비밀번호"
+                            />
+                        </div>
+                        <div>
+                            <Label>관리자 역할</Label>
+                            <select
+                                className="border rounded px-2 py-1 w-full"
+                                value={adminForm.adminRole}
+                                onChange={(e) =>
+                                    setAdminForm((prev) => ({
+                                        ...prev,
+                                        adminRole: e.target.value,
+                                    }))
+                                }
+                            >
+                                <option value="CustomerSupport">고객지원</option>
+                                <option value="Operations">운영</option>
+                                <option value="Finance">재무</option>
+                            </select>
+                        </div>
+                        <Button onClick={handleCreateAdmin}>관리자 생성</Button>
                     </div>
                 </div>
             )}

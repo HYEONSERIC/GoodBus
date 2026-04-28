@@ -215,7 +215,10 @@ export function Notifications() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" className="relative">
+                <Button
+                    variant="ghost"
+                    className="relative h-7 w-7 p-0 text-gray-700 hover:bg-transparent hover:text-black"
+                >
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && (
                         <Badge
