@@ -14,6 +14,26 @@ enum UserRole {
   Passenger
   Driver
   BusCompany
+  Admin
+}
+
+enum UserStatus {
+  Active
+  Blocked
+}
+
+enum AdminRole {
+  Super
+  CustomerSupport
+  Operations
+  Finance
+}
+
+enum VerificationStatus {
+  none
+  pending
+  approved
+  rejected
 }
 
 enum BusSize {
@@ -40,11 +60,34 @@ model User {
   email       String   @unique
   passwordHash String
   role        UserRole
+  status      UserStatus @default(Active)
+  adminRole   AdminRole?
+  displayName String?
+  companyName String?
+  phoneNumber String?
+  garageAddress String?
+  busNumber   String?
+  busType     String?
+  busYear     String?
+  capacity    Int?
+  driverComment String?
+  profileImageUrl String?
+  vehicleImageUrls String[] @default([])
+  driverLicenseUrl String?
+  driverLicenseStatus VerificationStatus @default(none)
+  driverLicenseNote String?
+  companyRegistrationUrl String?
+  companyRegistrationStatus VerificationStatus @default(none)
+  companyRegistrationNote String?
   createdAt   DateTime @default(now())
   
   tripsAsPassenger Trip[] @relation("PassengerTrips")
   bids            Bid[]
   notifications   Notification[] @relation("UserNotifications")
+  notificationHistories NotificationHistory[] @relation("UserNotificationHistories")
+  chatRoomsAsPassenger ChatRoom[] @relation("PassengerChatRooms")
+  chatRoomsAsBidder    ChatRoom[] @relation("BidderChatRooms")
+  chatMessages         ChatMessage[] @relation("ChatMessageSender")
 }
 
 model Trip {
@@ -60,6 +103,7 @@ model Trip {
   createdAt   DateTime   @default(now())
   
   bids Bid[]
+  chatRoom ChatRoom?
 }
 
 model Bid {
@@ -80,6 +124,8 @@ model Bid {
 enum NotificationType {
   BID_RECEIVED
   BID_AWARDED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
 }
 
 model Notification {
@@ -96,6 +142,54 @@ model Notification {
   
   @@index([userId])
   @@index([read])
+}
+
+model NotificationHistory {
+  id                    String           @id @default(cuid())
+  userId                String
+  user                  User             @relation("UserNotificationHistories", fields: [userId], references: [id], onDelete: Cascade)
+  type                  NotificationType
+  title                 String
+  message               String
+  tripId                String?
+  bidId                 String?
+  notificationCreatedAt DateTime
+  readAt                DateTime         @default(now())
+  
+  @@index([userId])
+  @@index([readAt])
+}
+
+model ChatRoom {
+  id          String   @id @default(cuid())
+  tripId      String   @unique
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerId String
+  passenger   User     @relation("PassengerChatRooms", fields: [passengerId], references: [id], onDelete: Cascade)
+  bidderId    String
+  bidder      User     @relation("BidderChatRooms", fields: [bidderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages ChatMessage[]
+
+  @@index([passengerId])
+  @@index([bidderId])
+}
+
+model ChatMessage {
+  id        String    @id @default(cuid())
+  roomId    String
+  room      ChatRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User      @relation("ChatMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  message   String
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
+
+  @@index([roomId])
+  @@index([senderId])
+  @@index([readAt])
 }
 
 generator erd {

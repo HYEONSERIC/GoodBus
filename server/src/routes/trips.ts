@@ -400,6 +400,19 @@ router.post(
 
             // Create notification for the bidder
             if (awardedBid && tripWithDetails) {
+                await prisma.chatRoom.upsert({
+                    where: { tripId: trip.id },
+                    update: {
+                        passengerId: tripWithDetails.passenger.id,
+                        bidderId: awardedBid.bidder.id,
+                    },
+                    create: {
+                        tripId: trip.id,
+                        passengerId: tripWithDetails.passenger.id,
+                        bidderId: awardedBid.bidder.id,
+                    },
+                });
+
                 await prisma.notification.create({
                     data: {
                         userId: awardedBid.bidder.id,

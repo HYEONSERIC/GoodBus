@@ -7,11 +7,13 @@ const API_BASE_URL =
 
 async function fetchAPI(endpoint: string, options?: RequestInit) {
     try {
+        const isFormData =
+            typeof FormData !== 'undefined' && options?.body instanceof FormData;
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             credentials: 'include',
             headers: {
-                'Content-Type': 'application/json',
+                ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
                 ...options?.headers,
             },
         });
@@ -37,12 +39,24 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
 
         const data = await response.json();
         return data;
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             throw new Error('Cannot connect to server. Please check if the backend server is running.');
         }
         throw error;
     }
+}
+
+function toQuery(params?: Record<string, string | number | undefined>) {
+    if (!params) return '';
+
+    const query = new URLSearchParams(
+        Object.entries(params)
+            .filter(([, value]) => value !== undefined && value !== '')
+            .map(([key, value]) => [key, String(value)])
+    ).toString();
+
+    return query ? `?${query}` : '';
 }
 
 export const authAPI = {
@@ -73,7 +87,7 @@ export const tripsAPI = {
         return fetchAPI(`/trips${query}`);
     },
     getById: async (id: string) => fetchAPI(`/trips/${id}`),
-    create: async (data: any) =>
+    create: async (data: Record<string, unknown>) =>
         fetchAPI('/trips', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -87,7 +101,7 @@ export const tripsAPI = {
         fetchAPI(`/trips/${tripId}/cancel`, {
             method: 'PATCH',
         }),
-    update: async (tripId: string, data: any) =>
+    update: async (tripId: string, data: Record<string, unknown>) =>
         fetchAPI(`/trips/${tripId}`, {
             method: 'PATCH',
             body: JSON.stringify(data),
@@ -106,8 +120,30 @@ export const bidsAPI = {
         }),
 };
 
+export const chatsAPI = {
+    getRooms: async () => fetchAPI('/chats/rooms'),
+    getMessages: async (roomId: string, params?: { after?: string }) =>
+        fetchAPI(`/chats/rooms/${roomId}/messages${toQuery(params)}`),
+    sendMessage: async (roomId: string, message: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ message }),
+        }),
+    markRead: async (roomId: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/read`, {
+            method: 'PATCH',
+        }),
+};
+
 export const notificationsAPI = {
     getAll: async () => fetchAPI('/notifications'),
+    getHistory: async (params?: {
+        page?: number;
+        pageSize?: number;
+        type?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => fetchAPI(`/notifications/history${toQuery(params)}`),
     getUnreadCount: async () => fetchAPI('/notifications/unread-count'),
     markAsRead: async (id: string) =>
         fetchAPI(`/notifications/${id}/read`, {
@@ -116,5 +152,110 @@ export const notificationsAPI = {
     markAllAsRead: async () =>
         fetchAPI('/notifications/read-all', {
             method: 'PATCH',
+        }),
+    deleteHistory: async (id: string) =>
+        fetchAPI(`/notifications/history/${id}`, {
+            method: 'DELETE',
+        }),
+    clearHistory: async () =>
+        fetchAPI('/notifications/history', {
+            method: 'DELETE',
+        }),
+};
+
+export const adminAPI = {
+    getOverview: async () => fetchAPI('/admin/overview'),
+    getUsers: async (params?: {
+        role?: string;
+        status?: string;
+        search?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/users${query}`);
+    },
+    updateUserStatus: async (id: string, status: 'Active' | 'Blocked') =>
+        fetchAPI(`/admin/users/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        }),
+    getUserDetails: async (id: string) => fetchAPI(`/admin/users/${id}`),
+    getUserActivity: async (id: string, take?: number) =>
+        fetchAPI(`/admin/users/${id}/activity${take ? `?take=${take}` : ''}`),
+    createAdmin: async (data: {
+        email: string;
+        password: string;
+        adminRole: 'Super' | 'CustomerSupport' | 'Operations' | 'Finance';
+    }) =>
+        fetchAPI('/admin/admins', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+    getBids: async (params?: {
+        search?: string;
+        bidStatus?: string;
+        tripStatus?: string;
+        startDate?: string;
+        endDate?: string;
+    }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/bids${query}`);
+    },
+    getNotificationHistory: async (params?: {
+        page?: number;
+        pageSize?: number;
+        type?: string;
+        startDate?: string;
+        endDate?: string;
+        search?: string;
+        userId?: string;
+    }) => fetchAPI(`/admin/notification-history${toQuery(params)}`),
+    getVerifications: async (params?: { type?: string; status?: string }) => {
+        const query = params
+            ? `?${new URLSearchParams(
+                  Object.entries(params).filter(([, value]) => value) as string[][]
+              ).toString()}`
+            : '';
+        return fetchAPI(`/admin/verifications${query}`);
+    },
+    updateVerification: async (
+        id: string,
+        type: 'driver' | 'company',
+        status: 'approved' | 'rejected',
+        reason?: string
+    ) =>
+        fetchAPI(`/admin/verifications/${id}?type=${type}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, reason }),
+        }),
+};
+
+export const verificationAPI = {
+    getMe: async () => fetchAPI('/verification/me'),
+    upload: async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return fetchAPI('/verification/upload', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        });
+    },
+};
+
+export const profileAPI = {
+    getMe: async () => fetchAPI('/profile/me'),
+    update: async (formData: FormData) =>
+        fetchAPI('/profile/me', {
+            method: 'PATCH',
+            body: formData,
+            headers: {},
         }),
 };

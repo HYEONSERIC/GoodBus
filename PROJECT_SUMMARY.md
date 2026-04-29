@@ -2,7 +2,7 @@
 
 ## ✅ What Was Built
 
-A production-ready full-stack charter bus bidding platform with role-based access control.
+A full-stack charter bus bidding platform with role-based access control and admin tooling.
 
 ### Backend (Express + TypeScript)
 
@@ -13,10 +13,14 @@ A production-ready full-stack charter bus bidding platform with role-based acces
     -   `/auth` - signup, login, logout, get current user
     -   `/trips` - create, list, get by ID, award trips
     -   `/bids` - create bids, withdraw bids
+-   `/profile` - my profile read/update (multipart uploads)
+-   `/verification` - document upload and status read
+-   `/admin` - overview stats, user list, block/unblock, user activity, bid search, admin creation, verification moderation
+-   `/kakao` - places search proxy for autocomplete
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
 
-### Frontend (Next.js 14 + TypeScript)
+### Frontend (Next.js 16 + TypeScript)
 
 -   **Location**: Root directory
 -   **UI**: Tailwind CSS + shadcn/ui components
@@ -25,9 +29,10 @@ A production-ready full-stack charter bus bidding platform with role-based acces
     -   Login (`/login`) - User authentication
     -   Signup (`/signup`) - User registration with role selection
     -   Dashboard (`/dashboard`) - Role-based redirect
-    -   Passenger Dashboard (`/dashboard/passenger`) - Create trips, view bids, award trips
+    -   Passenger Dashboard (`/dashboard/passenger`) - Create trips, view bids, award trips + Kakao autocomplete
     -   Driver Dashboard (`/dashboard/driver`) - Browse trips, place bids
     -   Company Dashboard (`/dashboard/company`) - Browse trips, place bids
+-   Admin Console (`/admin`) - Overview, users, activity, bid search, admin creation
 -   **API Client**: Centralized API wrapper in `lib/api.ts`
 
 ### Features Implemented
@@ -39,12 +44,20 @@ A production-ready full-stack charter bus bidding platform with role-based acces
 ✅ View bids for your trips (Passenger)  
 ✅ Award trip to a selected bid (Passenger only)  
 ✅ Bid withdrawal (bid owner only)  
+✅ User status (Active/Blocked) with admin controls  
+✅ Admin dashboard + user activity views  
+✅ Bid search dashboard (status/date/user filters)  
+✅ Driver/Company profile edit with photo uploads and persistence  
+✅ Vehicle photo multi-upload (up to 4) with keep/append flow  
+✅ Verification upload + pending/approved/rejected UX flow  
+✅ Garage address autocomplete via Kakao Places (Passenger + Driver/Company)  
+✅ Admin user detail expanded with garage/vehicle/profile/contact data  
 ✅ JWT-based authentication with secure cookies  
 ✅ Role-based authorization on all protected routes  
 ✅ Prisma schema with proper relationships  
 ✅ Database seeding with test users and sample trip  
 ✅ Docker Compose for PostgreSQL  
-✅ Mobile-responsive UI  
+✅ Mobile-responsive UI + unified top bar/side menu/bottom tabs  
 ✅ ESLint + Prettier setup
 
 ## File Structure
@@ -107,7 +120,7 @@ goodbus/
 
 ### Frontend
 
--   **Framework**: Next.js 14 (App Router)
+-   **Framework**: Next.js 16 (App Router)
 -   **Language**: TypeScript
 -   **Styling**: Tailwind CSS
 -   **Components**: shadcn/ui (Radix UI + Tailwind)
@@ -129,7 +142,7 @@ goodbus/
 
 ### User
 
--   id, email (unique), passwordHash, role (Passenger|Driver|BusCompany), createdAt
+-   id, email (unique), passwordHash, role (Passenger|Driver|BusCompany|Admin), status (Active|Blocked), adminRole (Super|CustomerSupport|Operations|Finance), displayName, companyName, phoneNumber, garageAddress, busNumber, busType, busYear, capacity, driverComment, profileImageUrl, vehicleImageUrls[], driverLicenseUrl/status, companyRegistrationUrl/status, createdAt
 
 ### Trip
 
@@ -167,6 +180,7 @@ The database comes pre-seeded with:
 -   1 Passenger (passenger@example.com)
 -   1 Driver (driver@example.com)
 -   1 Bus Company (company@example.com)
+-   1 Admin (admin@example.com)
 -   1 Sample trip (New York → Boston)
 -   All passwords: `password123`
 

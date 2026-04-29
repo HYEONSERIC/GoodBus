@@ -16,6 +16,7 @@ async function main() {
             email: 'passenger@example.com',
             passwordHash,
             role: 'Passenger',
+            status: 'Active',
         },
     });
 
@@ -26,6 +27,7 @@ async function main() {
             email: 'driver@example.com',
             passwordHash,
             role: 'Driver',
+            status: 'Active',
         },
     });
 
@@ -36,6 +38,19 @@ async function main() {
             email: 'company@example.com',
             passwordHash,
             role: 'BusCompany',
+            status: 'Active',
+        },
+    });
+
+    const admin = await prisma.user.upsert({
+        where: { email: 'admin@example.com' },
+        update: {},
+        create: {
+            email: 'admin@example.com',
+            passwordHash,
+            role: 'Admin',
+            status: 'Active',
+            adminRole: 'Super',
         },
     });
 
@@ -53,7 +68,7 @@ async function main() {
     });
 
     console.log('Seed completed!');
-    console.log('Created users:', { passenger, driver, company });
+    console.log('Created users:', { passenger, driver, company, admin });
     console.log('Created trip:', trip);
 }
 

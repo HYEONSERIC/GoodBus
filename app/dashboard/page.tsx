@@ -29,6 +29,7 @@ export default function DashboardPage() {
                 Passenger: '/dashboard/passenger',
                 Driver: '/dashboard/driver',
                 BusCompany: '/dashboard/company',
+                Admin: '/admin',
             };
 
             const rolePath = rolePaths[user.role];
