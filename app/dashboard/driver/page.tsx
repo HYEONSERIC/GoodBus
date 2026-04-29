@@ -565,7 +565,7 @@ export default function DriverDashboard() {
                 </div>
             )}
 
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-5 py-5 sm:py-6">
 
                 <Dialog
                     open={verificationDialogOpen}
@@ -637,29 +637,29 @@ export default function DriverDashboard() {
                 {activeTab === 'available' && (
                     <div>
                         <div className="mb-6 flex justify-center w-full">
-                            <div className="flex flex-wrap gap-2 rounded-full border bg-white px-3 py-2 shadow-sm w-full justify-between sm:justify-center">
+                            <div className="flex flex-wrap gap-1 rounded-none border bg-white px-2 py-2 shadow-sm w-full max-w-xl justify-between sm:justify-center">
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setRegionFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {selectedRegion
                                         ? `출발지역: ${selectedRegion}`
                                         : '출발지역'}
                                 </Button>
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setDateFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {selectedDate
                                         ? `출발일: ${selectedDate}`
                                         : '출발일'}
                                 </Button>
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setPaxFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {minPax || maxPax
                                         ? `인원수: ${minPax || '0'}~${
@@ -675,15 +675,20 @@ export default function DriverDashboard() {
                                         setMinPax('');
                                         setMaxPax('');
                                     }}
-                                    className="rounded-full"
+                                    title="필터 초기화"
+                                    aria-label="필터 초기화"
+                                    className="h-9 w-9 rounded-none px-0 text-gray-800 hover:bg-gray-100 active:bg-gray-100"
                                 >
-                                    필터 초기화
+                                    ↻
                                 </Button>
                             </div>
                         </div>
-                        <div className="grid gap-4">
+                        <div className="grid gap-4 w-full max-w-xl mx-auto">
                             {filterTrips(trips).map((trip) => (
-                                <Card key={trip.id} className="w-full border-gray-200 shadow-sm">
+                                <Card
+                                    key={trip.id}
+                                    className="w-full rounded-none border-gray-200 shadow-sm"
+                                >
                                     <CardHeader>
                                         <div className="flex justify-between">
                                             <div>
@@ -1667,32 +1672,48 @@ export default function DriverDashboard() {
         )}
         {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
+                <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
-                        variant={activeTab === 'available' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('available')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'available'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         주문
                     </Button>
                     <Button
-                        variant={activeTab === 'contract' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('contract')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'contract'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         계약
                     </Button>
                     <Button
-                        variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('chat')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'chat'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         채팅
                     </Button>
                     <Button
-                        variant={activeTab === 'support' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('support')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'support'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         고객센터
                     </Button>
