@@ -62,6 +62,17 @@ model User {
   role        UserRole
   status      UserStatus @default(Active)
   adminRole   AdminRole?
+  displayName String?
+  companyName String?
+  phoneNumber String?
+  garageAddress String?
+  busNumber   String?
+  busType     String?
+  busYear     String?
+  capacity    Int?
+  driverComment String?
+  profileImageUrl String?
+  vehicleImageUrls String[] @default([])
   driverLicenseUrl String?
   driverLicenseStatus VerificationStatus @default(none)
   driverLicenseNote String?

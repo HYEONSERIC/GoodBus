@@ -49,6 +49,16 @@ interface AdminUserDetail extends AdminUser {
         tripsAsPassenger: number;
         bids: number;
     };
+    displayName?: string | null;
+    companyName?: string | null;
+    phoneNumber?: string | null;
+    garageAddress?: string | null;
+    busNumber?: string | null;
+    busType?: string | null;
+    busYear?: string | null;
+    capacity?: number | null;
+    profileImageUrl?: string | null;
+    vehicleImageUrls?: string[] | null;
     driverLicenseUrl?: string | null;
     driverLicenseStatus?: string | null;
     driverLicenseNote?: string | null;
@@ -702,6 +712,80 @@ export default function AdminPage() {
                                     <span className="font-medium">이메일:</span>{' '}
                                     {selectedUser.email}
                                 </div>
+                                {(selectedUser.displayName ||
+                                    selectedUser.companyName ||
+                                    selectedUser.phoneNumber ||
+                                    selectedUser.garageAddress ||
+                                    selectedUser.busNumber ||
+                                    selectedUser.busType ||
+                                    selectedUser.busYear ||
+                                    selectedUser.capacity !== null) && (
+                                    <div className="rounded border bg-gray-50 p-3">
+                                        <div className="grid gap-1 text-xs text-gray-700">
+                                            {selectedUser.displayName && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        이름:
+                                                    </span>{' '}
+                                                    {selectedUser.displayName}
+                                                </div>
+                                            )}
+                                            {selectedUser.companyName && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        소속:
+                                                    </span>{' '}
+                                                    {selectedUser.companyName}
+                                                </div>
+                                            )}
+                                            {selectedUser.phoneNumber && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        휴대전화:
+                                                    </span>{' '}
+                                                    {selectedUser.phoneNumber}
+                                                </div>
+                                            )}
+                                            {selectedUser.garageAddress && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        차고지:
+                                                    </span>{' '}
+                                                    {selectedUser.garageAddress}
+                                                </div>
+                                            )}
+                                            {selectedUser.busNumber && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        차량번호:
+                                                    </span>{' '}
+                                                    {selectedUser.busNumber}
+                                                </div>
+                                            )}
+                                            {(selectedUser.busType ||
+                                                selectedUser.busYear ||
+                                                selectedUser.capacity !== null) && (
+                                                <div>
+                                                    <span className="font-medium">
+                                                        차량정보:
+                                                    </span>{' '}
+                                                    {[
+                                                        selectedUser.busType,
+                                                        selectedUser.busYear
+                                                            ? `${selectedUser.busYear}년식`
+                                                            : null,
+                                                        typeof selectedUser.capacity ===
+                                                        'number'
+                                                            ? `${selectedUser.capacity}명`
+                                                            : null,
+                                                    ]
+                                                        .filter(Boolean)
+                                                        .join(' / ') || '-'}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                                 <div>
                                     <span className="font-medium">역할:</span>{' '}
                                     {selectedUser.role}
@@ -741,16 +825,23 @@ export default function AdminPage() {
                                         )}
                                         {selectedUser.driverLicenseUrl ? (
                                             <div className="space-y-2">
-                                                <img
-                                                    src={`${uploadBaseUrl}${selectedUser.driverLicenseUrl}`}
-                                                    alt="운전자격증"
-                                                    className="max-h-56 w-full rounded border object-contain bg-white cursor-pointer"
-                                                    onClick={() =>
-                                                        setPreviewUrl(
-                                                            `${uploadBaseUrl}${selectedUser.driverLicenseUrl}`
-                                                        )
-                                                    }
-                                                />
+                                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                                    <button
+                                                        type="button"
+                                                        className="aspect-square overflow-hidden rounded-md border bg-gray-50"
+                                                        onClick={() =>
+                                                            setPreviewUrl(
+                                                                `${uploadBaseUrl}${selectedUser.driverLicenseUrl}`
+                                                            )
+                                                        }
+                                                    >
+                                                        <img
+                                                            src={`${uploadBaseUrl}${selectedUser.driverLicenseUrl}`}
+                                                            alt="운전자격증"
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    </button>
+                                                </div>
                                                 <a
                                                     href={`/api/admin/verifications/${selectedUser.id}/download?type=driver`}
                                                     download
@@ -783,16 +874,23 @@ export default function AdminPage() {
                                         )}
                                         {selectedUser.companyRegistrationUrl ? (
                                             <div className="space-y-2">
-                                                <img
-                                                    src={`${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`}
-                                                    alt="사업자등록증"
-                                                    className="max-h-56 w-full rounded border object-contain bg-white cursor-pointer"
-                                                    onClick={() =>
-                                                        setPreviewUrl(
-                                                            `${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`
-                                                        )
-                                                    }
-                                                />
+                                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                                    <button
+                                                        type="button"
+                                                        className="aspect-square overflow-hidden rounded-md border bg-gray-50"
+                                                        onClick={() =>
+                                                            setPreviewUrl(
+                                                                `${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`
+                                                            )
+                                                        }
+                                                    >
+                                                        <img
+                                                            src={`${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`}
+                                                            alt="사업자등록증"
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    </button>
+                                                </div>
                                                 <a
                                                     href={`/api/admin/verifications/${selectedUser.id}/download?type=company`}
                                                     download

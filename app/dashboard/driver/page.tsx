@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, tripsAPI, bidsAPI, verificationAPI } from '@/lib/api';
+import { authAPI, tripsAPI, bidsAPI, verificationAPI, profileAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -42,6 +42,13 @@ interface Bid {
     };
 }
 
+interface KakaoPlace {
+    id: string;
+    place_name: string;
+    address_name: string;
+    road_address_name: string;
+}
+
 export default function DriverDashboard() {
     const [user, setUser] = useState<any>(null);
     const [membershipPlan, setMembershipPlan] = useState<any>(null);
@@ -65,6 +72,9 @@ export default function DriverDashboard() {
         | 'membership'
         | 'profile'
         | 'profileEdit'
+    >('available');
+    const [membershipPrevTab, setMembershipPrevTab] = useState<
+        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -145,31 +155,121 @@ export default function DriverDashboard() {
         membershipNameMap[membershipPlan?.name] || '베이직';
     const [openMembership, setOpenMembership] = useState<string | null>(null);
     const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+    const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
     const [vehiclePhotos, setVehiclePhotos] = useState<string[]>([]);
+    const [vehiclePhotoFiles, setVehiclePhotoFiles] = useState<File[]>([]);
+    const [vehiclePersistedUrls, setVehiclePersistedUrls] = useState<string[]>(
+        []
+    );
     const [profileForm, setProfileForm] = useState({
         name: '',
         company: '',
+        phone: '',
         garage: '',
         busNumber: '',
         busType: '',
         busYear: '',
         capacity: '',
+        driverComment: '',
     });
+    const [profileSection, setProfileSection] = useState<'details' | 'review'>(
+        'details'
+    );
+    const [garageResults, setGarageResults] = useState<KakaoPlace[]>([]);
+    const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 기사';
     const bannerUrl = vehiclePhotos[0] || null;
+    const [galleryOpen, setGalleryOpen] = useState(false);
+    const [galleryIndex, setGalleryIndex] = useState(0);
     const driverLicenseUrl =
         verification?.driverLicenseUrl || user?.driverLicenseUrl || null;
-    const vehicleLabel = profileForm.busType || '미등록';
+    const vehicleTypeLabel = profileForm.busType || '미등록';
+    const vehicleCapacityLabel = profileForm.capacity
+        ? `${profileForm.capacity}인승`
+        : null;
+    const vehicleYearLabel = profileForm.busYear
+        ? `(${profileForm.busYear}년식)`
+        : null;
     const insuranceLabel =
         verification?.driverLicenseStatus === 'approved' ? '인증완료' : '미인증';
     const companyLabel = profileForm.company || '미등록';
+    const resolveMediaUrl = (url?: string | null) =>
+        url
+            ? url.startsWith('/uploads')
+                ? `${uploadBaseUrl}${url}`
+                : url
+            : null;
+
+    function searchGaragePlaces(query: string) {
+        if (!query.trim()) {
+            setGarageResults([]);
+            setGarageStatusMessage('');
+            return;
+        }
+
+        setGarageStatusMessage('검색 중...');
+        fetch(`/api/kakao/places?query=${encodeURIComponent(query)}`)
+            .then(async (response) => {
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.error || 'Kakao API error');
+                }
+                return response.json();
+            })
+            .then((data) => {
+                const places = (data.places || []) as KakaoPlace[];
+                setGarageResults(places);
+                if (places.length === 0) {
+                    setGarageStatusMessage('검색 결과 없음');
+                } else {
+                    setGarageStatusMessage(`${places.length}건 조회됨`);
+                }
+            })
+            .catch(() => {
+                setGarageResults([]);
+                setGarageStatusMessage('검색 오류');
+            });
+    }
 
     const addVehiclePhotos = (files: FileList | null) => {
         if (!files) return;
-        const previews = Array.from(files).map((file) =>
-            URL.createObjectURL(file)
+        const incoming = Array.from(files);
+        const remainingSlots = Math.max(
+            0,
+            4 - (vehiclePersistedUrls.length + vehiclePhotoFiles.length)
         );
+        if (remainingSlots === 0) {
+            alert('차량 사진은 최대 4장까지 등록할 수 있습니다.');
+            return;
+        }
+
+        const accepted = incoming.slice(0, remainingSlots);
+        if (incoming.length > accepted.length) {
+            alert('차량 사진은 최대 4장까지 등록할 수 있습니다.');
+        }
+
+        const previews = accepted.map((file) => URL.createObjectURL(file));
+        setVehiclePhotoFiles((prev) => [...prev, ...accepted]);
         setVehiclePhotos((prev) => [...prev, ...previews]);
+    };
+
+    const openGallery = (index: number) => {
+        if (vehiclePhotos.length === 0) return;
+        const safeIndex = Math.max(0, Math.min(index, vehiclePhotos.length - 1));
+        setGalleryIndex(safeIndex);
+        setGalleryOpen(true);
+    };
+
+    const showPrevPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === 0 ? vehiclePhotos.length - 1 : prev - 1
+        );
+    };
+
+    const showNextPhoto = () => {
+        setGalleryIndex((prev) =>
+            prev === vehiclePhotos.length - 1 ? 0 : prev + 1
+        );
     };
 
     useEffect(() => {
@@ -187,6 +287,29 @@ export default function DriverDashboard() {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             setMembershipPlan(userData.user?.membershipPlan || null);
+            setProfileForm({
+                name: userData.user?.displayName || '',
+                company: userData.user?.companyName || '',
+                phone: userData.user?.phoneNumber || '',
+                garage: userData.user?.garageAddress || '',
+                busNumber: userData.user?.busNumber || '',
+                busType: userData.user?.busType || '',
+                busYear: userData.user?.busYear || '',
+                capacity: userData.user?.capacity
+                    ? String(userData.user.capacity)
+                    : '',
+                driverComment: userData.user?.driverComment || '',
+            });
+            setProfilePhoto(resolveMediaUrl(userData.user?.profileImageUrl));
+            const persisted = (userData.user?.vehicleImageUrls || []).slice(0, 4);
+            setVehiclePersistedUrls(persisted);
+            setVehiclePhotos(
+                persisted
+                    .map((url: string) => resolveMediaUrl(url))
+                    .filter(Boolean) as string[]
+            );
+            setProfilePhotoFile(null);
+            setVehiclePhotoFiles([]);
             try {
                 const verificationData = await verificationAPI.getMe();
                 setVerification(verificationData.verification);
@@ -309,6 +432,43 @@ export default function DriverDashboard() {
         }
     }
 
+    async function handleProfileSave() {
+        try {
+            const formData = new FormData();
+            formData.append('name', profileForm.name);
+            formData.append('company', profileForm.company);
+            formData.append('phone', profileForm.phone);
+            formData.append('garage', profileForm.garage);
+            formData.append('busNumber', profileForm.busNumber);
+            formData.append('busType', profileForm.busType);
+            formData.append('busYear', profileForm.busYear);
+            formData.append('capacity', profileForm.capacity);
+            formData.append('driverComment', profileForm.driverComment);
+
+            if (profilePhotoFile) {
+                formData.append('profilePhoto', profilePhotoFile);
+            }
+
+            formData.append(
+                'keepVehicleImageUrls',
+                JSON.stringify(vehiclePersistedUrls.slice(0, 4))
+            );
+
+            const remaining = Math.max(0, 4 - vehiclePersistedUrls.length);
+            vehiclePhotoFiles.slice(0, remaining).forEach((file) => {
+                formData.append('vehiclePhotos', file);
+            });
+
+            await profileAPI.update(formData);
+            await loadData();
+            setActiveTab('profile');
+            alert('정보 수정 완료');
+        } catch (error) {
+            console.error('Profile update error:', error);
+            alert('정보 수정에 실패했습니다.');
+        }
+    }
+
     async function handleWithdrawBid(trip: Trip) {
         if (!confirm('이 입찰을 철회하시겠습니까?')) {
             return;
@@ -357,25 +517,55 @@ export default function DriverDashboard() {
             {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
                 <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
                     <div className="relative flex w-full items-center justify-center px-3 sm:px-4 py-4">
-                        <div className="absolute left-3 sm:left-4">
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
-                                onClick={() => setMenuOpen(true)}
-                            >
-                                <span className="text-base leading-none">☰</span>
-                                <span>메뉴</span>
-                            </button>
-                        </div>
-                        <span className="text-lg font-semibold">GOODBUS</span>
-                        <div className="absolute right-3 sm:right-4 flex items-center gap-3">
-                            <Notifications />
-                        </div>
+                        {activeTab === 'membership' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab(membershipPrevTab)}
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
+                                        onClick={() => setMenuOpen(true)}
+                                    >
+                                        <span className="text-base leading-none">
+                                            ☰
+                                        </span>
+                                        <span>메뉴</span>
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    GOODBUS
+                                </span>
+                                <div className="absolute right-3 sm:right-4 flex items-center gap-3">
+                                    <Notifications />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
 
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-5 py-5 sm:py-6">
 
                 <Dialog
                     open={verificationDialogOpen}
@@ -447,29 +637,29 @@ export default function DriverDashboard() {
                 {activeTab === 'available' && (
                     <div>
                         <div className="mb-6 flex justify-center w-full">
-                            <div className="flex flex-wrap gap-2 rounded-full border bg-white px-3 py-2 shadow-sm w-full justify-between sm:justify-center">
+                            <div className="flex flex-wrap gap-1 rounded-none border bg-white px-2 py-2 shadow-sm w-full max-w-xl justify-between sm:justify-center">
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setRegionFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {selectedRegion
                                         ? `출발지역: ${selectedRegion}`
                                         : '출발지역'}
                                 </Button>
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setDateFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {selectedDate
                                         ? `출발일: ${selectedDate}`
                                         : '출발일'}
                                 </Button>
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => setPaxFilterOpen(true)}
-                                    className="rounded-full"
+                                    className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     {minPax || maxPax
                                         ? `인원수: ${minPax || '0'}~${
@@ -485,15 +675,20 @@ export default function DriverDashboard() {
                                         setMinPax('');
                                         setMaxPax('');
                                     }}
-                                    className="rounded-full"
+                                    title="필터 초기화"
+                                    aria-label="필터 초기화"
+                                    className="h-9 w-9 rounded-none px-0 text-gray-800 hover:bg-gray-100 active:bg-gray-100"
                                 >
-                                    필터 초기화
+                                    ↻
                                 </Button>
                             </div>
                         </div>
-                        <div className="grid gap-4">
+                        <div className="grid gap-4 w-full max-w-xl mx-auto">
                             {filterTrips(trips).map((trip) => (
-                                <Card key={trip.id} className="w-full border-gray-200 shadow-sm">
+                                <Card
+                                    key={trip.id}
+                                    className="w-full rounded-none border-gray-200 shadow-sm"
+                                >
                                     <CardHeader>
                                         <div className="flex justify-between">
                                             <div>
@@ -813,14 +1008,20 @@ export default function DriverDashboard() {
                         </div>
 
                         <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
-                            <div className="rounded-2xl overflow-hidden border bg-white">
-                                <div className="h-40 bg-gray-200">
+                            <div className="overflow-hidden border bg-white">
+                                <div className="h-48 bg-gray-200">
                                     {bannerUrl ? (
-                                        <img
-                                            src={bannerUrl}
-                                            alt="배너"
-                                            className="h-full w-full object-cover"
-                                        />
+                                        <button
+                                            type="button"
+                                            className="h-full w-full"
+                                            onClick={() => openGallery(0)}
+                                        >
+                                            <img
+                                                src={bannerUrl}
+                                                alt="배너"
+                                                className="h-full w-full object-cover"
+                                            />
+                                        </button>
                                     ) : null}
                                 </div>
                                 <div className="px-6 pb-6">
@@ -845,7 +1046,13 @@ export default function DriverDashboard() {
                                                 <p className="font-semibold text-gray-900">
                                                     차종
                                                 </p>
-                                                <p>{vehicleLabel}</p>
+                                                <p>{vehicleTypeLabel}</p>
+                                                {vehicleCapacityLabel && (
+                                                    <p>{vehicleCapacityLabel}</p>
+                                                )}
+                                                {vehicleYearLabel && (
+                                                    <p>{vehicleYearLabel}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <p className="font-semibold text-gray-900">
@@ -861,11 +1068,104 @@ export default function DriverDashboard() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="mt-6 space-y-4">
-                                        <h3 className="text-sm font-semibold">리뷰</h3>
-                                        <div className="rounded-lg border p-4 text-sm text-gray-600">
-                                            아직 등록된 리뷰가 없습니다.
+                                    <div className="mt-6">
+                                        <div className="grid grid-cols-2 border-b text-sm">
+                                            <button
+                                                type="button"
+                                                className={`py-2 ${
+                                                    profileSection === 'details'
+                                                        ? 'border-b-2 border-black font-semibold text-black'
+                                                        : 'text-gray-500'
+                                                }`}
+                                                onClick={() =>
+                                                    setProfileSection('details')
+                                                }
+                                            >
+                                                상세내역
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`py-2 ${
+                                                    profileSection === 'review'
+                                                        ? 'border-b-2 border-black font-semibold text-black'
+                                                        : 'text-gray-500'
+                                                }`}
+                                                onClick={() =>
+                                                    setProfileSection('review')
+                                                }
+                                            >
+                                                후기
+                                            </button>
                                         </div>
+                                        {profileSection === 'details' ? (
+                                            <div className="space-y-4 py-4 text-sm text-gray-700">
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        등록 차량
+                                                    </p>
+                                                    {vehiclePhotos.length > 0 ? (
+                                                        <div className="grid grid-cols-4 gap-2">
+                                                            {vehiclePhotos.map(
+                                                                (photo, idx) => (
+                                                                    <img
+                                                                        key={
+                                                                            photo +
+                                                                            idx
+                                                                        }
+                                                                        src={photo}
+                                                                        alt="등록 차량"
+                                                                        className="aspect-square w-full cursor-pointer rounded-md object-cover"
+                                                                        onClick={() =>
+                                                                            openGallery(
+                                                                                idx
+                                                                            )
+                                                                        }
+                                                                    />
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-gray-500">
+                                                            등록된 차량 사진이
+                                                            없습니다.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        차량 정보
+                                                    </p>
+                                                    <div className="rounded-md border bg-gray-50 p-3 text-gray-700">
+                                                        <p>{vehicleTypeLabel}</p>
+                                                        {vehicleCapacityLabel && (
+                                                            <p>
+                                                                {
+                                                                    vehicleCapacityLabel
+                                                                }
+                                                            </p>
+                                                        )}
+                                                        {vehicleYearLabel && (
+                                                            <p>{vehicleYearLabel}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="mb-2 font-semibold">
+                                                        기사님의 한마디
+                                                    </p>
+                                                    <div className="rounded-md border bg-gray-50 p-3 text-gray-700">
+                                                        {profileForm.driverComment ||
+                                                            '아직 작성된 한마디가 없습니다.'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="py-4">
+                                                <div className="rounded-lg border p-4 text-sm text-gray-600">
+                                                    아직 등록된 리뷰가 없습니다.
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -879,6 +1179,46 @@ export default function DriverDashboard() {
                                 정보 수정하기
                             </Button>
                         </div>
+
+                        <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+                            <DialogContent className="max-w-3xl bg-black/95 p-3">
+                                <DialogHeader>
+                                    <DialogTitle className="sr-only">
+                                        차량 사진 크게 보기
+                                    </DialogTitle>
+                                </DialogHeader>
+                                <div className="relative">
+                                    {vehiclePhotos[galleryIndex] ? (
+                                        <img
+                                            src={vehiclePhotos[galleryIndex]}
+                                            alt={`차량 사진 ${galleryIndex + 1}`}
+                                            className="max-h-[70vh] w-full rounded-md object-contain"
+                                        />
+                                    ) : null}
+                                    {vehiclePhotos.length > 1 && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showPrevPhoto}
+                                            >
+                                                ‹
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white"
+                                                onClick={showNextPhoto}
+                                            >
+                                                ›
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                <p className="text-center text-xs text-gray-300">
+                                    {galleryIndex + 1} / {vehiclePhotos.length}
+                                </p>
+                            </DialogContent>
+                        </Dialog>
                     </>
                 )}
 
@@ -904,155 +1244,298 @@ export default function DriverDashboard() {
                             </div>
                         </div>
                         <div className="mx-auto w-full max-w-3xl pb-24 pt-12">
-                        <div className="rounded-2xl border bg-white p-6 space-y-4">
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>프로필 사진</Label>
-                                <Input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setProfilePhoto(
-                                            e.target.files?.[0]
-                                                ? URL.createObjectURL(
-                                                      e.target.files[0]
-                                                  )
-                                                : null
-                                        )
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>이름</Label>
-                                <Input
-                                    value={profileForm.name}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            name: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>소속</Label>
-                                <Input
-                                    value={profileForm.company}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            company: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>차고지 주소</Label>
-                                <Input
-                                    value={profileForm.garage}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            garage: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>차량 번호</Label>
-                                <Input
-                                    value={profileForm.busNumber}
-                                    onChange={(e) =>
-                                        setProfileForm((prev) => ({
-                                            ...prev,
-                                            busNumber: e.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="space-y-2">
-                                    <Label>차량 종류</Label>
-                                    <Input
-                                        value={profileForm.busType}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                busType: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>연식</Label>
-                                    <Input
-                                        value={profileForm.busYear}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                busYear: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>탑승 정원</Label>
-                                    <Input
-                                        value={profileForm.capacity}
-                                        onChange={(e) =>
-                                            setProfileForm((prev) => ({
-                                                ...prev,
-                                                capacity: e.target.value,
-                                            }))
-                                        }
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>차량 사진 등록</Label>
-                                <Input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    onChange={(e) =>
-                                        addVehiclePhotos(e.target.files)
-                                    }
-                                />
-                                {vehiclePhotos.length > 0 && (
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {vehiclePhotos.map((photo, idx) => (
-                                            <img
-                                                key={photo + idx}
-                                                src={photo}
-                                                alt="차량"
-                                                className="h-16 w-full rounded object-cover"
+                            <div className="bg-white px-6 py-8 sm:px-10">
+                                <div className="space-y-8">
+                                    <div className="flex flex-col items-center text-center">
+                                        <div className="h-24 w-24 overflow-hidden rounded-full bg-gray-200">
+                                            {profilePhoto ? (
+                                                <img
+                                                    src={profilePhoto}
+                                                    alt="프로필"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : null}
+                                        </div>
+                                        <p className="mt-4 text-sm text-gray-500">
+                                            고객님에게 보이는 대표 사진입니다.
+                                        </p>
+                                        <p className="text-sm text-gray-500">
+                                            얼굴이 잘 보이는 사진을 등록해주세요.
+                                        </p>
+                                        <input
+                                            id="driver-profile-photo"
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file =
+                                                    e.target.files?.[0] || null;
+                                                setProfilePhotoFile(file);
+                                                setProfilePhoto(
+                                                    file
+                                                        ? URL.createObjectURL(file)
+                                                        : null
+                                                );
+                                            }}
+                                        />
+                                        <label
+                                            htmlFor="driver-profile-photo"
+                                            className="mt-4 inline-flex h-11 cursor-pointer items-center justify-center rounded-sm bg-[#4a4a4a] px-8 text-sm font-medium text-white transition hover:bg-[#3f3f3f]"
+                                        >
+                                            사진 등록
+                                        </label>
+                                    </div>
+
+                                    <div className="space-y-5">
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                이름
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.name}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        name: e.target.value,
+                                                    }))
+                                                }
                                             />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                소속
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.company}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        company: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                휴대전화번호
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.phone}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        phone: e.target.value,
+                                                    }))
+                                                }
+                                                placeholder="010-1234-5678"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                차고지 주소
+                                            </Label>
+                            {garageStatusMessage && (
+                                <p className="text-xs text-gray-400">
+                                    {garageStatusMessage}
+                                </p>
+                            )}
+                            <div className="relative">
+                                <Input
+                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                    value={profileForm.garage}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setProfileForm((prev) => ({
+                                            ...prev,
+                                            garage: value,
+                                        }));
+                                        searchGaragePlaces(value);
+                                    }}
+                                />
+                                {garageResults.length > 0 && (
+                                    <div className="absolute left-0 right-0 top-full z-10 mt-2 overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-black/5">
+                                        {garageResults.map((place) => (
+                                            <button
+                                                key={place.id}
+                                                type="button"
+                                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                                onClick={() => {
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        garage:
+                                                            place.road_address_name ||
+                                                            place.address_name ||
+                                                            place.place_name,
+                                                    }));
+                                                    setGarageResults([]);
+                                                }}
+                                            >
+                                                <div className="font-medium text-gray-900">
+                                                    {place.place_name}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {place.road_address_name ||
+                                                        place.address_name}
+                                                </div>
+                                            </button>
                                         ))}
                                     </div>
                                 )}
                             </div>
-                            <div className="space-y-2 text-sm text-gray-600">
-                                <Label>버스 운전 자격증</Label>
-                                {driverLicenseUrl ? (
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-sm text-gray-700">
+                                                차량 번호
+                                            </Label>
+                                            <Input
+                                                className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                value={profileForm.busNumber}
+                                                onChange={(e) =>
+                                                    setProfileForm((prev) => ({
+                                                        ...prev,
+                                                        busNumber: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                        <div className="grid gap-5 sm:grid-cols-3">
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    차량 종류
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                    value={profileForm.busType}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            busType: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    연식
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 shadow-none focus-visible:ring-0"
+                                                    value={profileForm.busYear}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            busYear: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm text-gray-700">
+                                                    탑승 정원
+                                                </Label>
+                                                <Input
+                                                    className="rounded-none border-x-0 border-t-0 border-b border-gray-200 px-0 text-right shadow-none focus-visible:ring-0"
+                                                    value={profileForm.capacity}
+                                                    onChange={(e) =>
+                                                        setProfileForm((prev) => ({
+                                                            ...prev,
+                                                            capacity: e.target.value,
+                                                        }))
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-sm text-gray-700">
+                                                차량 사진
+                                            </Label>
+                                            <input
+                                                id="driver-vehicle-photos"
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                className="hidden"
+                                                onChange={(e) =>
+                                                    addVehiclePhotos(
+                                                        e.target.files
+                                                    )
+                                                }
+                                            />
+                                            <label
+                                                htmlFor="driver-vehicle-photos"
+                                                className="cursor-pointer text-sm text-gray-500 underline underline-offset-4"
+                                            >
+                                                사진 추가
+                                            </label>
+                                        </div>
+                                        {vehiclePhotos.length > 0 ? (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {vehiclePhotos.map((photo, idx) => (
+                                                    <img
+                                                        key={photo + idx}
+                                                        src={photo}
+                                                        alt="차량"
+                                                        className="aspect-square w-full rounded-md object-cover"
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-400">
+                                                등록된 차량 사진이 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-sm text-gray-700">
+                                            버스 운전 자격증
+                                        </Label>
+                                        {driverLicenseUrl ? (
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="aspect-square overflow-hidden rounded-md bg-gray-50">
                                     <img
                                         src={`${uploadBaseUrl}${driverLicenseUrl}`}
                                         alt="운전자격증"
-                                        className="max-h-48 w-full rounded border object-contain bg-white"
+                                        className="h-full w-full object-contain"
                                     />
-                                ) : (
-                                    <p className="text-xs text-gray-500">
-                                        등록된 자격증이 없습니다.
-                                    </p>
-                                )}
+                                </div>
                             </div>
-                        </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-400">
+                                                등록된 자격증이 없습니다.
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-gray-700">
+                                            기사님의 한마디
+                                        </Label>
+                                        <Textarea
+                                            className="min-h-24 border-gray-200"
+                                            placeholder="예) 안전하고 친절한 운행으로 모시겠습니다."
+                                            value={profileForm.driverComment}
+                                            onChange={(e) =>
+                                                setProfileForm((prev) => ({
+                                                    ...prev,
+                                                    driverComment:
+                                                        e.target.value,
+                                                }))
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-black/10 bg-black">
                             <Button
                                 className="h-12 w-full rounded-none bg-black text-white hover:bg-black/90"
-                                onClick={() => {
-                                    setActiveTab('profile');
-                                    alert('정보 수정 완료');
-                                }}
+                                onClick={handleProfileSave}
                             >
                                 정보 수정 완료
                             </Button>
@@ -1155,6 +1638,11 @@ export default function DriverDashboard() {
                             type="button"
                             className="w-full flex items-center justify-between px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={() => {
+                                setMembershipPrevTab(
+                                    activeTab === 'membership'
+                                        ? 'available'
+                                        : activeTab
+                                );
                                 setActiveTab('membership');
                                 setMenuOpen(false);
                             }}
@@ -1184,32 +1672,48 @@ export default function DriverDashboard() {
         )}
         {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
+                <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
-                        variant={activeTab === 'available' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('available')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'available'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         주문
                     </Button>
                     <Button
-                        variant={activeTab === 'contract' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('contract')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'contract'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         계약
                     </Button>
                     <Button
-                        variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('chat')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'chat'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         채팅
                     </Button>
                     <Button
-                        variant={activeTab === 'support' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('support')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'support'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         고객센터
                     </Button>

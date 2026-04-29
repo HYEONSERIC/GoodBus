@@ -338,52 +338,55 @@ export default function PassengerDashboard() {
                 </div>
             )}
 
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-sm text-gray-500">
+            <div className="mx-auto w-full max-w-xl px-4 sm:px-5 py-5 sm:py-6 space-y-4">
+                <div className="grid grid-cols-3 divide-x divide-gray-200 overflow-hidden rounded-none border border-gray-200 bg-white shadow-sm">
+                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                        <CardHeader className="px-4 pb-1 gap-1 text-center">
+                            <CardTitle className="text-sm text-gray-500 text-center">
                                 회원등급
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="text-lg font-semibold">
+                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
                             일반회원
                         </CardContent>
                     </Card>
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-sm text-gray-500">
+                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                        <CardHeader className="px-4 pb-1 gap-1 text-center">
+                            <CardTitle className="text-sm text-gray-500 text-center">
                                 적립금
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="text-lg font-semibold">
+                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
                             0원
                         </CardContent>
                     </Card>
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardHeader>
-                            <CardTitle className="text-sm text-gray-500">
+                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                        <CardHeader className="px-4 pb-1 gap-1 text-center">
+                            <CardTitle className="text-sm text-gray-500 text-center">
                                 추천 혜택
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="text-lg font-semibold">
+                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
                             월 100만원
                         </CardContent>
                     </Card>
                 </div>
 
-                <Card className="border-gray-200 shadow-sm">
-                    <CardHeader className="text-center">
-                        <CardTitle>
+                <Card className="rounded-none border-gray-200 shadow-sm">
+                    <CardHeader className="pb-3 text-center">
+                        <CardTitle className="text-[17px] font-semibold tracking-tight">
                             굿버스에서 가격비교 하고 적립금도 받아가세요.
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-sm">
                             원하는 여정을 등록하면 기사/업체가 입찰을
                             제안합니다.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex justify-center">
-                        <Button onClick={() => setOpenDialog(true)}>
+                        <Button
+                            onClick={() => setOpenDialog(true)}
+                            className="h-10 rounded-xl bg-black px-6 text-sm font-medium text-white hover:bg-black/90"
+                        >
                             견적 등록하기
                         </Button>
                     </CardContent>
@@ -651,17 +654,20 @@ export default function PassengerDashboard() {
                 </Dialog>
 
                 {activeTab === 'quote' && (
-                    <div className="grid gap-6">
+                    <div className="grid gap-4 w-full max-w-xl mx-auto">
                         {trips.map((trip) => (
-                            <Card key={trip.id} className="border-gray-200 shadow-sm">
-                                <CardHeader>
+                            <Card
+                                key={trip.id}
+                                className="rounded-none border-gray-200 shadow-sm"
+                            >
+                                <CardHeader className="pb-3">
                                     <div className="flex justify-between">
                                         <div>
-                                            <CardTitle>
+                                            <CardTitle className="text-[19px] font-semibold tracking-tight">
                                                 {trip.origin} →{' '}
                                                 {trip.destination}
                                             </CardTitle>
-                                            <CardDescription>
+                                            <CardDescription className="mt-1 text-sm">
                                                 {format(
                                                     new Date(trip.dateTime),
                                                     'PPP p',
@@ -681,7 +687,7 @@ export default function PassengerDashboard() {
                                         </Badge>
                                     </div>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="space-y-1 text-[15px] text-gray-700">
                                     <p>승객 수: {trip.paxCount}</p>
                                     <p>
                                         버스 크기:{' '}
@@ -691,7 +697,7 @@ export default function PassengerDashboard() {
                                               ? '중형'
                                               : '대형'}
                                     </p>
-                                    <p className="mt-2 font-semibold">
+                                    <p className="mt-2 font-semibold text-gray-900">
                                         입찰 수: {trip.bids?.length || 0}
                                     </p>
                                     {trip.minBidPrice !== null && (
@@ -709,7 +715,7 @@ export default function PassengerDashboard() {
                                                 .map((bid: Bid) => (
                                                     <Card
                                                         key={bid.id}
-                                                        className="p-3"
+                                                        className="rounded-none p-3"
                                                     >
                                                         <div className="flex justify-between">
                                                             <div>
@@ -750,6 +756,7 @@ export default function PassengerDashboard() {
                                         <div className="flex gap-2 mt-4 flex-wrap">
                                             <Button
                                                 variant="outline"
+                                                className="h-9 rounded-lg text-sm"
                                                 onClick={() =>
                                                     openEditDialog(trip)
                                                 }
@@ -760,7 +767,7 @@ export default function PassengerDashboard() {
                                                 trip.bids.length > 0 && (
                                                     <Dialog>
                                                         <DialogTrigger asChild>
-                                                            <Button>
+                                                            <Button className="h-9 rounded-lg bg-black px-4 text-sm text-white hover:bg-black/90">
                                                                 입찰 수주
                                                             </Button>
                                                         </DialogTrigger>
@@ -820,6 +827,7 @@ export default function PassengerDashboard() {
                                                                 </SelectContent>
                                                             </Select>
                                                             <Button
+                                                                className="mt-3 h-9 rounded-lg bg-black text-sm text-white hover:bg-black/90"
                                                                 onClick={() =>
                                                                     awardTrip(
                                                                         trip.id,
@@ -836,7 +844,7 @@ export default function PassengerDashboard() {
                                                 )}
                                             <Button
                                                 variant="outline"
-                                                className="border-orange-200 text-orange-700 hover:bg-orange-50"
+                                                className="h-9 rounded-lg border-orange-200 text-sm text-orange-700 hover:bg-orange-50"
                                                 onClick={() =>
                                                     cancelTrip(trip.id)
                                                 }
@@ -852,18 +860,21 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'booking' && (
-                    <div className="grid gap-6">
+                    <div className="grid gap-4 w-full max-w-xl mx-auto">
                         {awardedTrips.length === 0 ? (
-                            <Card>
+                            <Card className="rounded-none">
                                 <CardContent className="p-6 text-sm text-gray-600">
                                     아직 낙찰된 여정이 없습니다.
                                 </CardContent>
                             </Card>
                         ) : (
                             awardedTrips.map((trip) => (
-                                <Card key={trip.id} className="border-gray-200 shadow-sm">
+                                <Card
+                                    key={trip.id}
+                                    className="rounded-none border-gray-200 shadow-sm"
+                                >
                                     <CardHeader>
-                                        <CardTitle>
+                                        <CardTitle className="text-[19px] font-semibold tracking-tight">
                                             {trip.origin} → {trip.destination}
                                         </CardTitle>
                                         <CardDescription>
@@ -879,7 +890,7 @@ export default function PassengerDashboard() {
                                             일정을 확인하세요.
                                         </p>
                                         <Button
-                                            className="mt-3"
+                                            className="mt-3 h-9 rounded-lg bg-black px-4 text-sm text-white hover:bg-black/90"
                                             onClick={() => setChatOpen(true)}
                                         >
                                             기사와 채팅하기
@@ -892,7 +903,7 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'chat' && (
-                    <Card className="border-gray-200 shadow-sm">
+                    <Card className="w-full max-w-xl mx-auto rounded-none border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-4">
                             <ChatPanel />
                             <p className="hidden">
@@ -907,13 +918,14 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="border-gray-200 shadow-sm">
+                    <Card className="w-full max-w-xl mx-auto rounded-none border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-4">
                             <p className="text-sm text-gray-600">
                                 문의는 버튼을 눌러 진행해주세요. 상담 기록은
                                 추후 저장될 수 있습니다.
                             </p>
                             <Button
+                                className="h-9 rounded-lg bg-black px-4 text-sm text-white hover:bg-black/90"
                                 onClick={() => {
                                     setSupportOpen(true);
                                     setSupportStep('menu');
@@ -927,32 +939,48 @@ export default function PassengerDashboard() {
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between">
+                <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
-                        variant={activeTab === 'quote' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('quote')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'quote'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         견적
                     </Button>
                     <Button
-                        variant={activeTab === 'booking' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('booking')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'booking'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         예약
                     </Button>
                     <Button
-                        variant={activeTab === 'chat' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('chat')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'chat'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         채팅
                     </Button>
                     <Button
-                        variant={activeTab === 'support' ? 'default' : 'ghost'}
+                        variant="ghost"
                         onClick={() => setActiveTab('support')}
-                        className="text-xs sm:text-sm"
+                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
+                            activeTab === 'support'
+                                ? 'bg-gray-100 text-gray-900'
+                                : 'text-gray-700'
+                        }`}
                     >
                         문의
                     </Button>

@@ -34,6 +34,11 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Dashboard UX**: Unified top bar, side menu, bottom tabs (Korean UI)
 - **Kakao Places**: Address autocomplete for passenger trip creation
 - **Kakao Places (REST)**: Server-side proxy using REST API key
+- **Profile management**: Driver/Company profile edit with photo uploads and vehicle details
+- **Verification flow**: License/registration upload + pending/approved/rejected branching
+- **Storage abstraction**: Local uploads by default, S3-ready service structure
+- **Admin profile visibility**: Garage, vehicle info, profile images, contact(phone) in admin user detail
+- **Membership UX**: Membership header uses unified icon-style back/home navigation
 
 ## Getting Started
 
@@ -135,7 +140,7 @@ npm run dev
 
 ## Default Test Accounts
 
-The seed script creates three test accounts (all with password: `password123`):
+The seed script creates test accounts (all with password: `password123`):
 
 - **Passenger**: passenger@example.com
 - **Driver**: driver@example.com
@@ -166,6 +171,16 @@ The seed script creates three test accounts (all with password: `password123`):
 - `GET /admin/users/:id/activity` - User trip/bid activity
 - `GET /admin/bids` - Bid search/filter dashboard
 - `POST /admin/admins` - Create admin (Super only)
+
+### Profile / Verification / Kakao
+
+- `GET /profile/me` - Get my profile data
+- `PATCH /profile/me` - Update my profile (multipart: text + photos)
+- `GET /verification/me` - Get my verification status
+- `POST /verification/upload` - Upload verification document
+- `GET /admin/verifications` - Get verification queue
+- `PATCH /admin/verifications/:id` - Approve/reject verification
+- `GET /api/kakao/places?query=...` - Kakao places autocomplete proxy
 
 ### Bids
 
