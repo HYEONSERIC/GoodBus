@@ -99,6 +99,12 @@ model Trip {
   dateTime    DateTime
   paxCount    Int
   busSize     BusSize
+  stopoverDetail String?
+  companionType  String?
+  itineraryDetail String?
+  servicePurpose String?
+  paymentMethod String?
+  additionalRequest String?
   status      TripStatus @default(open)
   createdAt   DateTime   @default(now())
   

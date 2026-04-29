@@ -44,7 +44,7 @@ export default function LoginPage() {
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
                             loginMethod === 'email'
-                                ? 'bg-[#e85b4f] text-white'
+                                ? 'bg-[#e08030] text-white'
                                 : 'text-gray-700'
                         }`}
                         onClick={() => setLoginMethod('email')}
@@ -55,7 +55,7 @@ export default function LoginPage() {
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
                             loginMethod === 'phone'
-                                ? 'bg-[#e85b4f] text-white'
+                                ? 'bg-[#e08030] text-white'
                                 : 'text-gray-700'
                         }`}
                         onClick={() => setLoginMethod('phone')}
@@ -93,7 +93,7 @@ export default function LoginPage() {
 
                         <Button
                             type="submit"
-                            className="h-11 w-full bg-[#e85b4f] hover:bg-[#d85045]"
+                            className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
                             disabled={loading}
                         >
                             {loading ? '로그인 중...' : '로그인'}
@@ -112,7 +112,7 @@ export default function LoginPage() {
                                 />
                                 <Button
                                     type="button"
-                                    className="whitespace-nowrap bg-[#e85b4f] hover:bg-[#d85045]"
+                                    className="whitespace-nowrap bg-[#e08030] hover:bg-[#d07526]"
                                     onClick={handlePhoneRequest}
                                 >
                                     인증 요청
@@ -121,7 +121,7 @@ export default function LoginPage() {
                         </div>
                         <Button
                             type="button"
-                            className="h-11 w-full bg-[#e85b4f] hover:bg-[#d85045]"
+                            className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
                             onClick={handlePhoneRequest}
                         >
                             로그인

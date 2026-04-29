@@ -6,7 +6,7 @@ export default function Home() {
         <div className="min-h-screen bg-[#f3f3f5]">
             <header className="h-16 border-b bg-white">
                 <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
-                    <Link href="/" className="text-xl font-bold text-[#e85b4f]">
+                    <Link href="/" className="text-xl font-bold text-[#e08030]">
                         GoodBus
                     </Link>
                     <nav className="flex items-center gap-6 text-sm font-semibold text-gray-800">
@@ -18,7 +18,7 @@ export default function Home() {
                         </Link>
                         <Link
                             href="/login"
-                            className="rounded-full bg-[#e85b4f] px-4 py-2 text-white"
+                            className="rounded-full bg-[#e08030] px-4 py-2 text-white"
                         >
                             로그인
                         </Link>
@@ -28,7 +28,7 @@ export default function Home() {
 
             <main className="mx-auto w-full max-w-6xl px-6 py-16">
                 <section className="rounded-3xl border bg-white px-8 py-14 text-center shadow-sm">
-                    <p className="text-sm font-semibold text-[#e85b4f]">
+                                <p className="text-sm font-semibold text-[#e08030]">
                         버스 대절 비교 플랫폼
                     </p>
                     <h1 className="mt-4 text-4xl font-bold tracking-tight text-gray-900 md:text-5xl">
@@ -51,7 +51,7 @@ export default function Home() {
                                 <p className="mt-1 text-sm text-gray-600">
                                     45인 · 장거리 단체 이동 추천
                                 </p>
-                                <Button className="mt-4 h-9 bg-[#2f9bff] px-4 text-sm hover:bg-[#2487e4]">
+                                <Button className="mt-4 h-9 rounded-xl bg-[#e08030] px-4 text-sm font-medium text-white hover:bg-[#d07526]">
                                     가격비교
                                 </Button>
                             </div>
@@ -66,7 +66,7 @@ export default function Home() {
                                 <p className="mt-1 text-sm text-gray-600">
                                     28인 · 편안한 좌석 중심 이동
                                 </p>
-                                <Button className="mt-4 h-9 bg-[#2f9bff] px-4 text-sm hover:bg-[#2487e4]">
+                                <Button className="mt-4 h-9 rounded-xl bg-[#e08030] px-4 text-sm font-medium text-white hover:bg-[#d07526]">
                                     가격비교
                                 </Button>
                             </div>
@@ -81,7 +81,7 @@ export default function Home() {
                                 <p className="mt-1 text-sm text-gray-600">
                                     18인 · 소규모 맞춤 이동 추천
                                 </p>
-                                <Button className="mt-4 h-9 bg-[#2f9bff] px-4 text-sm hover:bg-[#2487e4]">
+                                <Button className="mt-4 h-9 rounded-xl bg-[#e08030] px-4 text-sm font-medium text-white hover:bg-[#d07526]">
                                     가격비교
                                 </Button>
                             </div>

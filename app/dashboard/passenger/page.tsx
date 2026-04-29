@@ -84,10 +84,24 @@ export default function PassengerDashboard() {
     const [newTrip, setNewTrip] = useState({
         origin: '',
         destination: '',
-        dateTime: '',
+        tripType: 'oneway' as 'oneway' | 'round',
+        goingDateTime: '',
+        returnDateTime: '',
+        stopoverDetail: '',
+        companionType: 'depart_return' as
+            | 'depart_return'
+            | 'with_schedule',
+        itineraryDetail: '',
+        servicePurpose: '',
+        paymentMethod: 'cash' as 'cash' | 'card',
+        additionalRequest: '',
         paxCount: 1,
         busSize: 'small',
     });
+    const [stopoverOpen, setStopoverOpen] = useState(false);
+    const [companionInfoOpen, setCompanionInfoOpen] = useState(false);
+    const [companionInfoConfirmed, setCompanionInfoConfirmed] = useState(false);
+    const [purposeDialogOpen, setPurposeDialogOpen] = useState(false);
     const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
     const [selectedBid, setSelectedBid] = useState<string>('');
     const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -143,15 +157,73 @@ export default function PassengerDashboard() {
             if (
                 !newTrip.origin.trim() ||
                 !newTrip.destination.trim() ||
-                !newTrip.dateTime
+                (newTrip.tripType === 'oneway' && !newTrip.goingDateTime) ||
+                (newTrip.tripType === 'round' &&
+                    (!newTrip.goingDateTime || !newTrip.returnDateTime))
             ) {
                 alert('출발지, 도착지, 날짜 및 시간을 입력해주세요');
                 return;
             }
-            await tripsAPI.create({
-                ...newTrip,
-                dateTime: new Date(newTrip.dateTime).toISOString(),
-            });
+
+            if (
+                newTrip.companionType === 'with_schedule' &&
+                !newTrip.itineraryDetail.trim()
+            ) {
+                alert('일정 동행을 선택하신 경우 전체 일정을 입력해주세요.');
+                return;
+            }
+
+            // 왕복은 기존 DB 구조상 "편도 2개(방향 반대)"로 생성합니다.
+            const goingTripPayload = {
+                origin: newTrip.origin,
+                destination: newTrip.destination,
+                dateTime: new Date(newTrip.goingDateTime).toISOString(),
+                paxCount: newTrip.paxCount,
+                busSize: newTrip.busSize,
+                stopoverDetail: newTrip.stopoverDetail.trim() || undefined,
+                companionType: newTrip.companionType,
+                itineraryDetail:
+                    newTrip.companionType === 'with_schedule'
+                        ? newTrip.itineraryDetail.trim()
+                        : undefined,
+                servicePurpose: newTrip.servicePurpose || undefined,
+                paymentMethod: newTrip.paymentMethod,
+                additionalRequest:
+                    newTrip.additionalRequest.trim() || undefined,
+            };
+
+            if (newTrip.tripType === 'oneway') {
+                await tripsAPI.create(goingTripPayload);
+            } else {
+                const goingAt = new Date(newTrip.goingDateTime);
+                const returnAt = new Date(newTrip.returnDateTime);
+                if (returnAt.getTime() < goingAt.getTime()) {
+                    alert('오는날 시간이 가는날보다 빠를 수 없습니다.');
+                    return;
+                }
+
+                // 1) 가는 방향
+                await tripsAPI.create(goingTripPayload);
+                // 2) 오는 방향(원점/목적지 반전)
+                await tripsAPI.create({
+                    origin: newTrip.destination,
+                    destination: newTrip.origin,
+                    dateTime: new Date(newTrip.returnDateTime).toISOString(),
+                    paxCount: newTrip.paxCount,
+                    busSize: newTrip.busSize,
+                    stopoverDetail: newTrip.stopoverDetail.trim() || undefined,
+                    companionType: newTrip.companionType,
+                    itineraryDetail:
+                        newTrip.companionType === 'with_schedule'
+                            ? newTrip.itineraryDetail.trim()
+                            : undefined,
+                    servicePurpose: newTrip.servicePurpose || undefined,
+                    paymentMethod: newTrip.paymentMethod,
+                    additionalRequest:
+                        newTrip.additionalRequest.trim() || undefined,
+                });
+            }
+
             setOpenDialog(false);
             loadData();
         } catch (error) {
@@ -393,7 +465,7 @@ export default function PassengerDashboard() {
                 </Card>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogContent>
+                    <DialogContent className="w-[95vw] max-w-3xl max-h-[66vh] overflow-y-auto overflow-x-hidden">
                         <DialogHeader>
                             <DialogTitle>여정 만들기</DialogTitle>
                             <DialogDescription>
@@ -497,61 +569,464 @@ export default function PassengerDashboard() {
                             </div>
                             <div>
                                 <Label>날짜 및 시간</Label>
-                                <Input
-                                    type="datetime-local"
-                                    value={newTrip.dateTime}
+                                <div className="space-y-3">
+                                    <div className="space-y-2">
+                                        <Label>운행 방식</Label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button
+                                                type="button"
+                                                className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                                    newTrip.tripType ===
+                                                    'oneway'
+                                                        ? 'bg-black text-white'
+                                                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                                                }`}
+                                                onClick={() =>
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        tripType: 'oneway',
+                                                    })
+                                                }
+                                            >
+                                                편도
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                                    newTrip.tripType ===
+                                                    'round'
+                                                        ? 'bg-black text-white'
+                                                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                                                }`}
+                                                onClick={() =>
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        tripType: 'round',
+                                                    })
+                                                }
+                                            >
+                                                왕복
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {newTrip.tripType === 'oneway' ? (
+                                        <div className="space-y-2">
+                                            <Label>가는날 시간</Label>
+                                            <Input
+                                                type="datetime-local"
+                                                value={newTrip.goingDateTime}
+                                                onChange={(e) =>
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        goingDateTime:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="space-y-2">
+                                                <Label>가는날 시간</Label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={newTrip.goingDateTime}
+                                                    onChange={(e) =>
+                                                        setNewTrip({
+                                                            ...newTrip,
+                                                            goingDateTime:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>오는날 시간</Label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={newTrip.returnDateTime}
+                                                    onChange={(e) =>
+                                                        setNewTrip({
+                                                            ...newTrip,
+                                                            returnDateTime:
+                                                                e.target.value,
+                                                        })
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            {/* 경유지 추가 */}
+                            <div className="space-y-3 pt-2">
+                                <button
+                                    type="button"
+                                    className={`flex items-center gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-semibold transition ${
+                                        stopoverOpen
+                                            ? 'border-[#e08030]/70 bg-[#fff0e6] hover:bg-[#ffe7d9]'
+                                            : 'border-[#e08030]/40 hover:bg-[#fff0e6]'
+                                    }`}
+                                    onClick={() => {
+                                        if (!stopoverOpen) {
+                                            setStopoverOpen(true);
+                                            return;
+                                        }
+                                        setStopoverOpen(false);
+                                        setNewTrip({
+                                            ...newTrip,
+                                            stopoverDetail: '',
+                                        });
+                                    }}
+                                >
+                                    <span
+                                        className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                                            stopoverOpen
+                                                ? 'bg-[#e08030] text-white'
+                                                : 'border border-[#e08030] text-[#e08030]'
+                                        }`}
+                                    >
+                                        {stopoverOpen ? '−' : '+'}
+                                    </span>
+                                    <span className="text-gray-900">
+                                        {stopoverOpen ? '경유지 삭제' : '경유지 추가'}
+                                    </span>
+                                </button>
+
+                                {stopoverOpen && (
+                                    <div className="rounded-xl border border-[#e08030] bg-white p-4">
+                                        <Textarea
+                                            value={newTrip.stopoverDetail}
+                                            onChange={(e) =>
+                                                setNewTrip({
+                                                    ...newTrip,
+                                                    stopoverDetail:
+                                                        e.target.value,
+                                                })
+                                            }
+                                            placeholder="모든 경유지를 구체적으로 적어주세요."
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 결제 방식 + 버스 선택 + 추가 사항 */}
+                            <div className="space-y-3 pt-4">
+                                <Label>결제 방식</Label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                            newTrip.paymentMethod === 'cash'
+                                                ? 'bg-black text-white'
+                                                : 'bg-gray-100 text-gray-900'
+                                        }`}
+                                        onClick={() =>
+                                            setNewTrip({
+                                                ...newTrip,
+                                                paymentMethod: 'cash',
+                                            })
+                                        }
+                                    >
+                                        현금
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                            newTrip.paymentMethod === 'card'
+                                                ? 'bg-black text-white'
+                                                : 'bg-gray-100 text-gray-900'
+                                        }`}
+                                        onClick={() =>
+                                            setNewTrip({
+                                                ...newTrip,
+                                                paymentMethod: 'card',
+                                            })
+                                        }
+                                    >
+                                        카드
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 pt-4">
+                                <Label>버스 선택</Label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <button
+                                        type="button"
+                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                            newTrip.busSize === 'large'
+                                                ? 'border-[#e08030] bg-[#fff0e6]'
+                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                        }`}
+                                        onClick={() =>
+                                            setNewTrip({
+                                                ...newTrip,
+                                                busSize: 'large',
+                                            })
+                                        }
+                                    >
+                                        대형버스
+                                        <div className="mt-1 text-xs font-normal text-gray-500">
+                                            (45인승)
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                            newTrip.busSize === 'medium'
+                                                ? 'border-[#e08030] bg-[#fff0e6]'
+                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                        }`}
+                                        onClick={() =>
+                                            setNewTrip({
+                                                ...newTrip,
+                                                busSize: 'medium',
+                                            })
+                                        }
+                                    >
+                                        우등버스
+                                        <div className="mt-1 text-xs font-normal text-gray-500">
+                                            (28인승)
+                                        </div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                            newTrip.busSize === 'small'
+                                                ? 'border-[#e08030] bg-[#fff0e6]'
+                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                        }`}
+                                        onClick={() =>
+                                            setNewTrip({
+                                                ...newTrip,
+                                                busSize: 'small',
+                                            })
+                                        }
+                                    >
+                                        미니버스·밴
+                                        <div className="mt-1 text-xs font-normal text-gray-500">
+                                            (14인승)
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-4">
+                                <Label>추가 사항</Label>
+                                <Textarea
+                                    value={newTrip.additionalRequest}
                                     onChange={(e) =>
                                         setNewTrip({
                                             ...newTrip,
-                                            dateTime: e.target.value,
+                                            additionalRequest: e.target.value,
                                         })
                                     }
+                                    placeholder="예) 정차 요청, 짐 위치, 시간 조율 등 추가로 남길 사항을 입력해주세요."
                                 />
                             </div>
+
+                            {/* 기사님 동행 여부 */}
+                            <div className="space-y-3 pt-4">
+                                <Label>기사님 동행 여부</Label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                            newTrip.companionType ===
+                                            'depart_return'
+                                                ? 'bg-black text-white'
+                                                : 'bg-gray-100 text-gray-900'
+                                        }`}
+                                        onClick={() => {
+                                            setNewTrip({
+                                                ...newTrip,
+                                                companionType: 'depart_return',
+                                                itineraryDetail: '',
+                                            });
+                                            setCompanionInfoConfirmed(false);
+                                        }}
+                                    >
+                                        출발, 귀환만
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition flex items-center justify-center gap-2 ${
+                                            newTrip.companionType ===
+                                            'with_schedule'
+                                                ? 'bg-black text-white'
+                                                : 'bg-gray-100 text-gray-900'
+                                        }`}
+                                        onClick={() => {
+                                            setNewTrip({
+                                                ...newTrip,
+                                                companionType: 'with_schedule',
+                                            });
+                                            setCompanionInfoConfirmed(false);
+                                            setCompanionInfoOpen(true);
+                                        }}
+                                    >
+                                        일정 동행
+                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current text-[10px] leading-none">
+                                            ?
+                                        </span>
+                                    </button>
+                                </div>
+
+                                {newTrip.companionType === 'with_schedule' &&
+                                    companionInfoConfirmed && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm text-gray-700">
+                                                일정 동행을 선택하셨습니다. 기사님이
+                                                함께할 수 있도록 전체 일정을 구체적으로
+                                                적어주세요.
+                                            </p>
+                                            <Textarea
+                                                value={newTrip.itineraryDetail}
+                                                onChange={(e) =>
+                                                    setNewTrip({
+                                                        ...newTrip,
+                                                        itineraryDetail:
+                                                            e.target.value,
+                                                    })
+                                                }
+                                                placeholder="전체적인 일정(이동 경로/시간/요청사항)을 적어주세요."
+                                            />
+                                        </div>
+                                    )}
+                            </div>
+
+                            {/* 서비스 목적 */}
+                            <div className="space-y-2 pt-4">
+                                <Label>어떤 목적으로 서비스를 이용하세요?</Label>
+                                <button
+                                    type="button"
+                                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50 transition"
+                                    onClick={() => setPurposeDialogOpen(true)}
+                                >
+                                    {newTrip.servicePurpose
+                                        ? newTrip.servicePurpose
+                                        : '목적을 선택해주세요'}
+                                </button>
+                            </div>
+
                             <div>
                                 <Label>승객 수</Label>
                                 <Input
                                     type="number"
                                     value={newTrip.paxCount}
+                                        min={1}
                                     onChange={(e) =>
-                                        setNewTrip({
-                                            ...newTrip,
-                                            paxCount: parseInt(e.target.value),
-                                        })
+                                            setNewTrip({
+                                                ...newTrip,
+                                                paxCount: (() => {
+                                                    const raw =
+                                                        e.target.value;
+                                                    const n = Number(raw);
+                                                    if (!raw) return 1;
+                                                    return Number.isFinite(n) &&
+                                                        n >= 1
+                                                        ? Math.floor(n)
+                                                        : 1;
+                                                })(),
+                                            })
                                     }
                                 />
-                            </div>
-                            <div>
-                                <Label>버스 크기</Label>
-                                <Select
-                                    value={newTrip.busSize}
-                                    onValueChange={(value) =>
-                                        setNewTrip({
-                                            ...newTrip,
-                                            busSize: value,
-                                        })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="small">
-                                            소형
-                                        </SelectItem>
-                                        <SelectItem value="medium">
-                                            중형
-                                        </SelectItem>
-                                        <SelectItem value="large">
-                                            대형
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
                             </div>
                             <Button onClick={createTrip} className="w-full">
                                 여정 만들기
                             </Button>
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* 기사님 동행 안내(확인 누르면 전체 일정 입력 노출) */}
+                <Dialog
+                    open={companionInfoOpen}
+                    onOpenChange={setCompanionInfoOpen}
+                >
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>기사님 동행 여부?</DialogTitle>
+                            <DialogDescription className="text-sm">
+                                '출발, 귀환만 운송'은 목적지까지 왕복
+                                수송만 하는 운행이고, '일정 동행'은 수학여행
+                                처럼 승객님의 일정에 따라 기사님이 계속
+                                동행해서 함께하는 운행입니다.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-2 text-sm text-gray-700">
+                            <p>
+                                (일정 동행은 상세 일정 전제이며, 정량화된
+                                견적을 바탕으로 진행될 수 있습니다.)
+                            </p>
+                        </div>
+
+                        <Button
+                            className="mt-4 h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            onClick={() => {
+                                setCompanionInfoOpen(false);
+                                setCompanionInfoConfirmed(true);
+                            }}
+                        >
+                            확인
+                        </Button>
+                    </DialogContent>
+                </Dialog>
+
+                {/* 서비스 목적 선택 */}
+                <Dialog
+                    open={purposeDialogOpen}
+                    onOpenChange={setPurposeDialogOpen}
+                >
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>
+                                어떤 목적으로 버스를 구하실까요?
+                            </DialogTitle>
+                        </DialogHeader>
+
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            {[
+                                '결혼식',
+                                '워크샵',
+                                '산학회',
+                                'MT/학교',
+                                '콘서트',
+                                '골프',
+                                '낚시',
+                                '통근/셔틀',
+                                '어린이집',
+                                '기타',
+                            ].map((purpose) => (
+                                <button
+                                    key={purpose}
+                                    type="button"
+                                    onClick={() => {
+                                        setNewTrip({
+                                            ...newTrip,
+                                            servicePurpose: purpose,
+                                        });
+                                    }}
+                                    className={`rounded-lg border px-3 py-4 text-sm font-semibold transition ${
+                                        newTrip.servicePurpose === purpose
+                                            ? 'border-[#e08030] bg-[#fff0e6]'
+                                            : 'border-gray-200 bg-gray-100 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {purpose}
+                                </button>
+                            ))}
+                        </div>
+
+                        <Button
+                            className="mt-5 h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            onClick={() => setPurposeDialogOpen(false)}
+                        >
+                            선택
+                        </Button>
                     </DialogContent>
                 </Dialog>
 
@@ -608,10 +1083,19 @@ export default function PassengerDashboard() {
                                 <Input
                                     type="number"
                                     value={editTripData.paxCount}
+                                    min={1}
                                     onChange={(e) =>
                                         setEditTripData({
                                             ...editTripData,
-                                            paxCount: parseInt(e.target.value),
+                                            paxCount: (() => {
+                                                const raw = e.target.value;
+                                                const n = Number(raw);
+                                                if (!raw) return 1;
+                                                return Number.isFinite(n) &&
+                                                    n >= 1
+                                                    ? Math.floor(n)
+                                                    : 1;
+                                            })(),
                                         })
                                     }
                                 />
@@ -635,13 +1119,13 @@ export default function PassengerDashboard() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="small">
-                                            소형
+                                            미니버스·밴
                                         </SelectItem>
                                         <SelectItem value="medium">
-                                            중형
+                                            우등버스
                                         </SelectItem>
                                         <SelectItem value="large">
-                                            대형
+                                            대형버스
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -692,10 +1176,10 @@ export default function PassengerDashboard() {
                                     <p>
                                         버스 크기:{' '}
                                         {trip.busSize === 'small'
-                                            ? '소형'
+                                            ? '미니버스·밴'
                                             : trip.busSize === 'medium'
-                                              ? '중형'
-                                              : '대형'}
+                                              ? '우등버스'
+                                              : '대형버스'}
                                     </p>
                                     <p className="mt-2 font-semibold text-gray-900">
                                         입찰 수: {trip.bids?.length || 0}

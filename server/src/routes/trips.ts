@@ -13,6 +13,14 @@ const createTripSchema = z.object({
     dateTime: z.string().datetime(),
     paxCount: z.number().int().positive(),
     busSize: z.enum(['small', 'medium', 'large']),
+    stopoverDetail: z.string().optional(),
+    companionType: z
+        .enum(['depart_return', 'with_schedule'])
+        .optional(),
+    itineraryDetail: z.string().optional(),
+    servicePurpose: z.string().optional(),
+    paymentMethod: z.enum(['cash', 'card']).optional(),
+    additionalRequest: z.string().optional(),
 });
 
 router.get('/', requireAuth, async (req, res) => {
@@ -75,8 +83,28 @@ router.post(
     requireRole(UserRole.Passenger),
     async (req, res) => {
         try {
-            const { origin, destination, dateTime, paxCount, busSize } =
-                createTripSchema.parse(req.body);
+            const {
+                origin,
+                destination,
+                dateTime,
+                paxCount,
+                busSize,
+                stopoverDetail,
+                companionType,
+                itineraryDetail,
+                servicePurpose,
+                paymentMethod,
+                additionalRequest,
+            } = createTripSchema.parse(req.body);
+
+            if (
+                companionType === 'with_schedule' &&
+                (!itineraryDetail || !itineraryDetail.trim())
+            ) {
+                return res.status(400).json({
+                    error: 'itineraryDetail is required when companionType is with_schedule',
+                });
+            }
 
             const trip = await prisma.trip.create({
                 data: {
@@ -86,6 +114,15 @@ router.post(
                     dateTime: new Date(dateTime),
                     paxCount,
                     busSize: busSize as BusSize,
+                    stopoverDetail: stopoverDetail || undefined,
+                    companionType: companionType || undefined,
+                    itineraryDetail: itineraryDetail || undefined,
+                    servicePurpose: servicePurpose || undefined,
+                    paymentMethod: paymentMethod || undefined,
+                    additionalRequest:
+                        additionalRequest && additionalRequest.trim()
+                            ? additionalRequest.trim()
+                            : undefined,
                 },
                 include: {
                     passenger: {
