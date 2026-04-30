@@ -9,7 +9,11 @@ const router = express.Router();
 
 const createTripSchema = z.object({
     origin: z.string().min(1),
+    originX: z.number().finite().optional(),
+    originY: z.number().finite().optional(),
     destination: z.string().min(1),
+    destinationX: z.number().finite().optional(),
+    destinationY: z.number().finite().optional(),
     dateTime: z.string().datetime(),
     paxCount: z.number().int().positive(),
     busSize: z.enum(['small', 'medium', 'large']),
@@ -85,7 +89,11 @@ router.post(
         try {
             const {
                 origin,
+                originX,
+                originY,
                 destination,
+                destinationX,
+                destinationY,
                 dateTime,
                 paxCount,
                 busSize,
@@ -110,7 +118,11 @@ router.post(
                 data: {
                     passengerId: req.user!.userId,
                     origin,
+                    originX,
+                    originY,
                     destination,
+                    destinationX,
+                    destinationY,
                     dateTime: new Date(dateTime),
                     paxCount,
                     busSize: busSize as BusSize,
@@ -201,10 +213,20 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 const updateTripSchema = z.object({
     origin: z.string().min(1).optional(),
+    originX: z.number().finite().optional(),
+    originY: z.number().finite().optional(),
     destination: z.string().min(1).optional(),
+    destinationX: z.number().finite().optional(),
+    destinationY: z.number().finite().optional(),
     dateTime: z.string().datetime().optional(),
     paxCount: z.number().int().positive().optional(),
     busSize: z.enum(['small', 'medium', 'large']).optional(),
+    stopoverDetail: z.string().optional(),
+    companionType: z.enum(['depart_return', 'with_schedule']).optional(),
+    itineraryDetail: z.string().optional(),
+    servicePurpose: z.string().optional(),
+    paymentMethod: z.enum(['cash', 'card']).optional(),
+    additionalRequest: z.string().optional(),
 });
 
 router.patch(
@@ -214,6 +236,15 @@ router.patch(
     async (req, res) => {
         try {
             const updateData = updateTripSchema.parse(req.body);
+            if (
+                updateData.companionType === 'with_schedule' &&
+                (!updateData.itineraryDetail ||
+                    !updateData.itineraryDetail.trim())
+            ) {
+                return res.status(400).json({
+                    error: 'itineraryDetail is required when companionType is with_schedule',
+                });
+            }
 
             // Get trip with bids
             const trip = await prisma.trip.findUnique({
@@ -250,13 +281,49 @@ router.patch(
             // Prepare update data
             const dataToUpdate: any = {};
             if (updateData.origin) dataToUpdate.origin = updateData.origin;
+            if (updateData.originX !== undefined)
+                dataToUpdate.originX = updateData.originX;
+            if (updateData.originY !== undefined)
+                dataToUpdate.originY = updateData.originY;
             if (updateData.destination)
                 dataToUpdate.destination = updateData.destination;
+            if (updateData.destinationX !== undefined)
+                dataToUpdate.destinationX = updateData.destinationX;
+            if (updateData.destinationY !== undefined)
+                dataToUpdate.destinationY = updateData.destinationY;
             if (updateData.dateTime)
                 dataToUpdate.dateTime = new Date(updateData.dateTime);
             if (updateData.paxCount) dataToUpdate.paxCount = updateData.paxCount;
             if (updateData.busSize)
                 dataToUpdate.busSize = updateData.busSize as BusSize;
+            if (updateData.stopoverDetail !== undefined) {
+                dataToUpdate.stopoverDetail = updateData.stopoverDetail.trim()
+                    ? updateData.stopoverDetail.trim()
+                    : null;
+            }
+            if (updateData.companionType !== undefined) {
+                dataToUpdate.companionType = updateData.companionType || null;
+            }
+            if (updateData.itineraryDetail !== undefined) {
+                dataToUpdate.itineraryDetail =
+                    updateData.itineraryDetail.trim()
+                        ? updateData.itineraryDetail.trim()
+                        : null;
+            }
+            if (updateData.servicePurpose !== undefined) {
+                dataToUpdate.servicePurpose = updateData.servicePurpose.trim()
+                    ? updateData.servicePurpose.trim()
+                    : null;
+            }
+            if (updateData.paymentMethod !== undefined) {
+                dataToUpdate.paymentMethod = updateData.paymentMethod || null;
+            }
+            if (updateData.additionalRequest !== undefined) {
+                dataToUpdate.additionalRequest =
+                    updateData.additionalRequest.trim()
+                        ? updateData.additionalRequest.trim()
+                        : null;
+            }
 
             // Use transaction to update trip and cancel all open bids
             const updatedTrip = await prisma.$transaction(async (tx) => {
@@ -497,10 +564,10 @@ router.patch(
                 return res.status(403).json({ error: 'Not your trip' });
             }
 
-            if (trip.status !== 'open') {
+            if (!['open', 'awarded'].includes(trip.status)) {
                 return res
                     .status(400)
-                    .json({ error: 'Only open trips can be cancelled' });
+                    .json({ error: 'Only open or awarded trips can be cancelled' });
             }
 
             // Cancel the trip and all related bids
@@ -512,7 +579,9 @@ router.patch(
                 prisma.bid.updateMany({
                     where: {
                         tripId: trip.id,
-                        status: 'open',
+                        status: {
+                            in: ['open', 'awarded'],
+                        },
                     },
                     data: { status: 'withdrawn' },
                 }),

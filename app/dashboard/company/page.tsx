@@ -248,6 +248,29 @@ export default function CompanyDashboard() {
         setVehiclePhotos((prev) => [...prev, ...previews]);
     };
 
+    const removeVehiclePhoto = (index: number) => {
+        if (index < 0 || index >= vehiclePhotos.length) return;
+
+        const persistedCount = vehiclePersistedUrls.length;
+        if (index < persistedCount) {
+            setVehiclePersistedUrls((prev) =>
+                prev.filter((_, idx) => idx !== index)
+            );
+            setVehiclePhotos((prev) => prev.filter((_, idx) => idx !== index));
+            return;
+        }
+
+        const newPhotoIndex = index - persistedCount;
+        const targetPreview = vehiclePhotos[index];
+        if (targetPreview?.startsWith('blob:')) {
+            URL.revokeObjectURL(targetPreview);
+        }
+        setVehiclePhotoFiles((prev) =>
+            prev.filter((_, idx) => idx !== newPhotoIndex)
+        );
+        setVehiclePhotos((prev) => prev.filter((_, idx) => idx !== index));
+    };
+
     const openGallery = (index: number) => {
         if (vehiclePhotos.length === 0) return;
         const safeIndex = Math.max(0, Math.min(index, vehiclePhotos.length - 1));
@@ -1345,12 +1368,29 @@ export default function CompanyDashboard() {
                                         {vehiclePhotos.length > 0 ? (
                                             <div className="grid grid-cols-4 gap-2">
                                                 {vehiclePhotos.map((photo, idx) => (
-                                                    <img
+                                                    <div
                                                         key={photo + idx}
-                                                        src={photo}
-                                                        alt="차량"
-                                                        className="aspect-square w-full rounded-md object-cover"
-                                                    />
+                                                        className="relative"
+                                                    >
+                                                        <img
+                                                            src={photo}
+                                                            alt="차량"
+                                                            className="aspect-square w-full rounded-md object-cover"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs font-semibold text-white"
+                                                            onClick={() =>
+                                                                removeVehiclePhoto(
+                                                                    idx
+                                                                )
+                                                            }
+                                                            aria-label="차량 사진 삭제"
+                                                            title="차량 사진 삭제"
+                                                        >
+                                                            -
+                                                        </button>
+                                                    </div>
                                                 ))}
                                             </div>
                                         ) : (

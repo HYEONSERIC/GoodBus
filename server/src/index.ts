@@ -13,7 +13,10 @@ import chatsRoutes from './routes/chats';
 import verificationRoutes from './routes/verification';
 import profileRoutes from './routes/profile';
 
-dotenv.config();
+dotenv.config({
+    path: path.resolve(__dirname, '../.env'),
+    override: true,
+});
 
 const app = express();
 const PORT = process.env.PORT || 4000;

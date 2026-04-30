@@ -22,11 +22,17 @@ import { format } from 'date-fns';
 interface Trip {
     id: string;
     origin: string;
+    originX?: number | null;
+    originY?: number | null;
     destination: string;
+    destinationX?: number | null;
+    destinationY?: number | null;
     dateTime: string;
+    createdAt?: string;
     paxCount: number;
     busSize: string;
     status: string;
+    servicePurpose?: string | null;
     bids: Bid[];
 }
 
@@ -47,6 +53,8 @@ interface KakaoPlace {
     place_name: string;
     address_name: string;
     road_address_name: string;
+    x?: string;
+    y?: string;
 }
 
 export default function DriverDashboard() {
@@ -56,6 +64,9 @@ export default function DriverDashboard() {
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
     const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+    const [distanceByTripId, setDistanceByTripId] = useState<
+        Record<string, number | null>
+    >({});
     const [bidData, setBidData] = useState({ price: 0, note: '' });
     const [verification, setVerification] = useState<any>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
@@ -251,6 +262,29 @@ export default function DriverDashboard() {
         const previews = accepted.map((file) => URL.createObjectURL(file));
         setVehiclePhotoFiles((prev) => [...prev, ...accepted]);
         setVehiclePhotos((prev) => [...prev, ...previews]);
+    };
+
+    const removeVehiclePhoto = (index: number) => {
+        if (index < 0 || index >= vehiclePhotos.length) return;
+
+        const persistedCount = vehiclePersistedUrls.length;
+        if (index < persistedCount) {
+            setVehiclePersistedUrls((prev) =>
+                prev.filter((_, idx) => idx !== index)
+            );
+            setVehiclePhotos((prev) => prev.filter((_, idx) => idx !== index));
+            return;
+        }
+
+        const newPhotoIndex = index - persistedCount;
+        const targetPreview = vehiclePhotos[index];
+        if (targetPreview?.startsWith('blob:')) {
+            URL.revokeObjectURL(targetPreview);
+        }
+        setVehiclePhotoFiles((prev) =>
+            prev.filter((_, idx) => idx !== newPhotoIndex)
+        );
+        setVehiclePhotos((prev) => prev.filter((_, idx) => idx !== index));
     };
 
     const openGallery = (index: number) => {
@@ -511,6 +545,127 @@ export default function DriverDashboard() {
         });
     }
 
+    async function fetchPlaceTopResult(query: string) {
+        if (!query.trim()) return null;
+        try {
+            const response = await fetch(
+                `/api/kakao/places?query=${encodeURIComponent(query)}`
+            );
+            if (!response.ok) return null;
+            const data = await response.json();
+            const first = (data.places || [])[0] as KakaoPlace | undefined;
+            if (!first?.x || !first?.y) return null;
+            return { x: Number(first.x), y: Number(first.y) };
+        } catch {
+            return null;
+        }
+    }
+
+    async function fetchDrivingDistanceKm(
+        origin: { x: number; y: number },
+        destination: { x: number; y: number }
+    ) {
+        try {
+            const params = new URLSearchParams({
+                originX: String(origin.x),
+                originY: String(origin.y),
+                destX: String(destination.x),
+                destY: String(destination.y),
+            });
+            const response = await fetch(`/api/kakao/directions?${params}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            const km = Number(data?.distanceKm);
+            return Number.isFinite(km) ? km : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function getRoundPartnerTrip(baseTrip: Trip, list: Trip[]) {
+        const reverseTrips = list.filter(
+            (other) =>
+                other.id !== baseTrip.id &&
+                other.origin === baseTrip.destination &&
+                other.destination === baseTrip.origin
+        );
+        if (reverseTrips.length === 0) return undefined;
+        const baseTime = new Date(baseTrip.dateTime).getTime();
+        return reverseTrips.sort((a, b) => {
+            const aDiff = Math.abs(new Date(a.dateTime).getTime() - baseTime);
+            const bDiff = Math.abs(new Date(b.dateTime).getTime() - baseTime);
+            return aDiff - bDiff;
+        })[0];
+    }
+
+    function getBusLabel(busSize: string) {
+        if (busSize === 'large') return '대형버스 선호';
+        if (busSize === 'medium') return '우등버스 선호';
+        return '미니버스/밴 선호';
+    }
+
+    function getServicePurposeLabel(purpose?: string | null) {
+        if (!purpose) return null;
+        if (purpose === 'MT/학교') return '학교 행사/MT';
+        return purpose;
+    }
+
+    function formatTripDateLine(dateTime: string) {
+        const date = new Date(dateTime);
+        const md = date.toLocaleDateString('ko-KR', {
+            month: 'long',
+            day: 'numeric',
+        });
+        const weekday = date.toLocaleDateString('ko-KR', {
+            weekday: 'short',
+        });
+        return `${md} (${weekday})`;
+    }
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function calculateDistances() {
+            const results: Record<string, number | null> = {};
+            for (const trip of trips) {
+                const originPoint =
+                    typeof trip.originX === 'number' &&
+                    typeof trip.originY === 'number'
+                        ? { x: trip.originX, y: trip.originY }
+                        : await fetchPlaceTopResult(trip.origin);
+                const destinationPoint =
+                    typeof trip.destinationX === 'number' &&
+                    typeof trip.destinationY === 'number'
+                        ? { x: trip.destinationX, y: trip.destinationY }
+                        : await fetchPlaceTopResult(trip.destination);
+
+                if (!originPoint || !destinationPoint) {
+                    results[trip.id] = null;
+                    continue;
+                }
+
+                results[trip.id] = await fetchDrivingDistanceKm(
+                    originPoint,
+                    destinationPoint
+                );
+            }
+
+            if (!cancelled) {
+                setDistanceByTripId(results);
+            }
+        }
+
+        if (trips.length > 0) {
+            calculateDistances();
+        } else {
+            setDistanceByTripId({});
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [trips]);
+
     return (
         <>
         <div className="min-h-screen bg-[#f3f3f5]">
@@ -683,32 +838,110 @@ export default function DriverDashboard() {
                                 </Button>
                             </div>
                         </div>
-                        <div className="grid gap-4 w-full max-w-xl mx-auto">
-                            {filterTrips(trips).map((trip) => (
-                                <Card
+                        <div className="w-full max-w-xl mx-auto border border-gray-200 bg-white">
+                            {(() => {
+                                const visibleTrips = filterTrips(trips);
+                                const consumed = new Set<string>();
+                                const cards = visibleTrips.filter((trip) => {
+                                    if (consumed.has(trip.id)) return false;
+                                    const partner = getRoundPartnerTrip(
+                                        trip,
+                                        visibleTrips
+                                    );
+                                    if (partner) {
+                                        const base =
+                                            new Date(trip.dateTime).getTime() <=
+                                            new Date(partner.dateTime).getTime()
+                                                ? trip
+                                                : partner;
+                                        const other =
+                                            base.id === trip.id ? partner : trip;
+                                        consumed.add(base.id);
+                                        consumed.add(other.id);
+                                        return trip.id === base.id;
+                                    }
+                                    consumed.add(trip.id);
+                                    return true;
+                                });
+
+                                return cards.map((trip) => {
+                                    const partner = getRoundPartnerTrip(
+                                        trip,
+                                        visibleTrips
+                                    );
+                                    const isRound = Boolean(partner);
+                                    const distance =
+                                        distanceByTripId[trip.id] ?? null;
+                                    const bidCount = isRound
+                                        ? (trip.bids?.length || 0) +
+                                          (partner?.bids?.length || 0)
+                                        : trip.bids?.length || 0;
+                                    const servicePurpose = getServicePurposeLabel(
+                                        trip.servicePurpose
+                                    );
+                                    return (
+                                <div
                                     key={trip.id}
-                                    className="w-full rounded-none border-gray-200 shadow-sm"
+                                    className="border-b border-gray-200 px-3 py-2 last:border-b-0"
                                 >
-                                    <CardHeader>
-                                        <div className="flex justify-between">
-                                            <div>
-                                                <CardTitle>
-                                                    {trip.origin} →{' '}
-                                                    {trip.destination}
-                                                </CardTitle>
-                                                <p className="text-sm text-gray-600">
-                                                    {format(
-                                                        new Date(trip.dateTime),
-                                                        'PPP p'
-                                                    )}
+                                    <div className="pb-1">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                                    <span className="font-semibold text-gray-900">
+                                                        {formatTripDateLine(
+                                                            trip.dateTime
+                                                        )}
+                                                    </span>
+                                                    <span className="text-gray-500">
+                                                        당일 일정
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="text-[15px] font-semibold leading-snug">
+                                                        {trip.origin}
+                                                    </p>
+                                                    <p className="text-[15px] font-semibold leading-snug">
+                                                        {trip.destination}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[18px] font-semibold">
+                                                    {trip.paxCount}명
                                                 </p>
                                             </div>
-                                            <Badge>{trip.status === 'open' ? '진행중' : trip.status === 'awarded' ? '낙찰됨' : '취소됨'}</Badge>
                                         </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-2">
-                                        <p>승객 수: {trip.paxCount}</p>
-                                        <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
+                                    </div>
+                                    <div className="space-y-2 pb-1">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-gray-700">
+                                                <span className="text-sm leading-none">
+                                                    ↕
+                                                </span>
+                                                <span className="text-xs font-medium">
+                                                    {isRound ? '왕복' : '편도'}
+                                                </span>
+                                                {typeof distance === 'number' && (
+                                                    <span className="text-[14px] text-gray-500">
+                                                        {distance}km
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                                {servicePurpose && (
+                                                    <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600">
+                                                        {servicePurpose}
+                                                    </span>
+                                                )}
+                                                <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600">
+                                                    {getBusLabel(trip.busSize)}
+                                                </span>
+                                                <span className="rounded-full border border-red-200 px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                                                    입찰 {bidCount}
+                                                </span>
+                                            </div>
+                                        </div>
                                         <Dialog
                                             open={selectedTrip?.id === trip.id}
                                             onOpenChange={(open) => {
@@ -718,7 +951,7 @@ export default function DriverDashboard() {
                                             }}
                                         >
                                             <Button
-                                                className="mt-2 w-full sm:w-auto"
+                                                className="mt-1 h-8 rounded-md px-3 text-xs"
                                                 onClick={() =>
                                                     handleBidButtonClick(trip)
                                                 }
@@ -795,9 +1028,11 @@ export default function DriverDashboard() {
                                                 </div>
                                             </DialogContent>
                                         </Dialog>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                    </div>
+                                </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     </div>
                 )}
@@ -1477,12 +1712,29 @@ export default function DriverDashboard() {
                                         {vehiclePhotos.length > 0 ? (
                                             <div className="grid grid-cols-4 gap-2">
                                                 {vehiclePhotos.map((photo, idx) => (
-                                                    <img
+                                                    <div
                                                         key={photo + idx}
-                                                        src={photo}
-                                                        alt="차량"
-                                                        className="aspect-square w-full rounded-md object-cover"
-                                                    />
+                                                        className="relative"
+                                                    >
+                                                        <img
+                                                            src={photo}
+                                                            alt="차량"
+                                                            className="aspect-square w-full rounded-md object-cover"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs font-semibold text-white"
+                                                            onClick={() =>
+                                                                removeVehiclePhoto(
+                                                                    idx
+                                                                )
+                                                            }
+                                                            aria-label="차량 사진 삭제"
+                                                            title="차량 사진 삭제"
+                                                        >
+                                                            -
+                                                        </button>
+                                                    </div>
                                                 ))}
                                             </div>
                                         ) : (

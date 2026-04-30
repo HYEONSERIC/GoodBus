@@ -95,7 +95,11 @@ model Trip {
   passengerId String
   passenger   User       @relation("PassengerTrips", fields: [passengerId], references: [id])
   origin      String
+  originX     Float?
+  originY     Float?
   destination String
+  destinationX Float?
+  destinationY Float?
   dateTime    DateTime
   paxCount    Int
   busSize     BusSize
