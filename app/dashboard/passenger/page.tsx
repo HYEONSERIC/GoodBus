@@ -594,15 +594,29 @@ export default function PassengerDashboard() {
                 </Card>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogContent className="w-[95vw] max-w-3xl max-h-[66vh] overflow-y-auto overflow-x-hidden">
-                        <DialogHeader>
+                    <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-4xl [&>button]:top-4 [&>button]:right-4">
+                        <DialogHeader className="sr-only">
                             <DialogTitle>여정 만들기</DialogTitle>
                             <DialogDescription>
                                 여정 정보를 입력하세요
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div>
+                        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4">
+                            <button
+                                type="button"
+                                onClick={() => setOpenDialog(false)}
+                                className="min-w-[4rem] text-left text-lg font-medium text-gray-700 hover:text-black"
+                            >
+                                &lt; 이전
+                            </button>
+                            <span className="text-2xl font-bold tracking-tight">
+                                견적 신청
+                            </span>
+                            <span className="min-w-[4rem]" />
+                        </div>
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-24 pt-4">
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>출발지</Label>
                                 <Input
                                     value={newTrip.origin}
@@ -655,7 +669,7 @@ export default function PassengerDashboard() {
                                     </div>
                                 )}
                             </div>
-                            <div>
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>도착지</Label>
                                 <Input
                                     value={newTrip.destination}
@@ -713,7 +727,7 @@ export default function PassengerDashboard() {
                                     </div>
                                 )}
                             </div>
-                            <div>
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>날짜 및 시간</Label>
                                 <div className="space-y-3">
                                     <div className="space-y-2">
@@ -955,7 +969,7 @@ export default function PassengerDashboard() {
                                 </div>
                             </div>
                             {stopoverOpen && (
-                                <div className="space-y-3 pt-2">
+                                <div className="space-y-3 rounded-md border border-sky-200 bg-sky-50/60 p-3">
                                     <Textarea
                                         value={newTrip.stopoverDetail}
                                         onChange={(e) =>
@@ -971,7 +985,7 @@ export default function PassengerDashboard() {
                             )}
 
                             {/* 결제 방식 + 버스 선택 + 추가 사항 */}
-                            <div className="space-y-3 pt-4">
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>결제 방식</Label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
@@ -1009,7 +1023,7 @@ export default function PassengerDashboard() {
                                 </div>
                             </div>
 
-                            <div className="space-y-3 pt-4">
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>버스 선택</Label>
                                 <div className="grid grid-cols-3 gap-3">
                                     <button
@@ -1072,7 +1086,7 @@ export default function PassengerDashboard() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2 pt-4">
+                            <div className="space-y-2 border-b border-gray-100 pb-4">
                                 <Label>추가 사항</Label>
                                 <Textarea
                                     value={newTrip.additionalRequest}
@@ -1087,7 +1101,7 @@ export default function PassengerDashboard() {
                             </div>
 
                             {/* 기사님 동행 여부 */}
-                            <div className="space-y-3 pt-4">
+                            <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>기사님 동행 여부</Label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
@@ -1157,7 +1171,7 @@ export default function PassengerDashboard() {
                             </div>
 
                             {/* 서비스 목적 */}
-                            <div className="space-y-2 pt-4">
+                            <div className="space-y-2 border-b border-gray-100 pb-4">
                                 <Label>어떤 목적으로 서비스를 이용하세요?</Label>
                                 <div className="grid grid-cols-2 gap-3 pt-1">
                                     {[
@@ -1194,7 +1208,7 @@ export default function PassengerDashboard() {
                                 </div>
                             </div>
 
-                            <div>
+                            <div className="space-y-2 pb-2">
                                 <Label>승객 수</Label>
                                 <Input
                                     type="number"
@@ -1217,9 +1231,25 @@ export default function PassengerDashboard() {
                                     }
                                 />
                             </div>
-                            <Button onClick={createTrip} className="w-full">
-                                여정 만들기
-                            </Button>
+                            </div>
+
+                            <div className="flex shrink-0 gap-2 border-t border-gray-200 bg-white px-4 py-3">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="h-11 flex-1 rounded-md bg-gray-700 text-sm font-semibold text-white hover:bg-gray-600"
+                                    onClick={() => setOpenDialog(false)}
+                                >
+                                    닫기
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={createTrip}
+                                    className="h-11 flex-[1.4] rounded-md bg-[#ffcd00] text-sm font-semibold text-black hover:bg-[#f0c200]"
+                                >
+                                    견적 등록하기
+                                </Button>
+                            </div>
                         </div>
                     </DialogContent>
                 </Dialog>
