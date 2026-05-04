@@ -594,22 +594,22 @@ export default function PassengerDashboard() {
                 </Card>
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.25rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-4xl [&>button]:top-4 [&>button]:right-4">
+                    <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-lg [&>button]:top-3 [&>button]:right-4">
                         <DialogHeader className="sr-only">
                             <DialogTitle>여정 만들기</DialogTitle>
                             <DialogDescription>
                                 여정 정보를 입력하세요
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-4">
+                        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-3">
                             <button
                                 type="button"
                                 onClick={() => setOpenDialog(false)}
-                                className="min-w-[4rem] text-left text-lg font-medium text-gray-700 hover:text-black"
+                                className="min-w-[4rem] text-left text-sm text-gray-700 hover:text-black"
                             >
                                 &lt; 이전
                             </button>
-                            <span className="text-2xl font-bold tracking-tight">
+                            <span className="text-base font-semibold">
                                 견적 신청
                             </span>
                             <span className="min-w-[4rem]" />
@@ -619,6 +619,8 @@ export default function PassengerDashboard() {
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>출발지</Label>
                                 <Input
+                                    className="h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 shadow-none focus-visible:border-gray-500 focus-visible:ring-0"
+                                    placeholder="출발지를 입력하세요"
                                     value={newTrip.origin}
                                     onChange={(e) => {
                                         const value = e.target.value;
@@ -672,6 +674,8 @@ export default function PassengerDashboard() {
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>도착지</Label>
                                 <Input
+                                    className="h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 shadow-none focus-visible:border-gray-500 focus-visible:ring-0"
+                                    placeholder="도착지를 입력하세요"
                                     value={newTrip.destination}
                                     onChange={(e) => {
                                         const value = e.target.value;
@@ -732,14 +736,14 @@ export default function PassengerDashboard() {
                                 <div className="space-y-3">
                                     <div className="space-y-2">
                                         <Label>운행 방식</Label>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-2 overflow-hidden rounded-md border border-gray-300">
                                             <button
                                                 type="button"
-                                                className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                                className={`h-11 border-r border-gray-300 px-4 text-sm font-semibold transition ${
                                                     newTrip.tripType ===
                                                     'oneway'
-                                                        ? 'bg-black text-white'
-                                                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                                                        ? 'bg-gray-200 text-gray-900'
+                                                        : 'bg-white text-gray-500 hover:bg-gray-50'
                                                 }`}
                                                 onClick={() =>
                                                     setNewTrip({
@@ -752,11 +756,11 @@ export default function PassengerDashboard() {
                                             </button>
                                             <button
                                                 type="button"
-                                                className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                                className={`h-11 px-4 text-sm font-semibold transition ${
                                                     newTrip.tripType ===
                                                     'round'
-                                                        ? 'bg-black text-white'
-                                                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                                                        ? 'bg-gray-200 text-gray-900'
+                                                        : 'bg-white text-gray-500 hover:bg-gray-50'
                                                 }`}
                                                 onClick={() =>
                                                     setNewTrip({
@@ -778,7 +782,7 @@ export default function PassengerDashboard() {
                                                     ref={goingDateTimeRef}
                                                     type="datetime-local"
                                                     value={newTrip.goingDateTime}
-                                                    className={`peer text-sm ${
+                                                    className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                         !newTrip.goingDateTime
                                                             ? 'text-transparent'
                                                             : ''
@@ -803,21 +807,17 @@ export default function PassengerDashboard() {
                                                     }
                                                 />
                                                 {!newTrip.goingDateTime && (
-                                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
+                                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
                                                         날짜를 선택하세요
                                                     </span>
                                                 )}
                                             </div>
 
                                             {/* 편도일 때 경유지 버튼 */}
-                                            <div className="pt-2">
+                                            <div className="pt-1">
                                                 <button
                                                     type="button"
-                                                    className={`inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-semibold transition ${
-                                                        stopoverOpen
-                                                            ? 'border-black bg-black text-white hover:bg-black/90'
-                                                            : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-100'
-                                                    }`}
+                                                    className="inline-flex h-7 items-center gap-1.5 px-0 text-xs font-medium text-gray-700 transition hover:text-black"
                                                     onClick={() => {
                                                         if (!stopoverOpen) {
                                                             setStopoverOpen(
@@ -832,7 +832,7 @@ export default function PassengerDashboard() {
                                                         });
                                                     }}
                                                 >
-                                                    <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[12px] leading-none">
+                                                    <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full border border-current text-[11px] leading-none">
                                                         {stopoverOpen
                                                             ? '−'
                                                             : '+'}
@@ -854,7 +854,7 @@ export default function PassengerDashboard() {
                                                         ref={goingDateTimeRef}
                                                         type="datetime-local"
                                                         value={newTrip.goingDateTime}
-                                                        className={`peer text-sm ${
+                                                        className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.goingDateTime
                                                                 ? 'text-transparent'
                                                                 : ''
@@ -879,7 +879,7 @@ export default function PassengerDashboard() {
                                                         }
                                                     />
                                                     {!newTrip.goingDateTime && (
-                                                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
+                                                        <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
                                                             날짜를 선택하세요
                                                         </span>
                                                     )}
@@ -892,7 +892,7 @@ export default function PassengerDashboard() {
                                                         ref={returnDateTimeRef}
                                                         type="datetime-local"
                                                         value={newTrip.returnDateTime}
-                                                        className={`peer text-sm ${
+                                                        className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.returnDateTime
                                                                 ? 'text-transparent'
                                                                 : ''
@@ -917,21 +917,17 @@ export default function PassengerDashboard() {
                                                         }
                                                     />
                                                     {!newTrip.returnDateTime && (
-                                                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
+                                                        <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-sm text-gray-500 peer-focus:hidden">
                                                             날짜를 선택하세요
                                                         </span>
                                                     )}
                                                 </div>
 
                                                 {/* 왕복일 때 경유지 버튼 */}
-                                                <div className="pt-2">
+                                                <div className="pt-1">
                                                     <button
                                                         type="button"
-                                                        className={`inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-semibold transition ${
-                                                            stopoverOpen
-                                                                ? 'border-black bg-black text-white hover:bg-black/90'
-                                                                : 'border-gray-300 bg-white text-gray-900 hover:bg-gray-100'
-                                                        }`}
+                                                        className="inline-flex h-7 items-center gap-1.5 px-0 text-xs font-medium text-gray-700 transition hover:text-black"
                                                         onClick={() => {
                                                             if (
                                                                 !stopoverOpen
@@ -951,7 +947,7 @@ export default function PassengerDashboard() {
                                                             });
                                                         }}
                                                     >
-                                                        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[12px] leading-none">
+                                                        <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full border border-current text-[11px] leading-none">
                                                             {stopoverOpen
                                                                 ? '−'
                                                                 : '+'}
@@ -969,8 +965,13 @@ export default function PassengerDashboard() {
                                 </div>
                             </div>
                             {stopoverOpen && (
-                                <div className="space-y-3 rounded-md border border-sky-200 bg-sky-50/60 p-3">
+                                <div className="space-y-2 py-1">
+                                    <Label className="text-sm font-semibold text-gray-900">
+                                        경유지 상세
+                                    </Label>
                                     <Textarea
+                                        rows={3}
+                                        className="rounded-md border border-gray-200 px-4 py-3 text-sm shadow-sm focus-visible:border-gray-300 focus-visible:ring-0"
                                         value={newTrip.stopoverDetail}
                                         onChange={(e) =>
                                             setNewTrip({
@@ -987,13 +988,13 @@ export default function PassengerDashboard() {
                             {/* 결제 방식 + 버스 선택 + 추가 사항 */}
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>결제 방식</Label>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 overflow-hidden rounded-md border border-gray-300">
                                     <button
                                         type="button"
-                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                        className={`h-11 border-r border-gray-300 px-4 text-sm font-semibold transition ${
                                             newTrip.paymentMethod === 'cash'
-                                                ? 'bg-black text-white'
-                                                : 'bg-gray-100 text-gray-900'
+                                                ? 'bg-gray-200 text-gray-900'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
                                         }`}
                                         onClick={() =>
                                             setNewTrip({
@@ -1006,10 +1007,10 @@ export default function PassengerDashboard() {
                                     </button>
                                     <button
                                         type="button"
-                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                        className={`h-11 px-4 text-sm font-semibold transition ${
                                             newTrip.paymentMethod === 'card'
-                                                ? 'bg-black text-white'
-                                                : 'bg-gray-100 text-gray-900'
+                                                ? 'bg-gray-200 text-gray-900'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
                                         }`}
                                         onClick={() =>
                                             setNewTrip({
@@ -1025,13 +1026,13 @@ export default function PassengerDashboard() {
 
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>버스 선택</Label>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-3 overflow-hidden rounded-md border border-gray-300">
                                     <button
                                         type="button"
-                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                        className={`border-r border-gray-300 px-3 py-3 text-center text-sm font-semibold transition ${
                                             newTrip.busSize === 'large'
-                                                ? 'border-gray-400 bg-gray-100'
-                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                                ? 'bg-gray-200'
+                                                : 'bg-white hover:bg-gray-50'
                                         }`}
                                         onClick={() =>
                                             setNewTrip({
@@ -1047,10 +1048,10 @@ export default function PassengerDashboard() {
                                     </button>
                                     <button
                                         type="button"
-                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                        className={`border-r border-gray-300 px-3 py-3 text-center text-sm font-semibold transition ${
                                             newTrip.busSize === 'medium'
-                                                ? 'border-gray-400 bg-gray-100'
-                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                                ? 'bg-gray-200'
+                                                : 'bg-white hover:bg-gray-50'
                                         }`}
                                         onClick={() =>
                                             setNewTrip({
@@ -1066,10 +1067,10 @@ export default function PassengerDashboard() {
                                     </button>
                                     <button
                                         type="button"
-                                        className={`rounded-xl border px-3 py-3 text-center text-sm font-semibold transition ${
+                                        className={`px-3 py-3 text-center text-sm font-semibold transition ${
                                             newTrip.busSize === 'small'
-                                                ? 'border-gray-400 bg-gray-100'
-                                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                                                ? 'bg-gray-200'
+                                                : 'bg-white hover:bg-gray-50'
                                         }`}
                                         onClick={() =>
                                             setNewTrip({
@@ -1103,14 +1104,14 @@ export default function PassengerDashboard() {
                             {/* 기사님 동행 여부 */}
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>기사님 동행 여부</Label>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 overflow-hidden rounded-md border border-gray-300">
                                     <button
                                         type="button"
-                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition ${
+                                        className={`h-11 border-r border-gray-300 px-4 text-sm font-semibold transition ${
                                             newTrip.companionType ===
                                             'depart_return'
-                                                ? 'bg-black text-white'
-                                                : 'bg-gray-100 text-gray-900'
+                                                ? 'bg-gray-200 text-gray-900'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
                                         }`}
                                         onClick={() => {
                                             setNewTrip({
@@ -1125,11 +1126,11 @@ export default function PassengerDashboard() {
                                     </button>
                                     <button
                                         type="button"
-                                        className={`h-12 rounded-full px-4 text-sm font-semibold transition flex items-center justify-center gap-2 ${
+                                        className={`flex h-11 items-center justify-center gap-2 px-4 text-sm font-semibold transition ${
                                             newTrip.companionType ===
                                             'with_schedule'
-                                                ? 'bg-black text-white'
-                                                : 'bg-gray-100 text-gray-900'
+                                                ? 'bg-gray-200 text-gray-900'
+                                                : 'bg-white text-gray-500 hover:bg-gray-50'
                                         }`}
                                         onClick={() => {
                                             setNewTrip({
@@ -1211,41 +1212,33 @@ export default function PassengerDashboard() {
                             <div className="space-y-2 pb-2">
                                 <Label>승객 수</Label>
                                 <Input
+                                    className="h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 shadow-none focus-visible:border-gray-500 focus-visible:ring-0"
                                     type="number"
                                     value={newTrip.paxCount}
-                                        min={1}
+                                    min={1}
                                     onChange={(e) =>
-                                            setNewTrip({
-                                                ...newTrip,
-                                                paxCount: (() => {
-                                                    const raw =
-                                                        e.target.value;
-                                                    const n = Number(raw);
-                                                    if (!raw) return 1;
-                                                    return Number.isFinite(n) &&
-                                                        n >= 1
-                                                        ? Math.floor(n)
-                                                        : 1;
-                                                })(),
-                                            })
+                                        setNewTrip({
+                                            ...newTrip,
+                                            paxCount: (() => {
+                                                const raw = e.target.value;
+                                                const n = Number(raw);
+                                                if (!raw) return 1;
+                                                return Number.isFinite(n) &&
+                                                    n >= 1
+                                                    ? Math.floor(n)
+                                                    : 1;
+                                            })(),
+                                        })
                                     }
                                 />
                             </div>
                             </div>
 
-                            <div className="flex shrink-0 gap-2 border-t border-gray-200 bg-white px-4 py-3">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="h-11 flex-1 rounded-md bg-gray-700 text-sm font-semibold text-white hover:bg-gray-600"
-                                    onClick={() => setOpenDialog(false)}
-                                >
-                                    닫기
-                                </Button>
+                            <div className="flex shrink-0 border-t border-gray-200 bg-white px-4 py-3">
                                 <Button
                                     type="button"
                                     onClick={createTrip}
-                                    className="h-11 flex-[1.4] rounded-md bg-[#ffcd00] text-sm font-semibold text-black hover:bg-[#f0c200]"
+                                    className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
                                 >
                                     견적 등록하기
                                 </Button>

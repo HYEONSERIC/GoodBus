@@ -1196,7 +1196,7 @@ export default function DriverDashboard() {
                                         </p>
                                         <Button
                                             type="button"
-                                            className="h-11 w-full rounded-md bg-[#ffcd00] font-semibold text-black hover:bg-[#f0c200]"
+                                            className="h-11 w-full rounded-md bg-[#e08030] font-semibold text-white hover:bg-[#d07526]"
                                             onClick={() => setBidUiStep('form')}
                                         >
                                             확인
