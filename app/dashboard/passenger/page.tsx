@@ -10,7 +10,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, tripsAPI, bidsAPI } from '@/lib/api';
+import { authAPI, chatsAPI, tripsAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -60,15 +60,29 @@ interface Trip {
     minBidPrice: number | null;
 }
 
+interface BidderProfile {
+    id: string;
+    email: string;
+    role: string;
+    displayName?: string | null;
+    companyName?: string | null;
+    profileImageUrl?: string | null;
+    vehicleImageUrls?: string[] | null;
+    busType?: string | null;
+    busYear?: string | null;
+    capacity?: number | null;
+    driverComment?: string | null;
+    driverLicenseStatus?: string | null;
+    companyRegistrationStatus?: string | null;
+}
+
 interface Bid {
     id: string;
+    tripId: string;
     price: number;
-    note?: string;
+    note?: string | null;
     status: string;
-    bidder: {
-        email: string;
-        role: string;
-    };
+    bidder: BidderProfile;
 }
 
 interface KakaoPlace {
@@ -89,6 +103,10 @@ export default function PassengerDashboard() {
         'quote' | 'booking' | 'chat' | 'support'
     >('quote');
     const [chatOpen, setChatOpen] = useState(false);
+    /** 견적 상세에서 채팅하기로 들어왔을 때 자동 선택할 방 */
+    const [chatFocusRoomId, setChatFocusRoomId] = useState<string | null>(
+        null,
+    );
     const [supportOpen, setSupportOpen] = useState(false);
     const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
         'menu',
@@ -132,10 +150,30 @@ export default function PassengerDashboard() {
     const [cancelDialogTrip, setCancelDialogTrip] = useState<Trip | null>(null);
     const [cancelReason, setCancelReason] = useState('');
     const cancelReasons = ['일정 변경', '다른 전세버스 이용', '다른 교통수단 이용', '기타'];
+    const [quotesExpandedTripIds, setQuotesExpandedTripIds] = useState<string[]>(
+        [],
+    );
+    const [bidDetail, setBidDetail] = useState<{
+        bid: Bid;
+        bidTrip: Trip;
+    } | null>(null);
+    const [bidGalleryIndex, setBidGalleryIndex] = useState(0);
+    const uploadBaseUrl =
+        process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+    function resolveMediaUrl(url?: string | null) {
+        if (!url) return null;
+        return url.startsWith('/uploads') ? `${uploadBaseUrl}${url}` : url;
+    }
 
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        if (bidDetail) setBidGalleryIndex(0);
+    }, [bidDetail?.bid?.id]);
+
 
 
     async function loadData() {
@@ -415,6 +453,134 @@ export default function PassengerDashboard() {
         );
     }
 
+    function toggleQuotesTrip(tripId: string) {
+        setQuotesExpandedTripIds((prev) =>
+            prev.includes(tripId)
+                ? prev.filter((id) => id !== tripId)
+                : [...prev, tripId],
+        );
+    }
+
+    function parseVehicleCountFromNote(note?: string | null) {
+        if (!note) return null;
+        const m = note.match(/×\s*(\d+)\s*대/);
+        if (!m) return null;
+        const n = Number(m[1]);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    }
+
+    type OpenBidRow = { bid: Bid; bidTrip: Trip; segment: string | null };
+
+    function collectOpenBidsForCard(trip: Trip, partner?: Trip): OpenBidRow[] {
+        const rows: OpenBidRow[] = [];
+        if (partner) {
+            for (const b of trip.bids || []) {
+                if (b.status === 'open') {
+                    rows.push({
+                        bid: b,
+                        bidTrip: trip,
+                        segment: '가는편',
+                    });
+                }
+            }
+            for (const b of partner.bids || []) {
+                if (b.status === 'open') {
+                    rows.push({
+                        bid: b,
+                        bidTrip: partner,
+                        segment: '오는편',
+                    });
+                }
+            }
+        } else {
+            for (const b of trip.bids || []) {
+                if (b.status === 'open') {
+                    rows.push({
+                        bid: b,
+                        bidTrip: trip,
+                        segment: null,
+                    });
+                }
+            }
+        }
+        return rows.sort((a, b) => Number(a.bid.price) - Number(b.bid.price));
+    }
+
+    function bidderDisplayName(b: BidderProfile) {
+        if (b.displayName?.trim()) return `${b.displayName.trim()} 기사님`;
+        if (b.companyName?.trim()) return b.companyName.trim();
+        const local = b.email?.split('@')[0] || '입찰자';
+        return b.role === 'Driver' ? `${local} 기사님` : local;
+    }
+
+    function vehicleSpecLine(bidder: BidderProfile) {
+        const parts = [
+            bidder.busType?.trim() || null,
+            bidder.busYear?.trim()
+                ? `${bidder.busYear.trim()}년식`
+                : null,
+            bidder.capacity != null ? `${bidder.capacity}인승` : null,
+        ].filter(Boolean);
+        return parts.length ? parts.join(' · ') : '차량 정보 미등록';
+    }
+
+    function verificationLabel(bidder: BidderProfile) {
+        if (bidder.role === 'Driver') {
+            return bidder.driverLicenseStatus === 'approved'
+                ? '인증완료'
+                : '미인증';
+        }
+        if (bidder.role === 'BusCompany') {
+            return bidder.companyRegistrationStatus === 'approved'
+                ? '인증완료'
+                : '미인증';
+        }
+        return '—';
+    }
+
+    async function awardSelectedBid(bidTripId: string, bidId: string) {
+        if (
+            !confirm(
+                '이 견적으로 낙찰할까요? 다른 열린 입찰은 자동으로 제외됩니다.',
+            )
+        ) {
+            return;
+        }
+        try {
+            await tripsAPI.award(bidTripId, bidId);
+            setBidDetail(null);
+            setQuotesExpandedTripIds([]);
+            await loadData();
+        } catch (error: unknown) {
+            alert(
+                error instanceof Error ? error.message : '낙찰 처리에 실패했습니다',
+            );
+        }
+    }
+
+    async function openQuoteChat(bidTrip: Trip, bid: Bid) {
+        try {
+            const data = (await chatsAPI.ensureQuoteRoom(
+                bidTrip.id,
+                bid.bidder.id,
+            )) as { room?: { id?: string } };
+            const roomId = data.room?.id;
+            if (!roomId) {
+                alert('채팅방을 열 수 없습니다.');
+                return;
+            }
+            setChatFocusRoomId(roomId);
+            setBidDetail(null);
+            setActiveTab('chat');
+        } catch (error: unknown) {
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : '채팅방을 준비하지 못했습니다.',
+            );
+        }
+    }
+
     function formatTripDateLine(dateTime: string) {
         const date = new Date(dateTime);
         const md = date.toLocaleDateString('ko-KR', {
@@ -615,7 +781,7 @@ export default function PassengerDashboard() {
                             <span className="min-w-[4rem]" />
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-24 pt-4">
+                            <div className="scrollbar-none min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-24 pt-4">
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>출발지</Label>
                                 <Input
@@ -1283,6 +1449,236 @@ export default function PassengerDashboard() {
                 </Dialog>
 
                 <Dialog
+                    open={Boolean(bidDetail)}
+                    onOpenChange={(open) => {
+                        if (!open) setBidDetail(null);
+                    }}
+                >
+                    <DialogContent className="scrollbar-none max-h-[min(92vh,720px)] w-[calc(100vw-1.25rem)] max-w-lg gap-0 overflow-y-auto p-0 sm:max-w-lg">
+                        {bidDetail &&
+                            (() => {
+                                const { bid, bidTrip } = bidDetail;
+                                const bidder = bid.bidder;
+                                const galleryUrls = (
+                                    bidder.vehicleImageUrls || []
+                                )
+                                    .map((u) => resolveMediaUrl(u))
+                                    .filter(Boolean) as string[];
+                                const fallbackProfile = resolveMediaUrl(
+                                    bidder.profileImageUrl,
+                                );
+                                const showImg =
+                                    galleryUrls[bidGalleryIndex] ||
+                                    fallbackProfile;
+                                const imgCount = Math.max(
+                                    galleryUrls.length,
+                                    showImg ? 1 : 0,
+                                );
+                                const units = parseVehicleCountFromNote(
+                                    bid.note,
+                                );
+                                const priceText = `${Number(
+                                    bid.price,
+                                ).toLocaleString()}만원${units ? ` (${units}대)` : ''}`;
+                                return (
+                                    <>
+                                        <DialogHeader className="sr-only">
+                                            <DialogTitle>
+                                                견적 상세
+                                            </DialogTitle>
+                                            <DialogDescription>
+                                                입찰자 프로필 및 제안 내용입니다.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="relative bg-gray-900">
+                                            <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-200">
+                                                {showImg ? (
+                                                    <img
+                                                        src={showImg}
+                                                        alt=""
+                                                        className="size-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex size-full items-center justify-center text-sm text-gray-500">
+                                                        등록된 차량 사진이 없습니다
+                                                    </div>
+                                                )}
+                                                {imgCount > 1 && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 px-2 py-1 text-white"
+                                                            onClick={() =>
+                                                                setBidGalleryIndex(
+                                                                    (i) =>
+                                                                        (i -
+                                                                            1 +
+                                                                            imgCount) %
+                                                                        imgCount,
+                                                                )
+                                                            }
+                                                        >
+                                                            ‹
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/40 px-2 py-1 text-white"
+                                                            onClick={() =>
+                                                                setBidGalleryIndex(
+                                                                    (i) =>
+                                                                        (i + 1) %
+                                                                        imgCount,
+                                                                )
+                                                            }
+                                                        >
+                                                            ›
+                                                        </button>
+                                                        <span className="absolute bottom-3 right-3 rounded bg-black/55 px-2 py-0.5 text-xs text-white">
+                                                            {bidGalleryIndex + 1} /{' '}
+                                                            {imgCount}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="relative flex flex-col items-center border-b border-gray-200 bg-white pb-4 pt-10">
+                                                <div className="absolute -top-9 left-1/2 size-20 -translate-x-1/2 overflow-hidden rounded-full border-4 border-white bg-gray-100 shadow">
+                                                    {fallbackProfile ? (
+                                                        <img
+                                                            src={fallbackProfile}
+                                                            alt=""
+                                                            className="size-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex size-full items-center justify-center text-xs text-gray-400">
+                                                            프로필
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-lg font-bold">
+                                                    {bidderDisplayName(bidder)}
+                                                </p>
+                                                <p className="mt-1 text-sm text-amber-600">
+                                                    ⭐ 준비중 (0.0)
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-px border-b border-gray-200 bg-gray-100">
+                                            <div className="bg-white p-3 text-center">
+                                                <p className="text-[11px] text-gray-400">
+                                                    차종
+                                                </p>
+                                                <p className="mt-1 text-xs font-medium text-gray-900">
+                                                    {bidder.busType?.trim() ||
+                                                        '—'}
+                                                </p>
+                                            </div>
+                                            <div className="bg-white p-3 text-center">
+                                                <p className="text-[11px] text-gray-400">
+                                                    연식
+                                                </p>
+                                                <p className="mt-1 text-xs font-medium text-gray-900">
+                                                    {bidder.busYear?.trim()
+                                                        ? `${bidder.busYear}년식`
+                                                        : '—'}
+                                                </p>
+                                            </div>
+                                            <div className="bg-white p-3 text-center">
+                                                <p className="text-[11px] text-gray-400">
+                                                    서류
+                                                </p>
+                                                <p className="mt-1 text-xs font-medium text-gray-900">
+                                                    {verificationLabel(bidder)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4 p-4">
+                                            {bidder.driverComment?.trim() && (
+                                                <div>
+                                                    <p className="text-xs font-semibold text-gray-700">
+                                                        기사님의 한마디
+                                                    </p>
+                                                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">
+                                                        {bidder.driverComment}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-700">
+                                                    제안 견적
+                                                </p>
+                                                <p className="mt-1 text-xl font-bold tracking-tight">
+                                                    {priceText}
+                                                </p>
+                                                <p className="mt-0.5 text-xs text-gray-500">
+                                                    세금·수수료 포함 여부는 현장
+                                                    협의 전제입니다.
+                                                </p>
+                                            </div>
+                                            {bid.note?.trim() && (
+                                                <div>
+                                                    <p className="text-xs font-semibold text-gray-700">
+                                                        상세 제안
+                                                    </p>
+                                                    <p className="mt-1 whitespace-pre-wrap rounded-md border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+                                                        {bid.note}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {((bidTrip.status === 'open' &&
+                                            bid.status === 'open') ||
+                                            (bidTrip.status === 'awarded' &&
+                                                bid.status === 'awarded')) && (
+                                                <div className="sticky bottom-0 flex gap-2 border-t border-gray-200 bg-white p-4">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className={`h-11 shrink-0 rounded-lg border-gray-300 px-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 ${
+                                                            !(
+                                                                bidTrip.status ===
+                                                                    'open' &&
+                                                                bid.status ===
+                                                                    'open'
+                                                            )
+                                                                ? 'w-full'
+                                                                : ''
+                                                        }`}
+                                                        onClick={() =>
+                                                            openQuoteChat(
+                                                                bidTrip,
+                                                                bid,
+                                                            )
+                                                        }
+                                                    >
+                                                        채팅하기
+                                                    </Button>
+                                                    {bidTrip.status ===
+                                                        'open' &&
+                                                        bid.status ===
+                                                            'open' && (
+                                                            <Button
+                                                                type="button"
+                                                                className="h-11 min-w-0 flex-1 rounded-lg bg-[#ffcd00] text-sm font-semibold text-black hover:bg-[#f0c200]"
+                                                                onClick={() =>
+                                                                    awardSelectedBid(
+                                                                        bidTrip.id,
+                                                                        bid.id,
+                                                                    )
+                                                                }
+                                                            >
+                                                                이 견적으로
+                                                                낙찰하기
+                                                            </Button>
+                                                        )}
+                                                </div>
+                                            )}
+                                    </>
+                                );
+                            })()}
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog
                     open={Boolean(cancelDialogTrip)}
                     onOpenChange={(open) => {
                         if (!open) {
@@ -1376,10 +1772,15 @@ export default function PassengerDashboard() {
                                     const expanded = expandedTripIds.includes(
                                         trip.id,
                                     );
-                                    const bidCount = isRound
-                                        ? (trip.bids?.length || 0) +
-                                          (partner?.bids?.length || 0)
-                                        : trip.bids?.length || 0;
+                                    const openBidRows = collectOpenBidsForCard(
+                                        trip,
+                                        partner,
+                                    );
+                                    const openBidCount = openBidRows.length;
+                                    const quotesExpanded =
+                                        quotesExpandedTripIds.includes(
+                                            trip.id,
+                                        );
                                     const distance =
                                         distanceByTripId[trip.id] ?? null;
                                     return (
@@ -1563,18 +1964,183 @@ export default function PassengerDashboard() {
                                                     }
                                                 >
                                                     {expanded
-                                                        ? '간히 ▲'
+                                                        ? '간단히 ▲'
                                                         : '자세히 ▼'}
                                                 </button>
 
-                                                <div className="border-t pt-4 text-center">
-                                                    <p className="text-[30px] font-semibold">
-                                                        견적을 받는 중입니다.
-                                                    </p>
-                                                    <p className="mt-1 text-sm text-gray-600">
-                                                        기사님들이 견적을 올리면
-                                                        문자로 안내해 드립니다.
-                                                    </p>
+                                                <div className="border-t pt-4">
+                                                    {trip.status ===
+                                                        'awarded' && (
+                                                        <div className="rounded-md border border-green-200 bg-green-50 px-3 py-3 text-center">
+                                                            <p className="text-lg font-semibold text-green-800">
+                                                                낙찰 완료
+                                                            </p>
+                                                            <p className="mt-1 text-sm text-green-900/80">
+                                                                예약 탭에서 낙찰
+                                                                정보를 확인하세요.
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {trip.status === 'open' &&
+                                                        openBidCount === 0 && (
+                                                            <div className="text-center">
+                                                                <p className="text-xl font-semibold text-gray-800 sm:text-2xl">
+                                                                    견적을 받는
+                                                                    중입니다.
+                                                                </p>
+                                                                <p className="mt-1 text-sm text-gray-600">
+                                                                    기사님들이
+                                                                    견적을
+                                                                    올리면 확인할
+                                                                    수 있어요.
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    {trip.status === 'open' &&
+                                                        openBidCount > 0 && (
+                                                            <div className="space-y-3">
+                                                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                                                    <div>
+                                                                        <p className="text-base font-semibold text-gray-900">
+                                                                            들어온
+                                                                            입찰{' '}
+                                                                            <span className="text-blue-600">
+                                                                                {
+                                                                                    openBidCount
+                                                                                }
+                                                                            </span>
+                                                                            건
+                                                                        </p>
+                                                                        <p className="mt-0.5 text-xs text-gray-500">
+                                                                            최저
+                                                                            제시가
+                                                                            순으로
+                                                                            표시합니다.
+                                                                        </p>
+                                                                    </div>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="outline"
+                                                                        className="shrink-0 rounded-lg border-gray-900 bg-white px-4 text-sm font-semibold text-gray-900 hover:bg-gray-100"
+                                                                        onClick={() =>
+                                                                            toggleQuotesTrip(
+                                                                                trip.id,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        견적
+                                                                        보기
+                                                                        {quotesExpanded
+                                                                            ? ' ▲'
+                                                                            : ' ▼'}
+                                                                    </Button>
+                                                                </div>
+                                                                {quotesExpanded && (
+                                                                    <div className="space-y-2">
+                                                                        {openBidRows.map(
+                                                                            ({
+                                                                                bid,
+                                                                                bidTrip,
+                                                                                segment,
+                                                                            }) => {
+                                                                                const bidder =
+                                                                                    bid.bidder;
+                                                                                const thumb =
+                                                                                    resolveMediaUrl(
+                                                                                        bidder
+                                                                                            .vehicleImageUrls?.[0],
+                                                                                    ) ||
+                                                                                    resolveMediaUrl(
+                                                                                        bidder.profileImageUrl,
+                                                                                    );
+                                                                                const units =
+                                                                                    parseVehicleCountFromNote(
+                                                                                        bid.note,
+                                                                                    );
+                                                                                const priceLine =
+                                                                                    Number.isFinite(
+                                                                                        Number(
+                                                                                            bid.price,
+                                                                                        ),
+                                                                                    )
+                                                                                        ? `${Number(
+                                                                                              bid.price,
+                                                                                          ).toLocaleString()}만원${units ? ` (${units}대)` : ''}`
+                                                                                        : `${bid.price}만원`;
+                                                                                return (
+                                                                                    <button
+                                                                                        key={
+                                                                                            bid.id
+                                                                                        }
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setBidDetail(
+                                                                                                {
+                                                                                                    bid,
+                                                                                                    bidTrip,
+                                                                                                },
+                                                                                            )
+                                                                                        }
+                                                                                        className="flex w-full items-stretch gap-3 rounded-xl border border-gray-200 bg-white p-3 text-left shadow-sm transition hover:border-gray-400 hover:bg-gray-50"
+                                                                                    >
+                                                                                        <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                                                                            {thumb ? (
+                                                                                                <img
+                                                                                                    src={
+                                                                                                        thumb
+                                                                                                    }
+                                                                                                    alt=""
+                                                                                                    className="size-full object-cover"
+                                                                                                />
+                                                                                            ) : (
+                                                                                                <div className="flex size-full items-center justify-center text-xs text-gray-400">
+                                                                                                    사진
+                                                                                                    없음
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            <div className="flex items-start justify-between gap-2">
+                                                                                                <p className="truncate text-[15px] font-bold text-gray-900">
+                                                                                                    {bidderDisplayName(
+                                                                                                        bidder,
+                                                                                                    )}
+                                                                                                </p>
+                                                                                                <p className="shrink-0 text-[15px] font-bold tabular-nums text-gray-900">
+                                                                                                    {
+                                                                                                        priceLine
+                                                                                                    }
+                                                                                                </p>
+                                                                                            </div>
+                                                                                            <p className="mt-1 line-clamp-2 text-xs text-gray-500">
+                                                                                                {vehicleSpecLine(
+                                                                                                    bidder,
+                                                                                                )}
+                                                                                            </p>
+                                                                                            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                                                                                                <span className="text-[11px] text-gray-400">
+                                                                                                    ⭐
+                                                                                                    준비중
+                                                                                                    · 후기
+                                                                                                    준비중
+                                                                                                </span>
+                                                                                                {segment && (
+                                                                                                    <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-800">
+                                                                                                        {
+                                                                                                            segment
+                                                                                                        }
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </button>
+                                                                                );
+                                                                            },
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                 </div>
 
                                             </CardContent>
@@ -1631,7 +2197,12 @@ export default function PassengerDashboard() {
                 {activeTab === 'chat' && (
                     <Card className="w-full max-w-xl mx-auto rounded-none border-gray-200 shadow-sm">
                         <CardContent className="p-6 space-y-4">
-                            <ChatPanel />
+                            <ChatPanel
+                                focusRoomId={chatFocusRoomId}
+                                onFocusRoomConsumed={() =>
+                                    setChatFocusRoomId(null)
+                                }
+                            />
                             <p className="hidden">
                                 낙찰된 버스기사와의 채팅 영역입니다. 실제 채팅
                                 기능은 향후 실시간 기능과 함께 추가됩니다.
@@ -1721,7 +2292,10 @@ export default function PassengerDashboard() {
                             낙찰된 기사와 연결되는 대화창입니다.
                         </DialogDescription>
                     </DialogHeader>
-                    <ChatPanel />
+                    <ChatPanel
+                        focusRoomId={chatFocusRoomId}
+                        onFocusRoomConsumed={() => setChatFocusRoomId(null)}
+                    />
                     <div className="hidden">
                         <div className="rounded border p-3">
                             안녕하세요. 일정 확인을 위해 연락드립니다.

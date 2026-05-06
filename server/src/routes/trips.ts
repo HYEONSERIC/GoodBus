@@ -47,6 +47,16 @@ router.get('/', requireAuth, async (req, res) => {
                             id: true,
                             email: true,
                             role: true,
+                            displayName: true,
+                            companyName: true,
+                            profileImageUrl: true,
+                            vehicleImageUrls: true,
+                            busType: true,
+                            busYear: true,
+                            capacity: true,
+                            driverComment: true,
+                            driverLicenseStatus: true,
+                            companyRegistrationStatus: true,
                         },
                     },
                 },
@@ -179,6 +189,16 @@ router.get('/:id', requireAuth, async (req, res) => {
                             id: true,
                             email: true,
                             role: true,
+                            displayName: true,
+                            companyName: true,
+                            profileImageUrl: true,
+                            vehicleImageUrls: true,
+                            busType: true,
+                            busYear: true,
+                            capacity: true,
+                            driverComment: true,
+                            driverLicenseStatus: true,
+                            companyRegistrationStatus: true,
                         },
                     },
                 },
@@ -505,11 +525,13 @@ router.post(
             // Create notification for the bidder
             if (awardedBid && tripWithDetails) {
                 await prisma.chatRoom.upsert({
-                    where: { tripId: trip.id },
-                    update: {
-                        passengerId: tripWithDetails.passenger.id,
-                        bidderId: awardedBid.bidder.id,
+                    where: {
+                        tripId_bidderId: {
+                            tripId: trip.id,
+                            bidderId: awardedBid.bidder.id,
+                        },
                     },
+                    update: {},
                     create: {
                         tripId: trip.id,
                         passengerId: tripWithDetails.passenger.id,

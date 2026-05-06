@@ -121,6 +121,11 @@ export const bidsAPI = {
 };
 
 export const chatsAPI = {
+    ensureQuoteRoom: async (tripId: string, bidderId: string) =>
+        fetchAPI('/chats/rooms/for-quote', {
+            method: 'POST',
+            body: JSON.stringify({ tripId, bidderId }),
+        }),
     getRooms: async () => fetchAPI('/chats/rooms'),
     getMessages: async (roomId: string, params?: { after?: string }) =>
         fetchAPI(`/chats/rooms/${roomId}/messages${toQuery(params)}`),

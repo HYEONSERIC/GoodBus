@@ -113,7 +113,7 @@ model Trip {
   createdAt   DateTime   @default(now())
   
   bids Bid[]
-  chatRoom ChatRoom?
+  chatRooms ChatRoom[]
 }
 
 model Bid {
@@ -172,7 +172,7 @@ model NotificationHistory {
 
 model ChatRoom {
   id          String   @id @default(cuid())
-  tripId      String   @unique
+  tripId      String
   trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   passengerId String
   passenger   User     @relation("PassengerChatRooms", fields: [passengerId], references: [id], onDelete: Cascade)
@@ -183,6 +183,8 @@ model ChatRoom {
 
   messages ChatMessage[]
 
+  @@unique([tripId, bidderId])
+  @@index([tripId])
   @@index([passengerId])
   @@index([bidderId])
 }

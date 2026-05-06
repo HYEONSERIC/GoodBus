@@ -591,23 +591,6 @@ export default function DriverDashboard() {
         }
     }
 
-    function handleViewNextBidTrip() {
-        if (!selectedTrip) return;
-        const cards = getAvailableTripCards();
-        const idx = cards.findIndex((t) => t.id === selectedTrip.id);
-        if (idx < 0 || idx >= cards.length - 1) {
-            alert('다음 이용 가능 견적이 없습니다.');
-            return;
-        }
-        const next = cards[idx + 1];
-        const visibleTrips = filterTrips(trips);
-        setBidTripPartner(getRoundPartnerTrip(next, visibleTrips));
-        setBidUiStep('fee');
-        setExtendedBid(defaultExtendedBidForm());
-        setBidPhotoFiles([]);
-        setSelectedTrip(next);
-    }
-
     function formatBoardingLine(dateTime: string) {
         const d = new Date(dateTime);
         return `${d.toLocaleDateString('ko-KR', {
@@ -1229,7 +1212,7 @@ export default function DriverDashboard() {
                                         </div>
 
                                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                                        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
+                                        <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
                                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <span
@@ -1866,18 +1849,10 @@ export default function DriverDashboard() {
                                             </div>
                                         </div>
 
-                                        <div className="flex shrink-0 gap-2 border-t border-gray-200 bg-white px-4 py-3">
+                                        <div className="flex shrink-0 border-t border-gray-200 bg-white px-4 py-3">
                                             <Button
                                                 type="button"
-                                                variant="secondary"
-                                                className="h-11 flex-1 rounded-md bg-gray-700 text-xs font-semibold text-white hover:bg-gray-600 sm:text-sm"
-                                                onClick={handleViewNextBidTrip}
-                                            >
-                                                다음 주문 보기
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                className="h-11 flex-[1.4] rounded-md bg-[#ffcd00] text-xs font-semibold text-black hover:bg-[#f0c200] sm:text-sm"
+                                                className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
                                                 onClick={() =>
                                                     createBid(bidDialogTrip.id)
                                                 }
