@@ -129,4 +129,12 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+  .no-number-spin::-webkit-outer-spin-button,
+  .no-number-spin::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-number-spin {
+    -moz-appearance: textfield;
+  }
 }

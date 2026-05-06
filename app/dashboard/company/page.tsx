@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
+import { CalendarDays } from 'lucide-react';
 
 interface Trip {
     id: string;
@@ -79,8 +80,9 @@ export default function CompanyDashboard() {
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
     const [paxFilterOpen, setPaxFilterOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
+    const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
     const [selectedDate, setSelectedDate] = useState('');
+    const dateFilterInputRef = useRef<HTMLInputElement | null>(null);
     const [minPax, setMinPax] = useState('');
     const [maxPax, setMaxPax] = useState('');
     const regions = [
@@ -484,9 +486,27 @@ export default function CompanyDashboard() {
         }
     }
 
+    function openDateFilterPicker() {
+        const input = dateFilterInputRef.current;
+        if (!input) return;
+
+        const pickerInput = input as HTMLInputElement & {
+            showPicker?: () => void;
+        };
+        if (pickerInput.showPicker) {
+            pickerInput.showPicker();
+        } else {
+            input.focus();
+            input.click();
+        }
+    }
+
     function filterTrips(list: Trip[]) {
         return list.filter((trip) => {
-            if (selectedRegion && !trip.origin.includes(selectedRegion)) {
+            if (
+                selectedRegions.length > 0 &&
+                !selectedRegions.some((region) => trip.origin.includes(region))
+            ) {
                 return false;
             }
             if (selectedDate) {
@@ -625,9 +645,7 @@ export default function CompanyDashboard() {
                                     onClick={() => setRegionFilterOpen(true)}
                                     className="h-9 rounded-none px-3 text-sm text-gray-700 hover:bg-gray-100 active:bg-gray-100"
                                 >
-                                    {selectedRegion
-                                        ? `출발지역: ${selectedRegion}`
-                                        : '출발지역'}
+                                    출발지역
                                 </Button>
                                 <Button
                                     variant="ghost"
@@ -652,7 +670,7 @@ export default function CompanyDashboard() {
                                 <Button
                                     variant="ghost"
                                     onClick={() => {
-                                        setSelectedRegion(null);
+                                        setSelectedRegions([]);
                                         setSelectedDate('');
                                         setMinPax('');
                                         setMaxPax('');
@@ -1623,8 +1641,18 @@ export default function CompanyDashboard() {
                     {regions.map((region) => (
                         <Button
                             key={region}
-                            variant={selectedRegion === region ? 'default' : 'outline'}
-                            onClick={() => setSelectedRegion(region)}
+                            variant={
+                                selectedRegions.includes(region)
+                                    ? 'default'
+                                    : 'outline'
+                            }
+                            onClick={() =>
+                                setSelectedRegions((prev) =>
+                                    prev.includes(region)
+                                        ? prev.filter((r) => r !== region)
+                                        : [...prev, region]
+                                )
+                            }
                         >
                             {region}
                         </Button>
@@ -1643,18 +1671,24 @@ export default function CompanyDashboard() {
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
-                    <Input
+                    <input
+                        ref={dateFilterInputRef}
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
+                        className="sr-only"
                     />
+                    <button
+                        type="button"
+                        onClick={openDateFilterPicker}
+                        className="flex h-12 w-full items-center justify-between border-b border-gray-300 px-0 text-left text-sm"
+                    >
+                        <span className={selectedDate ? 'text-gray-900' : 'text-gray-500'}>
+                            {selectedDate || '날짜를 입력하세요'}
+                        </span>
+                        <CalendarDays className="h-5 w-5 text-black" aria-hidden />
+                    </button>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Button
-                            variant="outline"
-                            onClick={() => setSelectedDate('')}
-                        >
-                            초기화
-                        </Button>
                         <Button onClick={() => setDateFilterOpen(false)}>확인</Button>
                     </div>
                 </div>
@@ -1670,30 +1704,23 @@ export default function CompanyDashboard() {
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-3">
                         <Input
                             type="number"
                             placeholder="최소"
                             value={minPax}
                             onChange={(e) => setMinPax(e.target.value)}
+                            className="no-number-spin h-12 rounded-none border-0 border-b border-gray-300 px-0 shadow-none focus-visible:ring-0"
                         />
                         <Input
                             type="number"
                             placeholder="최대"
                             value={maxPax}
                             onChange={(e) => setMaxPax(e.target.value)}
+                            className="no-number-spin h-12 rounded-none border-0 border-b border-gray-300 px-0 shadow-none focus-visible:ring-0"
                         />
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setMinPax('');
-                                setMaxPax('');
-                            }}
-                        >
-                            초기화
-                        </Button>
                         <Button onClick={() => setPaxFilterOpen(false)}>확인</Button>
                     </div>
                 </div>
