@@ -8,11 +8,12 @@ async function requestDirectionsDistance(
     directionsKey: string,
     origin: Point,
     destination: Point,
+    priority: 'RECOMMEND' | 'TIME' | 'DISTANCE' = 'RECOMMEND',
 ) {
     const endpoint = new URL('https://apis-navi.kakaomobility.com/v1/directions');
     endpoint.searchParams.set('origin', `${origin.x},${origin.y}`);
     endpoint.searchParams.set('destination', `${destination.x},${destination.y}`);
-    endpoint.searchParams.set('priority', 'RECOMMEND');
+    endpoint.searchParams.set('priority', priority);
 
     const response = await fetch(endpoint.toString(), {
         headers: {
@@ -30,12 +31,25 @@ async function requestDirectionsDistance(
     }
 
     const data: any = await response.json();
-    const distanceMeters = Number(data?.routes?.[0]?.summary?.distance);
+    const firstRoute = data?.routes?.[0];
+    const summaryDistance = Number(firstRoute?.summary?.distance);
+    const sectionDistance = Array.isArray(firstRoute?.sections)
+        ? firstRoute.sections.reduce((acc: number, section: any) => {
+              const sectionDistanceValue = Number(section?.distance);
+              return acc + (Number.isFinite(sectionDistanceValue) ? sectionDistanceValue : 0);
+          }, 0)
+        : Number.NaN;
+    const distanceMeters = Number.isFinite(summaryDistance)
+        ? summaryDistance
+        : sectionDistance;
     if (!Number.isFinite(distanceMeters)) {
         return {
             ok: false as const,
             status: 404,
-            errorText: 'Route distance not found',
+            errorText:
+                String(data?.msg || '').trim() ||
+                String(data?.message || '').trim() ||
+                'Route distance not found',
         };
     }
 
@@ -177,6 +191,7 @@ router.get('/directions', async (req, res) => {
             kakaoDirectionsKey,
             origin,
             destination,
+            'RECOMMEND',
         );
         if (firstResult.ok) {
             return res.json({
@@ -190,17 +205,41 @@ router.get('/directions', async (req, res) => {
             findNearbyRoadPoint(kakaoLocalKey, destination),
         ]);
 
-        if (adjustedOrigin && adjustedDestination) {
+        const retryOrigin = adjustedOrigin ?? origin;
+        const retryDestination = adjustedDestination ?? destination;
+        const isSnapped =
+            retryOrigin.x !== origin.x ||
+            retryOrigin.y !== origin.y ||
+            retryDestination.x !== destination.x ||
+            retryDestination.y !== destination.y;
+
+        if (isSnapped) {
             const retryResult = await requestDirectionsDistance(
                 kakaoDirectionsKey,
-                adjustedOrigin,
-                adjustedDestination,
+                retryOrigin,
+                retryDestination,
+                'RECOMMEND',
             );
             if (retryResult.ok) {
                 return res.json({
                     distanceMeters: retryResult.distanceMeters,
                     distanceKm: Math.round(retryResult.distanceMeters / 1000),
                     snapped: true,
+                });
+            }
+
+            const retryByTimeResult = await requestDirectionsDistance(
+                kakaoDirectionsKey,
+                retryOrigin,
+                retryDestination,
+                'TIME',
+            );
+            if (retryByTimeResult.ok) {
+                return res.json({
+                    distanceMeters: retryByTimeResult.distanceMeters,
+                    distanceKm: Math.round(retryByTimeResult.distanceMeters / 1000),
+                    snapped: true,
+                    priority: 'TIME',
                 });
             }
         }

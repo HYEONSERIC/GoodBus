@@ -66,6 +66,7 @@ interface BidderProfile {
     role: string;
     displayName?: string | null;
     companyName?: string | null;
+    phoneNumber?: string | null;
     profileImageUrl?: string | null;
     vehicleImageUrls?: string[] | null;
     busType?: string | null;
@@ -183,8 +184,9 @@ export default function PassengerDashboard() {
             const tripData = await tripsAPI.getAll();
             // 현재 사용자가 만든 여행 중 취소되지 않은 것만 표시
             const myTrips = (tripData.trips || []).filter((trip: any) => {
+                const tripPassengerId = trip?.passenger?.id ?? trip?.passengerId;
                 return (
-                    trip.passenger.id === userData.user.id &&
+                    tripPassengerId === userData.user.id &&
                     trip.status !== 'cancelled'
                 );
             });
@@ -288,7 +290,11 @@ export default function PassengerDashboard() {
             loadData();
         } catch (error) {
             console.error('Error creating trip:', error);
-            alert('여정 생성에 실패했습니다');
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : '알 수 없는 오류가 발생했습니다.';
+            alert(`여정 생성에 실패했습니다: ${message}`);
         }
     }
 
@@ -423,8 +429,8 @@ export default function PassengerDashboard() {
         return purpose;
     }
 
-    function getRoundPartnerTrip(trip: Trip) {
-        const reverseTrips = trips.filter(
+    function getRoundPartnerTrip(trip: Trip, sourceTrips: Trip[] = trips) {
+        const reverseTrips = sourceTrips.filter(
             (other) =>
                 other.id !== trip.id &&
                 other.origin === trip.destination &&
@@ -605,7 +611,10 @@ export default function PassengerDashboard() {
         let cancelled = false;
         async function calculateDistances() {
             const results: Record<string, number | null> = {};
-            for (const trip of trips) {
+            const visibleTrips = trips.filter(
+                (trip) => trip.status === 'open' || trip.status === 'awarded',
+            );
+            for (const trip of visibleTrips) {
                 const originPoint =
                     typeof trip.originX === 'number' &&
                     typeof trip.originY === 'number'
@@ -632,7 +641,11 @@ export default function PassengerDashboard() {
                 setDistanceByTripId(results);
             }
         }
-        if (trips.length > 0) {
+        if (
+            trips.some(
+                (trip) => trip.status === 'open' || trip.status === 'awarded',
+            )
+        ) {
             calculateDistances();
         } else {
             setDistanceByTripId({});
@@ -705,59 +718,63 @@ export default function PassengerDashboard() {
                 </div>
             )}
 
-            <div className="mx-auto w-full max-w-xl px-4 sm:px-5 py-5 sm:py-6 space-y-4">
-                <div className="grid grid-cols-3 divide-x divide-gray-200 overflow-hidden rounded-none border border-gray-200 bg-white shadow-sm">
-                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                        <CardHeader className="px-4 pb-1 gap-1 text-center">
-                            <CardTitle className="text-sm text-gray-500 text-center">
-                                회원등급
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                            일반회원
-                        </CardContent>
-                    </Card>
-                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                        <CardHeader className="px-4 pb-1 gap-1 text-center">
-                            <CardTitle className="text-sm text-gray-500 text-center">
-                                적립금
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                            0원
-                        </CardContent>
-                    </Card>
-                    <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                        <CardHeader className="px-4 pb-1 gap-1 text-center">
-                            <CardTitle className="text-sm text-gray-500 text-center">
-                                추천 혜택
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                            월 100만원
-                        </CardContent>
-                    </Card>
-                </div>
+            <div className="mx-auto w-full max-w-xl space-y-4 px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-5 sm:pt-6">
+                {activeTab === 'quote' && (
+                    <>
+                        <div className="grid grid-cols-3 divide-x divide-gray-200 overflow-hidden rounded-none border border-gray-200 bg-white shadow-sm">
+                            <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                                <CardHeader className="px-4 pb-1 gap-1 text-center">
+                                    <CardTitle className="text-sm text-gray-500 text-center">
+                                        회원등급
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
+                                    일반회원
+                                </CardContent>
+                            </Card>
+                            <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                                <CardHeader className="px-4 pb-1 gap-1 text-center">
+                                    <CardTitle className="text-sm text-gray-500 text-center">
+                                        적립금
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
+                                    0원
+                                </CardContent>
+                            </Card>
+                            <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
+                                <CardHeader className="px-4 pb-1 gap-1 text-center">
+                                    <CardTitle className="text-sm text-gray-500 text-center">
+                                        추천 혜택
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
+                                    월 100만원
+                                </CardContent>
+                            </Card>
+                        </div>
 
-                <Card className="rounded-none border-gray-200 shadow-sm">
-                    <CardHeader className="pb-3 text-center">
-                        <CardTitle className="text-[17px] font-semibold tracking-tight">
-                            굿버스에서 가격비교 하고 적립금도 받아가세요.
-                        </CardTitle>
-                        <CardDescription className="text-sm">
-                            원하는 여정을 등록하면 기사/업체가 입찰을
-                            제안합니다.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-center">
-                        <Button
-                            onClick={() => setOpenDialog(true)}
-                            className="h-10 rounded-xl bg-black px-6 text-sm font-medium text-white hover:bg-black/90"
-                        >
-                            견적 등록하기
-                        </Button>
-                    </CardContent>
-                </Card>
+                        <Card className="rounded-none border-gray-200 shadow-sm">
+                            <CardHeader className="pb-3 text-center">
+                                <CardTitle className="text-[17px] font-semibold tracking-tight">
+                                    굿버스에서 가격비교 하고 적립금도 받아가세요.
+                                </CardTitle>
+                                <CardDescription className="text-sm">
+                                    원하는 여정을 등록하면 기사/업체가 입찰을
+                                    제안합니다.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex justify-center">
+                                <Button
+                                    onClick={() => setOpenDialog(true)}
+                                    className="h-10 rounded-xl bg-black px-6 text-sm font-medium text-white hover:bg-black/90"
+                                >
+                                    견적 등록하기
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </>
+                )}
 
                 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                     <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-lg [&>button]:top-3 [&>button]:right-4">
@@ -1747,10 +1764,22 @@ export default function PassengerDashboard() {
                     <div className="grid gap-4 w-full max-w-xl mx-auto">
                         {(() => {
                             const consumed = new Set<string>();
-                            return trips
+                            const quoteTrips = trips.filter((t) => t.status === 'open');
+                            if (quoteTrips.length === 0) {
+                                return (
+                                    <Card className="rounded-none">
+                                        <CardContent className="p-6 text-sm text-gray-600">
+                                            등록된 견적이 없습니다. 상단의
+                                            &apos;견적 신청&apos;으로 새 여정을
+                                            등록해 주세요.
+                                        </CardContent>
+                                    </Card>
+                                );
+                            }
+                            return quoteTrips
                                 .filter((trip) => {
                                     if (consumed.has(trip.id)) return false;
-                                    const partner = getRoundPartnerTrip(trip);
+                                    const partner = getRoundPartnerTrip(trip, quoteTrips);
                                     if (partner) {
                                         const base =
                                             new Date(trip.dateTime).getTime() <=
@@ -1767,7 +1796,7 @@ export default function PassengerDashboard() {
                                     return true;
                                 })
                                 .map((trip) => {
-                                    const partner = getRoundPartnerTrip(trip);
+                                    const partner = getRoundPartnerTrip(trip, quoteTrips);
                                     const isRound = Boolean(partner);
                                     const expanded = expandedTripIds.includes(
                                         trip.id,
@@ -2160,56 +2189,193 @@ export default function PassengerDashboard() {
                                 </CardContent>
                             </Card>
                         ) : (
-                            awardedTrips.map((trip) => (
-                                <Card
-                                    key={trip.id}
-                                    className="rounded-none border-gray-200 shadow-sm"
-                                >
-                                    <CardHeader>
-                                        <CardTitle className="text-[19px] font-semibold tracking-tight">
-                                            {trip.origin} → {trip.destination}
-                                        </CardTitle>
-                                        <CardDescription>
-                                            {format(
-                                                new Date(trip.dateTime),
-                                                'PPP p',
+                            awardedTrips.map((trip) => {
+                                const awardedBid = (trip.bids || []).find(
+                                    (b) => b.status === 'awarded',
+                                );
+                                const bidder = awardedBid?.bidder;
+                                return (
+                                    <Card
+                                        key={trip.id}
+                                        className="rounded-none border-gray-200 shadow-sm"
+                                    >
+                                        <CardHeader className="pb-2">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                                        {getRoundPartnerTrip(trip)
+                                                            ? '왕복'
+                                                            : '편도'}
+                                                    </span>
+                                                    {typeof distanceByTripId[trip.id] ===
+                                                        'number' && (
+                                                        <span className="rounded-full border border-sky-300 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                                                            {distanceByTripId[trip.id]}km
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <CardTitle className="text-[16px] font-semibold leading-snug">
+                                                    {trip.origin}
+                                                </CardTitle>
+                                                <CardTitle className="text-[16px] font-semibold leading-snug">
+                                                    {trip.destination}
+                                                </CardTitle>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="space-y-3 text-sm text-gray-700">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                                                        출발
+                                                    </span>
+                                                    <span>
+                                                        {formatTripDateLine(
+                                                            trip.dateTime,
+                                                        )}{' '}
+                                                        {formatTripTime(
+                                                            trip.dateTime,
+                                                        )}{' '}
+                                                        탑승
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2 text-xs border-t pt-3">
+                                                <span className="rounded border px-2 py-1">
+                                                    {trip.companionType ===
+                                                    'with_schedule'
+                                                        ? '일정 동행'
+                                                        : '출발/귀환 운송만'}
+                                                </span>
+                                                <span className="rounded border px-2 py-1">
+                                                    {trip.paxCount}명
+                                                </span>
+                                                <span className="rounded border px-2 py-1">
+                                                    {getBusLabel(trip.busSize)}
+                                                </span>
+                                                {getServicePurposeLabel(
+                                                    trip.servicePurpose,
+                                                ) && (
+                                                    <span className="rounded border px-2 py-1">
+                                                        {getServicePurposeLabel(
+                                                            trip.servicePurpose,
+                                                        )}
+                                                    </span>
+                                                )}
+                                                {trip.paymentMethod && (
+                                                    <span className="rounded border px-2 py-1">
+                                                        {trip.paymentMethod ===
+                                                        'cash'
+                                                            ? '만나서 현금결제'
+                                                            : '카드결제'}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="rounded-md border border-sky-400 bg-sky-50/50 p-3">
+                                                <p className="mb-1 text-sm font-semibold text-gray-800">
+                                                    경유지 및 세부사항
+                                                </p>
+                                                <p className="text-sm text-gray-700">
+                                                    {trip.stopoverDetail?.trim() ||
+                                                        '없음'}
+                                                </p>
+                                            </div>
+
+                                            <div className="rounded-md border border-green-200 bg-green-50 px-3 py-3 text-center">
+                                                <p className="text-lg font-semibold text-green-800">
+                                                    낙찰 완료
+                                                </p>
+                                                <p className="mt-1 text-sm text-green-900/80">
+                                                    예약 탭에서 낙찰 정보를 확인하세요.
+                                                </p>
+                                            </div>
+
+                                            <div className="rounded-md border bg-gray-50 px-3 py-3 text-sm">
+                                                <p className="font-semibold text-gray-900">
+                                                    담당 기사 정보
+                                                </p>
+                                                <p className="mt-1 text-gray-700">
+                                                    {bidder
+                                                        ? bidderDisplayName(
+                                                              bidder,
+                                                          )
+                                                        : '확인 중'}
+                                                </p>
+                                                <p className="mt-0.5 text-gray-700">
+                                                    전화번호:{' '}
+                                                    {bidder?.phoneNumber?.trim() ||
+                                                        '미등록'}
+                                                </p>
+                                            </div>
+
+                                            {awardedBid ? (
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        className="h-10 flex-1 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-black/90"
+                                                        onClick={() =>
+                                                            openQuoteChat(
+                                                                trip,
+                                                                awardedBid,
+                                                            )
+                                                        }
+                                                    >
+                                                        기사와 채팅하기
+                                                    </Button>
+                                                    {trip.status ===
+                                                        'awarded' && (
+                                                            <Button
+                                                                type="button"
+                                                                className="h-10 flex-1 rounded-lg border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                                                onClick={() => {
+                                                                    setCancelDialogTrip(
+                                                                        trip,
+                                                                    );
+                                                                    setCancelReason(
+                                                                        '',
+                                                                    );
+                                                                }}
+                                                            >
+                                                                낙찰 취소
+                                                            </Button>
+                                                        )}
+                                                </div>
+                                            ) : (
+                                                trip.status === 'awarded' && (
+                                                    <Button
+                                                        type="button"
+                                                        className="h-11 w-full rounded-md border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                                        onClick={() => {
+                                                            setCancelDialogTrip(
+                                                                trip,
+                                                            );
+                                                            setCancelReason(
+                                                                '',
+                                                            );
+                                                        }}
+                                                    >
+                                                        낙찰 취소
+                                                    </Button>
+                                                )
                                             )}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <p className="text-sm text-gray-600">
-                                            낙찰된 여정입니다. 기사와 채팅으로
-                                            일정을 확인하세요.
-                                        </p>
-                                        <Button
-                                            className="mt-3 h-9 rounded-lg bg-black px-4 text-sm text-white hover:bg-black/90"
-                                            onClick={() => setChatOpen(true)}
-                                        >
-                                            기사와 채팅하기
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            ))
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })
                         )}
                     </div>
                 )}
 
                 {activeTab === 'chat' && (
-                    <Card className="w-full max-w-xl mx-auto rounded-none border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-4">
+                    <Card className="w-full max-w-xl mx-auto gap-0 rounded-none border-gray-200 py-0 shadow-sm">
+                        <CardContent className="p-0">
                             <ChatPanel
                                 focusRoomId={chatFocusRoomId}
                                 onFocusRoomConsumed={() =>
                                     setChatFocusRoomId(null)
                                 }
+                                fillRoomHeight
                             />
-                            <p className="hidden">
-                                낙찰된 버스기사와의 채팅 영역입니다. 실제 채팅
-                                기능은 향후 실시간 기능과 함께 추가됩니다.
-                            </p>
-                            <Button className="hidden" onClick={() => setChatOpen(true)}>
-                                채팅 열기
-                            </Button>
                         </CardContent>
                     </Card>
                 )}
