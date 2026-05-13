@@ -76,7 +76,12 @@ async function ensureAwardedRooms(userId: string, role: UserRole) {
                 .filter((trip) => trip.bids[0])
                 .map((trip) =>
                     prisma.chatRoom.upsert({
-                        where: { tripId: trip.id },
+                        where: {
+                            tripId_bidderId: {
+                                tripId: trip.id,
+                                bidderId: trip.bids[0].bidderId,
+                            },
+                        },
                         update: {},
                         create: {
                             tripId: trip.id,
@@ -104,7 +109,12 @@ async function ensureAwardedRooms(userId: string, role: UserRole) {
         await Promise.all(
             bids.map((bid) =>
                 prisma.chatRoom.upsert({
-                    where: { tripId: bid.tripId },
+                    where: {
+                        tripId_bidderId: {
+                            tripId: bid.tripId,
+                            bidderId: bid.bidderId,
+                        },
+                    },
                     update: {},
                     create: {
                         tripId: bid.tripId,
@@ -125,6 +135,86 @@ async function findParticipantRoom(roomId: string, userId: string) {
         },
     });
 }
+
+/** 승객·입찰자가 견적 단계 또는 낙찰 후 해당 입찰 기준 채팅방을 준비합니다. */
+router.post('/rooms/for-quote', requireAuth, async (req, res) => {
+    try {
+        const tripId = String(req.body?.tripId || '').trim();
+        const bidderId = String(req.body?.bidderId || '').trim();
+        const userId = req.user!.userId;
+        const role = req.user!.role;
+
+        if (!tripId || !bidderId) {
+            return res
+                .status(400)
+                .json({ error: 'tripId and bidderId are required' });
+        }
+
+        const trip = await prisma.trip.findUnique({
+            where: { id: tripId },
+        });
+
+        if (!trip) {
+            return res.status(404).json({ error: 'Trip not found' });
+        }
+
+        const bid = await prisma.bid.findFirst({
+            where: { tripId, bidderId },
+        });
+
+        if (!bid) {
+            return res.status(404).json({ error: 'Bid not found' });
+        }
+
+        const isPassenger =
+            role === UserRole.Passenger && trip.passengerId === userId;
+        const isBidder =
+            (role === UserRole.Driver || role === UserRole.BusCompany) &&
+            bidderId === userId;
+
+        if (!isPassenger && !isBidder) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        if (trip.status === 'open') {
+            if (bid.status !== 'open') {
+                return res
+                    .status(400)
+                    .json({ error: 'This bid is no longer negotiable' });
+            }
+        } else if (trip.status === 'awarded') {
+            if (bid.status !== 'awarded') {
+                return res
+                    .status(400)
+                    .json({ error: 'Only the awarded bidder can chat' });
+            }
+        } else {
+            return res
+                .status(400)
+                .json({ error: 'Trip is not available for chat' });
+        }
+
+        const room = await prisma.chatRoom.upsert({
+            where: {
+                tripId_bidderId: {
+                    tripId,
+                    bidderId,
+                },
+            },
+            update: {},
+            create: {
+                tripId,
+                passengerId: trip.passengerId,
+                bidderId,
+            },
+        });
+
+        res.status(200).json({ room: { id: room.id } });
+    } catch (error) {
+        console.error('Ensure quote chat room error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 router.get('/rooms', requireAuth, async (req, res) => {
     try {

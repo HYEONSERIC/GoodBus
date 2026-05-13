@@ -13,7 +13,7 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
         <div className="min-h-screen bg-[#f3f3f5] flex flex-col">
             <header className="h-16 border-b bg-white">
                 <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
-                    <Link href="/" className="text-xl font-bold text-[#e85b4f]">
+                    <Link href="/" className="text-xl font-bold text-[#e08030]">
                         GoodBus
                     </Link>
                     <nav className="flex items-center gap-6 text-sm font-semibold text-gray-800">
@@ -25,7 +25,7 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
                         </Link>
                         <Link
                             href="/login"
-                            className="rounded-full bg-[#e85b4f] px-4 py-2 text-white"
+                            className="rounded-full bg-[#e08030] px-4 py-2 text-white"
                         >
                             로그인
                         </Link>

@@ -56,7 +56,16 @@ function formatMessageTime(value: string) {
     });
 }
 
-export function ChatPanel() {
+interface ChatPanelProps {
+    /** 열린 뒤 이 방을 자동 선택 (견적 상세에서 채팅하기 등) */
+    focusRoomId?: string | null;
+    onFocusRoomConsumed?: () => void;
+}
+
+export function ChatPanel({
+    focusRoomId,
+    onFocusRoomConsumed,
+}: ChatPanelProps) {
     const [user, setUser] = useState<ChatUser | null>(null);
     const [rooms, setRooms] = useState<ChatRoom[]>([]);
     const [selectedRoomId, setSelectedRoomId] = useState('');
@@ -72,6 +81,15 @@ export function ChatPanel() {
     useEffect(() => {
         loadInitialData();
     }, []);
+
+    useEffect(() => {
+        if (!focusRoomId || rooms.length === 0) return;
+        const found = rooms.some((r) => r.id === focusRoomId);
+        if (found) {
+            setSelectedRoomId(focusRoomId);
+            onFocusRoomConsumed?.();
+        }
+    }, [focusRoomId, rooms]); // eslint-disable-line react-hooks/exhaustive-deps -- onFocusRoomConsumed 의도적 제외
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -102,7 +120,7 @@ export function ChatPanel() {
         try {
             const me = await authAPI.getMe();
             setUser(me.user);
-            await loadRooms(true);
+            await loadRooms(!focusRoomId);
         } catch (err) {
             setError(
                 err instanceof Error
@@ -176,7 +194,7 @@ export function ChatPanel() {
                 <div className="border-b p-3">
                     <h3 className="font-semibold">채팅방</h3>
                     <p className="text-xs text-gray-500">
-                        낙찰된 여정 기준으로 생성됩니다.
+                        진행 중인 견적·낙찰 여정에서 상대방과 대화합니다.
                     </p>
                 </div>
                 <div className="max-h-[455px] overflow-y-auto">
