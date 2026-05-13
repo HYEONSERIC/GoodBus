@@ -134,6 +134,7 @@ export interface MyBidQuoteDetailDialogProps {
     onChatWithPassenger: () => void | Promise<void>;
     onWithdrawBid: () => void | Promise<void>;
     onHome?: () => void;
+    showWithdrawButton?: boolean;
 }
 
 export function MyBidQuoteDetailDialog({
@@ -147,6 +148,7 @@ export function MyBidQuoteDetailDialog({
     onChatWithPassenger,
     onWithdrawBid,
     onHome,
+    showWithdrawButton = true,
 }: MyBidQuoteDetailDialogProps) {
     const [pitchExpanded, setPitchExpanded] = useState(false);
     const [chatLoading, setChatLoading] = useState(false);
@@ -379,16 +381,18 @@ export function MyBidQuoteDetailDialog({
                         </div>
                     </div>
 
-                    <div className="bg-white px-4 py-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="h-11 w-full rounded-md border-gray-300 text-sm font-medium text-gray-800"
-                            onClick={() => void onWithdrawBid()}
-                        >
-                            입찰 취소
-                        </Button>
-                    </div>
+                    {showWithdrawButton ? (
+                        <div className="bg-white px-4 py-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-11 w-full rounded-md border-gray-300 text-sm font-medium text-gray-800"
+                                onClick={() => void onWithdrawBid()}
+                            >
+                                입찰 취소
+                            </Button>
+                        </div>
+                    ) : null}
                 </div>
             </DialogContent>
         </Dialog>
