@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -31,6 +31,72 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { format } from 'date-fns';
+import { Flag, Search } from 'lucide-react';
+
+type SupportBoardRow = {
+    id: string;
+    no: number | null;
+    title: string;
+    author: string;
+    date: string;
+    pinned?: boolean;
+};
+
+const SUPPORT_NOTICE_ROWS: SupportBoardRow[] = [
+    {
+        id: 'n1',
+        no: null,
+        title: 'GOODBUS 서비스 점검 안내 (5/18 새벽)',
+        author: '운영팀',
+        date: '2026-05-10',
+        pinned: true,
+    },
+    {
+        id: 'n2',
+        no: 12,
+        title: '결제 및 환불 정책 안내',
+        author: '고객센터',
+        date: '2026-04-22',
+    },
+    {
+        id: 'n3',
+        no: 11,
+        title: '개인정보 처리방침 개정 안내',
+        author: '운영팀',
+        date: '2026-03-05',
+    },
+];
+
+const SUPPORT_FAQ_ROWS: SupportBoardRow[] = [
+    {
+        id: 'f1',
+        no: 8,
+        title: '견적 요청 후 입찰이 얼마나 걸리나요?',
+        author: 'FAQ',
+        date: '2026-02-14',
+    },
+    {
+        id: 'f2',
+        no: 7,
+        title: '낙찰 후 일정·경로 변경은 어떻게 하나요?',
+        author: 'FAQ',
+        date: '2026-02-10',
+    },
+    {
+        id: 'f3',
+        no: 6,
+        title: '현금 결제는 언제 이루어지나요?',
+        author: 'FAQ',
+        date: '2026-01-28',
+    },
+    {
+        id: 'f4',
+        no: 5,
+        title: '취소 시 위약금이 있나요?',
+        author: 'FAQ',
+        date: '2026-01-20',
+    },
+];
 
 interface Trip {
     id: string;
@@ -112,6 +178,10 @@ export default function PassengerDashboard() {
     const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
         'menu',
     );
+    const [supportBoardTab, setSupportBoardTab] = useState<'notice' | 'faq'>(
+        'notice',
+    );
+    const [supportBoardQuery, setSupportBoardQuery] = useState('');
     const [newTrip, setNewTrip] = useState({
         origin: '',
         originX: null as number | null,
@@ -174,6 +244,23 @@ export default function PassengerDashboard() {
     useEffect(() => {
         if (bidDetail) setBidGalleryIndex(0);
     }, [bidDetail?.bid?.id]);
+
+    const supportBoardRows = useMemo(() => {
+        const base =
+            supportBoardTab === 'notice'
+                ? [...SUPPORT_NOTICE_ROWS]
+                : [...SUPPORT_FAQ_ROWS];
+        base.sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            const na = a.no ?? 0;
+            const nb = b.no ?? 0;
+            return nb - na;
+        });
+        const q = supportBoardQuery.trim().toLowerCase();
+        if (!q) return base;
+        return base.filter((r) => r.title.toLowerCase().includes(q));
+    }, [supportBoardTab, supportBoardQuery]);
 
 
 
@@ -1806,6 +1893,9 @@ export default function PassengerDashboard() {
                                         partner,
                                     );
                                     const openBidCount = openBidRows.length;
+                                    const awardedBidQuote = (
+                                        trip.bids || []
+                                    ).find((b) => b.status === 'awarded');
                                     const quotesExpanded =
                                         quotesExpandedTripIds.includes(
                                             trip.id,
@@ -2004,10 +2094,17 @@ export default function PassengerDashboard() {
                                                             <p className="text-lg font-semibold text-green-800">
                                                                 낙찰 완료
                                                             </p>
-                                                            <p className="mt-1 text-sm text-green-900/80">
-                                                                예약 탭에서 낙찰
-                                                                정보를 확인하세요.
-                                                            </p>
+                                                            {awardedBidQuote ? (
+                                                                <p className="mt-1 text-sm font-medium text-green-900">
+                                                                    낙찰가{' '}
+                                                                    <span className="tabular-nums">
+                                                                        {Number(
+                                                                            awardedBidQuote.price,
+                                                                        ).toLocaleString()}
+                                                                        만원
+                                                                    </span>
+                                                                </p>
+                                                            ) : null}
                                                         </div>
                                                     )}
                                                     {trip.status === 'open' &&
@@ -2286,9 +2383,17 @@ export default function PassengerDashboard() {
                                                 <p className="text-lg font-semibold text-green-800">
                                                     낙찰 완료
                                                 </p>
-                                                <p className="mt-1 text-sm text-green-900/80">
-                                                    예약 탭에서 낙찰 정보를 확인하세요.
-                                                </p>
+                                                {awardedBid ? (
+                                                    <p className="mt-1 text-sm font-medium text-green-900">
+                                                        낙찰가{' '}
+                                                        <span className="tabular-nums">
+                                                            {Number(
+                                                                awardedBid.price,
+                                                            ).toLocaleString()}
+                                                            만원
+                                                        </span>
+                                                    </p>
+                                                ) : null}
                                             </div>
 
                                             <div className="rounded-md border bg-gray-50 px-3 py-3 text-sm">
@@ -2381,23 +2486,115 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="w-full max-w-xl mx-auto rounded-none border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-4">
-                            <p className="text-sm text-gray-600">
-                                문의는 버튼을 눌러 진행해주세요. 상담 기록은
-                                추후 저장될 수 있습니다.
-                            </p>
-                            <Button
-                                className="h-9 rounded-lg bg-black px-4 text-sm text-white hover:bg-black/90"
-                                onClick={() => {
-                                    setSupportOpen(true);
-                                    setSupportStep('menu');
-                                }}
+                    <div className="mx-auto w-full max-w-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+                        <h2 className="border-b border-gray-200 py-4 text-center text-lg font-bold tracking-tight text-gray-900">
+                            문의
+                        </h2>
+                        <div className="grid grid-cols-2 border-b border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => setSupportBoardTab('notice')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    supportBoardTab === 'notice'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
                             >
-                                문의하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                                공지사항
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSupportBoardTab('faq')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    supportBoardTab === 'faq'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                자주 하는 질문
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 border-b border-gray-200 px-2 py-2.5 text-[11px] font-medium text-gray-500 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs">
+                            <span className="text-center">No</span>
+                            <span>제목</span>
+                            <span className="text-right">글쓴이</span>
+                            <span className="text-right">작성일</span>
+                        </div>
+
+                        <ul className="divide-y divide-gray-100">
+                            {supportBoardRows.length === 0 ? (
+                                <li className="px-3 py-8 text-center text-sm text-gray-500">
+                                    검색 결과가 없습니다.
+                                </li>
+                            ) : (
+                                supportBoardRows.map((row) => (
+                                    <li
+                                        key={row.id}
+                                        className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 px-2 py-2.5 text-[11px] text-gray-800 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs"
+                                    >
+                                        <div className="flex justify-center">
+                                            {row.pinned ? (
+                                                <Flag
+                                                    className="h-3.5 w-3.5 text-amber-600"
+                                                    strokeWidth={2}
+                                                    aria-label="고정"
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums text-gray-600">
+                                                    {row.no ?? '—'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="min-w-0 truncate font-medium text-gray-900">
+                                            {row.title}
+                                        </p>
+                                        <span className="truncate text-right text-gray-600">
+                                            {row.author}
+                                        </span>
+                                        <span className="truncate text-right text-gray-500">
+                                            {row.date}
+                                        </span>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+
+                        <div className="space-y-3 border-t border-gray-200 p-3">
+                            <div className="relative w-full">
+                                <Input
+                                    type="search"
+                                    value={supportBoardQuery}
+                                    onChange={(e) =>
+                                        setSupportBoardQuery(e.target.value)
+                                    }
+                                    placeholder="제목 검색"
+                                    className="h-9 w-full pr-9 text-sm"
+                                    aria-label="게시글 검색"
+                                />
+                                <Search
+                                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                                    strokeWidth={2}
+                                    aria-hidden
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-center text-sm text-gray-600">
+                                    추가로 궁금하신 점이 있으신가요?
+                                </p>
+                                <Button
+                                    type="button"
+                                    className="h-10 w-full rounded-md bg-gray-900 text-sm font-semibold text-white hover:bg-black"
+                                    onClick={() => {
+                                        setSupportOpen(true);
+                                        setSupportStep('menu');
+                                    }}
+                                >
+                                    문의하기
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
 

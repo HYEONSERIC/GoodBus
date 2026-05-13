@@ -27,10 +27,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
-    ArrowDown,
-    ArrowUp,
     ArrowUpDown,
     CalendarDays,
+    Flag,
+    Search,
 } from 'lucide-react';
 
 interface Trip {
@@ -76,6 +76,71 @@ interface KakaoPlace {
     x?: string;
     y?: string;
 }
+
+type DriverSupportBoardRow = {
+    id: string;
+    no: number | null;
+    title: string;
+    author: string;
+    date: string;
+    pinned?: boolean;
+};
+
+const DRIVER_SUPPORT_NOTICE_ROWS: DriverSupportBoardRow[] = [
+    {
+        id: 'dn1',
+        no: null,
+        title: 'GOODBUS 서비스 점검 안내 (5/18 새벽)',
+        author: '운영팀',
+        date: '2026-05-10',
+        pinned: true,
+    },
+    {
+        id: 'dn2',
+        no: 9,
+        title: '기사 자격증 심사 기준 안내',
+        author: '고객센터',
+        date: '2026-04-18',
+    },
+    {
+        id: 'dn3',
+        no: 8,
+        title: '입찰·낙찰 관련 운영 정책 안내',
+        author: '운영팀',
+        date: '2026-03-28',
+    },
+];
+
+const DRIVER_SUPPORT_FAQ_ROWS: DriverSupportBoardRow[] = [
+    {
+        id: 'df1',
+        no: 6,
+        title: '운전자격증 승인은 얼마나 걸리나요?',
+        author: 'FAQ',
+        date: '2026-02-12',
+    },
+    {
+        id: 'df2',
+        no: 5,
+        title: '입찰 후 승객과 대화는 어떻게 하나요?',
+        author: 'FAQ',
+        date: '2026-02-08',
+    },
+    {
+        id: 'df3',
+        no: 4,
+        title: '동시 입찰 가능 건수는 어디서 확인하나요?',
+        author: 'FAQ',
+        date: '2026-01-30',
+    },
+    {
+        id: 'df4',
+        no: 3,
+        title: '멤버십 혜택은 무엇인가요?',
+        author: 'FAQ',
+        date: '2026-01-22',
+    },
+];
 
 export default function DriverDashboard() {
     const [user, setUser] = useState<any>(null);
@@ -140,6 +205,15 @@ export default function DriverDashboard() {
     const [chatFocusRoomId, setChatFocusRoomId] = useState<string | null>(
         null
     );
+    const [driverSupportBoardTab, setDriverSupportBoardTab] = useState<
+        'notice' | 'faq'
+    >('notice');
+    const [driverSupportBoardQuery, setDriverSupportBoardQuery] =
+        useState('');
+    const [driverSupportOpen, setDriverSupportOpen] = useState(false);
+    const [driverSupportStep, setDriverSupportStep] = useState<
+        'menu' | 'form' | 'done'
+    >('menu');
     const [membershipPrevTab, setMembershipPrevTab] = useState<
         'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
     >('available');
@@ -1055,6 +1129,23 @@ export default function DriverDashboard() {
         });
     }, [contractCompletedTrips]);
 
+    const driverSupportBoardRows = useMemo(() => {
+        const base =
+            driverSupportBoardTab === 'notice'
+                ? [...DRIVER_SUPPORT_NOTICE_ROWS]
+                : [...DRIVER_SUPPORT_FAQ_ROWS];
+        base.sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            const na = a.no ?? 0;
+            const nb = b.no ?? 0;
+            return nb - na;
+        });
+        const q = driverSupportBoardQuery.trim().toLowerCase();
+        if (!q) return base;
+        return base.filter((r) => r.title.toLowerCase().includes(q));
+    }, [driverSupportBoardTab, driverSupportBoardQuery]);
+
     const bidDialogTrip = selectedTrip;
     const bidPartner = bidTripPartner;
     const bidDialogDistance = bidDialogTrip
@@ -1182,6 +1273,71 @@ export default function DriverDashboard() {
                         <Button onClick={() => setPendingDialogOpen(false)}>
                             확인
                         </Button>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog
+                    open={driverSupportOpen}
+                    onOpenChange={(open) => {
+                        setDriverSupportOpen(open);
+                        if (!open) setDriverSupportStep('menu');
+                    }}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>문의하기</DialogTitle>
+                            <DialogDescription>
+                                문의 유형을 선택해주세요.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {driverSupportStep === 'menu' && (
+                            <div className="space-y-3">
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    입찰·견적 문의
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    자격증·인증 문의
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    기타 문의
+                                </Button>
+                            </div>
+                        )}
+                        {driverSupportStep === 'form' && (
+                            <div className="space-y-4">
+                                <div>
+                                    <Label>문의 내용</Label>
+                                    <Textarea placeholder="문의 내용을 입력하세요" />
+                                </div>
+                                <Button onClick={() => setDriverSupportStep('done')}>
+                                    문의하기
+                                </Button>
+                            </div>
+                        )}
+                        {driverSupportStep === 'done' && (
+                            <div className="space-y-4 text-sm text-gray-600">
+                                문의가 접수되었습니다. 빠르게 답변드리겠습니다.
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportOpen(false)}
+                                >
+                                    닫기
+                                </Button>
+                            </div>
+                        )}
                     </DialogContent>
                 </Dialog>
 
@@ -1365,21 +1521,19 @@ export default function DriverDashboard() {
                                                     )}
                                                 </div>
                                                 <div className="min-w-0 flex-1 space-y-2 text-sm">
-                                                    <p className="flex items-start gap-1.5 font-medium leading-snug text-gray-900">
-                                                        <ArrowUp
-                                                            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-                                                            aria-hidden
-                                                        />
-                                                        <span className="min-w-0">
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            출발지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
                                                             {trip.origin}
                                                         </span>
                                                     </p>
-                                                    <p className="flex items-start gap-1.5 font-medium leading-snug text-gray-900">
-                                                        <ArrowDown
-                                                            className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-                                                            aria-hidden
-                                                        />
-                                                        <span className="min-w-0">
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            도착지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
                                                             {trip.destination}
                                                         </span>
                                                     </p>
@@ -2286,23 +2440,21 @@ export default function DriverDashboard() {
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
-                                                                <p className="flex items-start gap-1.5 font-medium leading-snug text-gray-900">
-                                                                    <ArrowUp
-                                                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-                                                                        aria-hidden
-                                                                    />
-                                                                    <span className="min-w-0">
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        출발지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
                                                                         {
                                                                             trip.origin
                                                                         }
                                                                     </span>
                                                                 </p>
-                                                                <p className="flex items-start gap-1.5 font-medium leading-snug text-gray-900">
-                                                                    <ArrowDown
-                                                                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-                                                                        aria-hidden
-                                                                    />
-                                                                    <span className="min-w-0">
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        도착지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
                                                                         {
                                                                             trip.destination
                                                                         }
@@ -2450,13 +2602,23 @@ export default function DriverDashboard() {
                                                             )}
                                                         </div>
                                                         <div className="min-w-0 flex-1 space-y-2 text-sm">
-                                                            <p className="font-medium leading-snug text-gray-900">
-                                                                {trip.origin}
+                                                            <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                    출발지
+                                                                </span>
+                                                                <span className="min-w-0 font-medium">
+                                                                    {trip.origin}
+                                                                </span>
                                                             </p>
-                                                            <p className="font-medium leading-snug text-gray-900">
-                                                                {
-                                                                    trip.destination
-                                                                }
+                                                            <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                    도착지
+                                                                </span>
+                                                                <span className="min-w-0 font-medium">
+                                                                    {
+                                                                        trip.destination
+                                                                    }
+                                                                </span>
                                                             </p>
                                                         </div>
                                                     </div>
@@ -2583,15 +2745,25 @@ export default function DriverDashboard() {
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
-                                                                <p className="font-medium leading-snug text-gray-900">
-                                                                    {
-                                                                        trip.origin
-                                                                    }
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        출발지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.origin
+                                                                        }
+                                                                    </span>
                                                                 </p>
-                                                                <p className="font-medium leading-snug text-gray-900">
-                                                                    {
-                                                                        trip.destination
-                                                                    }
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        도착지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.destination
+                                                                        }
+                                                                    </span>
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -2641,15 +2813,117 @@ export default function DriverDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            고객센터 문의 영역입니다. 문의 유형별로 분류하고
-                            처리 상태를 추적하도록 확장할 수 있습니다.
-                            <Button className="mt-2 w-full sm:w-auto">
-                                문의하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="mx-auto w-full max-w-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+                        <h2 className="border-b border-gray-200 py-4 text-center text-lg font-bold tracking-tight text-gray-900">
+                            고객센터
+                        </h2>
+                        <div className="grid grid-cols-2 border-b border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => setDriverSupportBoardTab('notice')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    driverSupportBoardTab === 'notice'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                공지사항
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDriverSupportBoardTab('faq')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    driverSupportBoardTab === 'faq'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                자주 하는 질문
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 border-b border-gray-200 px-2 py-2.5 text-[11px] font-medium text-gray-500 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs">
+                            <span className="text-center">No</span>
+                            <span>제목</span>
+                            <span className="text-right">글쓴이</span>
+                            <span className="text-right">작성일</span>
+                        </div>
+
+                        <ul className="divide-y divide-gray-100">
+                            {driverSupportBoardRows.length === 0 ? (
+                                <li className="px-3 py-8 text-center text-sm text-gray-500">
+                                    검색 결과가 없습니다.
+                                </li>
+                            ) : (
+                                driverSupportBoardRows.map((row) => (
+                                    <li
+                                        key={row.id}
+                                        className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 px-2 py-2.5 text-[11px] text-gray-800 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs"
+                                    >
+                                        <div className="flex justify-center">
+                                            {row.pinned ? (
+                                                <Flag
+                                                    className="h-3.5 w-3.5 text-amber-600"
+                                                    strokeWidth={2}
+                                                    aria-label="고정"
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums text-gray-600">
+                                                    {row.no ?? '—'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="min-w-0 truncate font-medium text-gray-900">
+                                            {row.title}
+                                        </p>
+                                        <span className="truncate text-right text-gray-600">
+                                            {row.author}
+                                        </span>
+                                        <span className="truncate text-right text-gray-500">
+                                            {row.date}
+                                        </span>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+
+                        <div className="space-y-3 border-t border-gray-200 p-3">
+                            <div className="relative w-full">
+                                <Input
+                                    type="search"
+                                    value={driverSupportBoardQuery}
+                                    onChange={(e) =>
+                                        setDriverSupportBoardQuery(
+                                            e.target.value,
+                                        )
+                                    }
+                                    placeholder="제목 검색"
+                                    className="h-9 w-full pr-9 text-sm"
+                                    aria-label="게시글 검색"
+                                />
+                                <Search
+                                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                                    strokeWidth={2}
+                                    aria-hidden
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-center text-sm text-gray-600">
+                                    추가로 궁금하신 점이 있으신가요?
+                                </p>
+                                <Button
+                                    type="button"
+                                    className="h-10 w-full rounded-md bg-gray-900 text-sm font-semibold text-white hover:bg-black"
+                                    onClick={() => {
+                                        setDriverSupportOpen(true);
+                                        setDriverSupportStep('menu');
+                                    }}
+                                >
+                                    문의하기
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
 

@@ -138,6 +138,15 @@ export const chatsAPI = {
         fetchAPI(`/chats/rooms/${roomId}/read`, {
             method: 'PATCH',
         }),
+    leaveRoom: async (roomId: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/leave`, {
+            method: 'POST',
+        }),
+    updateRoom: async (roomId: string, body: { customTitle: string | null }) =>
+        fetchAPI(`/chats/rooms/${roomId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
 };
 
 export const notificationsAPI = {

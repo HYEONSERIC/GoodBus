@@ -2,9 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { chatsAPI, authAPI } from '@/lib/api';
 
 interface ChatUser {
@@ -13,10 +22,13 @@ interface ChatUser {
     role: string;
     displayName?: string | null;
     companyName?: string | null;
+    profileImageUrl?: string | null;
 }
 
 interface ChatRoom {
     id: string;
+    /** 이 사용자만의 목록·헤더 표시 제목 (API에서 역할에 맞게 채움) */
+    customTitle?: string | null;
     trip: {
         id: string;
         origin: string;
@@ -79,20 +91,69 @@ function formatChatPeerLabel(u: ChatUser) {
     return u.email;
 }
 
+const DEFAULT_CHAT_AVATAR = '/chat-default-avatar.png';
+
+function resolveProfileImageUrl(raw?: string | null): string | null {
+    const u = raw?.trim();
+    if (!u) return null;
+    if (
+        u.startsWith('http://') ||
+        u.startsWith('https://') ||
+        u.startsWith('data:')
+    ) {
+        return u;
+    }
+    const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000')
+        .replace(/\/$/, '');
+    if (u.startsWith('/uploads')) return `${base}${u}`;
+    return u;
+}
+
+function ChatPeerAvatar({
+    profileImageUrl,
+    size = 'list',
+    className,
+}: {
+    profileImageUrl?: string | null;
+    size?: 'list' | 'header';
+    className?: string;
+}) {
+    const resolved = resolveProfileImageUrl(profileImageUrl);
+    const sizeClass = size === 'header' ? 'h-10 w-10' : 'h-11 w-11';
+    return (
+        <img
+            src={resolved ?? DEFAULT_CHAT_AVATAR}
+            alt=""
+            className={`${sizeClass} shrink-0 rounded-full object-cover ring-1 ring-gray-200/80 ${className ?? ''}`}
+            onError={(e) => {
+                const el = e.currentTarget;
+                if (el.dataset.fallback === '1') return;
+                el.dataset.fallback = '1';
+                el.src = DEFAULT_CHAT_AVATAR;
+            }}
+        />
+    );
+}
+
 function formatTripDepartureDay(iso: string) {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return '';
     return format(date, 'MM월dd일');
 }
 
-/** 목록·방 헤더: 출발 일자 + 구간 (기사·업체 화면에서는 ' 손님' 접미) */
-function chatTripHeadline(room: ChatRoom, viewerRole?: string) {
+function chatTripDefaultTitle(room: ChatRoom) {
     const day = formatTripDepartureDay(room.trip.dateTime);
-    const route = `${room.trip.origin} → ${room.trip.destination}`;
     const prefix = day ? `${day} ` : '';
+    return `${prefix}출발지 ${room.trip.origin} 도착지 ${room.trip.destination}`;
+}
+
+/** 목록·방 헤더: 사용자 지정 제목 또는 출발지/도착지 (기사·업체 화면에서는 ' 손님' 접미) */
+function chatTripHeadline(room: ChatRoom, viewerRole?: string) {
     const suffix =
         viewerRole === 'Driver' || viewerRole === 'BusCompany' ? ' 손님' : '';
-    return `${prefix}${route}${suffix}`;
+    const t = room.customTitle?.trim();
+    if (t) return `${t}${suffix}`;
+    return `${chatTripDefaultTitle(room)}${suffix}`;
 }
 
 interface ChatPanelProps {
@@ -119,6 +180,11 @@ export function ChatPanel({
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const [roomListMenuId, setRoomListMenuId] = useState<string | null>(null);
+    const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+    const [renameRoom, setRenameRoom] = useState<ChatRoom | null>(null);
+    const [renameDraft, setRenameDraft] = useState('');
+    const [renameSaving, setRenameSaving] = useState(false);
 
     const selectedRoom = rooms.find((room) => room.id === selectedRoomId) || null;
 
@@ -157,6 +223,18 @@ export function ChatPanel({
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages.length, selectedRoomId]);
+
+    useEffect(() => {
+        if (!roomListMenuId && !headerMenuOpen) return;
+        const close = (e: MouseEvent) => {
+            const t = e.target as HTMLElement;
+            if (t.closest('[data-chat-room-menu]')) return;
+            setRoomListMenuId(null);
+            setHeaderMenuOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [roomListMenuId, headerMenuOpen]);
 
     async function loadInitialData() {
         setLoading(true);
@@ -229,15 +307,128 @@ export function ChatPanel({
         setMessages([]);
         setError('');
         setDraft('');
+        setRoomListMenuId(null);
+        setHeaderMenuOpen(false);
     }
 
+    async function handleLeaveChatRoom(roomId: string) {
+        if (
+            !confirm(
+                '채팅방을 나가시겠어요? 내 목록에서는 사라지며, 상대는 남아 있으면 계속 대화할 수 있습니다.',
+            )
+        ) {
+            return;
+        }
+        try {
+            await chatsAPI.leaveRoom(roomId);
+            setRoomListMenuId(null);
+            setHeaderMenuOpen(false);
+            if (selectedRoomId === roomId) {
+                leaveRoom();
+            }
+            await loadRooms();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : '채팅방을 나가지 못했습니다.',
+            );
+        }
+    }
+
+    function openRenameDialog(room: ChatRoom) {
+        setRenameRoom(room);
+        setRenameDraft(room.customTitle?.trim() ?? '');
+        setRoomListMenuId(null);
+        setHeaderMenuOpen(false);
+    }
+
+    async function saveRenameDialog() {
+        if (!renameRoom) return;
+        setRenameSaving(true);
+        setError('');
+        try {
+            const trimmed = renameDraft.trim();
+            await chatsAPI.updateRoom(renameRoom.id, {
+                customTitle: trimmed.length ? trimmed.slice(0, 80) : null,
+            });
+            setRenameRoom(null);
+            await loadRooms();
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : '이름을 저장하지 못했습니다.',
+            );
+        } finally {
+            setRenameSaving(false);
+        }
+    }
+
+    const renameDialogEl = (
+        <Dialog
+            open={Boolean(renameRoom)}
+            onOpenChange={(open) => {
+                if (!open && !renameSaving) setRenameRoom(null);
+            }}
+        >
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>채팅방 이름</DialogTitle>
+                    <DialogDescription>
+                        내 채팅 목록과 방 상단에만 적용되며, 상대방 화면에는
+                        반영되지 않습니다. 비우면 날짜·출발지·도착지가 제목으로
+                        표시됩니다. (최대 80자)
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 py-2">
+                    <Label htmlFor="chat-room-title">표시 이름</Label>
+                    <Input
+                        id="chat-room-title"
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        maxLength={80}
+                        placeholder={
+                            renameRoom
+                                ? chatTripDefaultTitle(renameRoom)
+                                : ''
+                        }
+                    />
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setRenameRoom(null)}
+                        disabled={renameSaving}
+                    >
+                        취소
+                    </Button>
+                    <Button
+                        type="button"
+                        onClick={() => void saveRenameDialog()}
+                        disabled={renameSaving}
+                    >
+                        {renameSaving ? '저장 중…' : '저장'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
     if (loading) {
-        return <div className="p-4 text-sm text-gray-500">채팅 로딩 중...</div>;
+        return (
+            <>
+                <div className="p-4 text-sm text-gray-500">채팅 로딩 중...</div>
+                {renameDialogEl}
+            </>
+        );
     }
 
     if (!selectedRoomId || !selectedRoom) {
         return (
-            <div className="flex flex-col bg-white">
+            <>
+                <div className="flex flex-col bg-white">
                 {error && !selectedRoomId && (
                     <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs text-red-600">
                         {error}
@@ -257,41 +448,49 @@ export function ChatPanel({
                                     key={room.id}
                                     className="border-b border-gray-100 last:border-b-0"
                                 >
-                                    <button
-                                        type="button"
-                                        className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition hover:bg-gray-50 active:bg-gray-100"
-                                        onClick={() => {
-                                            setError('');
-                                            setSelectedRoomId(room.id);
-                                        }}
-                                    >
-                                        <div
-                                            className="h-11 w-11 shrink-0 rounded-full bg-gray-200 ring-1 ring-gray-200/80"
-                                            aria-hidden
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="line-clamp-2 text-[15px] font-medium leading-snug text-gray-900">
-                                                {chatTripHeadline(
-                                                    room,
-                                                    user?.role,
-                                                )}
-                                            </p>
-                                            <p className="mt-0.5 truncate text-sm text-gray-500">
-                                                {(room.lastMessage?.message ?? '').trim()
-                                                    ? room.lastMessage!.message
-                                                    : formatChatPeerLabel(
-                                                          otherUser
-                                                      )}
-                                            </p>
-                                        </div>
-                                        <div className="flex shrink-0 flex-col items-end gap-1">
+                                    <div className="flex items-start gap-1 px-3 py-3 sm:px-4">
+                                        <button
+                                            type="button"
+                                            className="flex min-w-0 flex-1 items-start gap-3 rounded-lg py-0.5 pl-1 pr-2 text-left transition hover:bg-gray-50 active:bg-gray-100"
+                                            onClick={() => {
+                                                setError('');
+                                                setRoomListMenuId(null);
+                                                setSelectedRoomId(room.id);
+                                            }}
+                                        >
+                                            <ChatPeerAvatar
+                                                profileImageUrl={
+                                                    otherUser.profileImageUrl
+                                                }
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="line-clamp-2 text-[15px] font-medium leading-snug text-gray-900">
+                                                    {chatTripHeadline(
+                                                        room,
+                                                        user?.role,
+                                                    )}
+                                                </p>
+                                                <p className="mt-0.5 truncate text-sm text-gray-500">
+                                                    {(
+                                                        room.lastMessage
+                                                            ?.message ?? ''
+                                                    ).trim()
+                                                        ? room.lastMessage!
+                                                              .message
+                                                        : formatChatPeerLabel(
+                                                              otherUser,
+                                                          )}
+                                                </p>
+                                            </div>
+                                        </button>
+                                        <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                                             {previewTime && (
                                                 <time
                                                     className="text-xs text-gray-500"
                                                     dateTime={previewTime}
                                                 >
                                                     {formatListTime(
-                                                        previewTime
+                                                        previewTime,
                                                     )}
                                                 </time>
                                             )}
@@ -300,20 +499,80 @@ export function ChatPanel({
                                                     {room.unreadCount}
                                                 </span>
                                             )}
+                                            <div
+                                                className="relative"
+                                                data-chat-room-menu
+                                            >
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 shrink-0 text-gray-600"
+                                                    aria-label="채팅방 메뉴"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setHeaderMenuOpen(false);
+                                                        setRoomListMenuId(
+                                                            (id) =>
+                                                                id === room.id
+                                                                    ? null
+                                                                    : room.id,
+                                                        );
+                                                    }}
+                                                >
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                                {roomListMenuId === room.id ? (
+                                                    <div
+                                                        role="menu"
+                                                        className="absolute right-0 top-full z-20 mt-0.5 min-w-[10.5rem] rounded-md border border-gray-200 bg-white py-1 shadow-md"
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            role="menuitem"
+                                                            className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openRenameDialog(
+                                                                    room,
+                                                                );
+                                                            }}
+                                                        >
+                                                            채팅방 이름 바꾸기
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            role="menuitem"
+                                                            className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                void handleLeaveChatRoom(
+                                                                    room.id,
+                                                                );
+                                                            }}
+                                                        >
+                                                            채팅방 나가기
+                                                        </button>
+                                                    </div>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                    </button>
+                                    </div>
                                 </li>
                             );
                         })}
                     </ul>
                 )}
             </div>
+                {renameDialogEl}
+            </>
         );
     }
 
     const other = getOtherUser(selectedRoom);
 
     return (
+        <>
         <div
             className={
                 fillRoomHeight
@@ -321,7 +580,7 @@ export function ChatPanel({
                     : 'flex min-h-[min(70vh,560px)] flex-col overflow-hidden bg-white'
             }
         >
-            <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-2 py-2">
+            <div className="flex shrink-0 items-center gap-1 border-b border-gray-100 px-2 py-2">
                 <Button
                     type="button"
                     variant="ghost"
@@ -332,13 +591,67 @@ export function ChatPanel({
                 >
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <div className="min-w-0 flex-1 py-0.5">
+                <ChatPeerAvatar
+                    profileImageUrl={other.profileImageUrl}
+                    size="header"
+                    className="ml-0.5"
+                />
+                <button
+                    type="button"
+                    className="min-w-0 flex-1 py-0.5 text-left"
+                    onClick={() => openRenameDialog(selectedRoom)}
+                >
                     <p className="truncate text-[15px] font-semibold leading-tight text-gray-900">
                         {chatTripHeadline(selectedRoom, user?.role)}
                     </p>
                     <p className="truncate text-xs text-gray-500">
                         상대: {formatChatPeerLabel(other)}
                     </p>
+                </button>
+                <div className="relative shrink-0" data-chat-room-menu>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-gray-600"
+                        aria-label="채팅방 메뉴"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setRoomListMenuId(null);
+                            setHeaderMenuOpen((o) => !o);
+                        }}
+                    >
+                        <MoreVertical className="h-4 w-4" />
+                    </Button>
+                    {headerMenuOpen ? (
+                        <div
+                            role="menu"
+                            className="absolute right-0 top-full z-20 mt-0.5 min-w-[10.5rem] rounded-md border border-gray-200 bg-white py-1 shadow-md"
+                        >
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openRenameDialog(selectedRoom);
+                                }}
+                            >
+                                채팅방 이름 바꾸기
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className="block w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleLeaveChatRoom(selectedRoom.id);
+                                }}
+                            >
+                                채팅방 나가기
+                            </button>
+                        </div>
+                    ) : null}
                 </div>
             </div>
             {error && (
@@ -438,5 +751,7 @@ export function ChatPanel({
                 </Button>
             </div>
         </div>
+        {renameDialogEl}
+        </>
     );
 }

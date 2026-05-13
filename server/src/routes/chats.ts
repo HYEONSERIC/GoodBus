@@ -23,6 +23,7 @@ function roomInclude(userId: string) {
                 role: true,
                 displayName: true,
                 companyName: true,
+                profileImageUrl: true,
             },
         },
         bidder: {
@@ -32,6 +33,7 @@ function roomInclude(userId: string) {
                 role: true,
                 displayName: true,
                 companyName: true,
+                profileImageUrl: true,
             },
         },
         messages: {
@@ -45,6 +47,7 @@ function roomInclude(userId: string) {
                         role: true,
                         displayName: true,
                         companyName: true,
+                        profileImageUrl: true,
                     },
                 },
             },
@@ -137,7 +140,17 @@ async function findParticipantRoom(roomId: string, userId: string) {
     return prisma.chatRoom.findFirst({
         where: {
             id: roomId,
-            OR: [{ passengerId: userId }, { bidderId: userId }],
+            OR: [
+                {
+                    AND: [
+                        { passengerId: userId },
+                        { passengerLeftAt: null },
+                    ],
+                },
+                {
+                    AND: [{ bidderId: userId }, { bidderLeftAt: null }],
+                },
+            ],
         },
     });
 }
@@ -207,7 +220,15 @@ router.post('/rooms/for-quote', requireAuth, async (req, res) => {
                     bidderId,
                 },
             },
-            update: {},
+            update: {
+                ...(role === UserRole.Passenger
+                    ? { passengerLeftAt: null }
+                    : {}),
+                ...((role === UserRole.Driver || role === UserRole.BusCompany) &&
+                bidderId === userId
+                    ? { bidderLeftAt: null }
+                    : {}),
+            },
             create: {
                 tripId,
                 passengerId: trip.passengerId,
@@ -229,22 +250,45 @@ router.get('/rooms', requireAuth, async (req, res) => {
         const rooms = await prisma.chatRoom.findMany({
             where: {
                 OR: [
-                    { passengerId: req.user!.userId },
-                    { bidderId: req.user!.userId },
+                    {
+                        AND: [
+                            { passengerId: req.user!.userId },
+                            { passengerLeftAt: null },
+                        ],
+                    },
+                    {
+                        AND: [
+                            { bidderId: req.user!.userId },
+                            { bidderLeftAt: null },
+                        ],
+                    },
                 ],
             },
             orderBy: { updatedAt: 'desc' },
             include: roomInclude(req.user!.userId),
         });
 
+        const viewerId = req.user!.userId;
         res.json({
-            rooms: rooms.map((room) => ({
-                ...room,
-                unreadCount: room._count.messages,
-                lastMessage: room.messages[0] || null,
-                messages: undefined,
-                _count: undefined,
-            })),
+            rooms: rooms.map((room) => {
+                const {
+                    messages,
+                    _count,
+                    passengerPrivateTitle,
+                    bidderPrivateTitle,
+                    ...rest
+                } = room;
+                const customTitle =
+                    room.passengerId === viewerId
+                        ? passengerPrivateTitle ?? null
+                        : bidderPrivateTitle ?? null;
+                return {
+                    ...rest,
+                    customTitle,
+                    unreadCount: _count.messages,
+                    lastMessage: messages[0] || null,
+                };
+            }),
         });
     } catch (error) {
         console.error('Get chat rooms error:', error);
@@ -281,6 +325,7 @@ router.get('/rooms/:roomId/messages', requireAuth, async (req, res) => {
                         role: true,
                         displayName: true,
                         companyName: true,
+                        profileImageUrl: true,
                     },
                 },
             },
@@ -333,6 +378,7 @@ router.post('/rooms/:roomId/messages', requireAuth, async (req, res) => {
                         role: true,
                         displayName: true,
                         companyName: true,
+                        profileImageUrl: true,
                     },
                 },
             },
@@ -351,6 +397,55 @@ router.post('/rooms/:roomId/messages', requireAuth, async (req, res) => {
         });
     } catch (error) {
         console.error('Create chat message error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.patch('/rooms/:roomId', requireAuth, async (req, res) => {
+    try {
+        const roomId = String(req.params.roomId || '').trim();
+        const userId = req.user!.userId;
+
+        if (!Object.prototype.hasOwnProperty.call(req.body, 'customTitle')) {
+            return res
+                .status(400)
+                .json({ error: 'customTitle is required (string or null)' });
+        }
+
+        const raw = req.body?.customTitle;
+        const room = await findParticipantRoom(roomId, userId);
+
+        if (!room) {
+            return res.status(404).json({ error: 'Chat room not found' });
+        }
+
+        let titleValue: string | null;
+        if (raw === null || raw === '') {
+            titleValue = null;
+        } else {
+            const s = String(raw).trim();
+            if (!s) {
+                titleValue = null;
+            } else if (s.length > 80) {
+                return res
+                    .status(400)
+                    .json({ error: 'Title must be at most 80 characters' });
+            } else {
+                titleValue = s;
+            }
+        }
+
+        const isPassenger = room.passengerId === userId;
+        await prisma.chatRoom.update({
+            where: { id: room.id },
+            data: isPassenger
+                ? { passengerPrivateTitle: titleValue }
+                : { bidderPrivateTitle: titleValue },
+        });
+
+        res.status(200).json({ ok: true });
+    } catch (error) {
+        console.error('Update chat room error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -380,6 +475,43 @@ router.patch('/rooms/:roomId/read', requireAuth, async (req, res) => {
         res.json({ count: result.count });
     } catch (error) {
         console.error('Mark chat room read error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+router.post('/rooms/:roomId/leave', requireAuth, async (req, res) => {
+    try {
+        const roomId = String(req.params.roomId || '').trim();
+        const userId = req.user!.userId;
+
+        const room = await findParticipantRoom(roomId, userId);
+
+        if (!room) {
+            return res.status(404).json({ error: 'Chat room not found' });
+        }
+
+        const isPassenger = room.passengerId === userId;
+        const data = isPassenger
+            ? { passengerLeftAt: new Date() }
+            : { bidderLeftAt: new Date() };
+
+        await prisma.chatRoom.update({
+            where: { id: room.id },
+            data,
+        });
+
+        const next = await prisma.chatRoom.findUnique({
+            where: { id: room.id },
+            select: { passengerLeftAt: true, bidderLeftAt: true },
+        });
+
+        if (next?.passengerLeftAt && next?.bidderLeftAt) {
+            await prisma.chatRoom.delete({ where: { id: room.id } });
+        }
+
+        res.status(200).json({ ok: true });
+    } catch (error) {
+        console.error('Leave chat room error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
