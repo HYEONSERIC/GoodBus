@@ -1,13 +1,20 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { authAPI, tripsAPI, bidsAPI, verificationAPI, profileAPI } from '@/lib/api';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+    authAPI,
+    tripsAPI,
+    bidsAPI,
+    chatsAPI,
+    verificationAPI,
+    profileAPI,
+} from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
+import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
     DialogContent,
@@ -19,7 +26,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
-import { CalendarDays } from 'lucide-react';
+import {
+    ArrowUpDown,
+    CalendarDays,
+    Flag,
+    Search,
+} from 'lucide-react';
 
 interface Trip {
     id: string;
@@ -48,6 +60,7 @@ interface Bid {
     price: number;
     note?: string;
     status: string;
+    createdAt?: string;
     bidder: {
         id: string;
         email: string;
@@ -63,6 +76,71 @@ interface KakaoPlace {
     x?: string;
     y?: string;
 }
+
+type DriverSupportBoardRow = {
+    id: string;
+    no: number | null;
+    title: string;
+    author: string;
+    date: string;
+    pinned?: boolean;
+};
+
+const DRIVER_SUPPORT_NOTICE_ROWS: DriverSupportBoardRow[] = [
+    {
+        id: 'dn1',
+        no: null,
+        title: 'GOODBUS 서비스 점검 안내 (5/18 새벽)',
+        author: '운영팀',
+        date: '2026-05-10',
+        pinned: true,
+    },
+    {
+        id: 'dn2',
+        no: 9,
+        title: '기사 자격증 심사 기준 안내',
+        author: '고객센터',
+        date: '2026-04-18',
+    },
+    {
+        id: 'dn3',
+        no: 8,
+        title: '입찰·낙찰 관련 운영 정책 안내',
+        author: '운영팀',
+        date: '2026-03-28',
+    },
+];
+
+const DRIVER_SUPPORT_FAQ_ROWS: DriverSupportBoardRow[] = [
+    {
+        id: 'df1',
+        no: 6,
+        title: '운전자격증 승인은 얼마나 걸리나요?',
+        author: 'FAQ',
+        date: '2026-02-12',
+    },
+    {
+        id: 'df2',
+        no: 5,
+        title: '입찰 후 승객과 대화는 어떻게 하나요?',
+        author: 'FAQ',
+        date: '2026-02-08',
+    },
+    {
+        id: 'df3',
+        no: 4,
+        title: '동시 입찰 가능 건수는 어디서 확인하나요?',
+        author: 'FAQ',
+        date: '2026-01-30',
+    },
+    {
+        id: 'df4',
+        no: 3,
+        title: '멤버십 혜택은 무엇인가요?',
+        author: 'FAQ',
+        date: '2026-01-22',
+    },
+];
 
 export default function DriverDashboard() {
     const [user, setUser] = useState<any>(null);
@@ -116,6 +194,26 @@ export default function DriverDashboard() {
         | 'profile'
         | 'profileEdit'
     >('available');
+    const [contractSubTab, setContractSubTab] = useState<
+        'reservation' | 'bidding' | 'completed'
+    >('reservation');
+    const [myBidDetail, setMyBidDetail] = useState<{
+        trip: Trip;
+        partner?: Trip;
+        bidStatus: 'open' | 'awarded';
+    } | null>(null);
+    const [chatFocusRoomId, setChatFocusRoomId] = useState<string | null>(
+        null
+    );
+    const [driverSupportBoardTab, setDriverSupportBoardTab] = useState<
+        'notice' | 'faq'
+    >('notice');
+    const [driverSupportBoardQuery, setDriverSupportBoardQuery] =
+        useState('');
+    const [driverSupportOpen, setDriverSupportOpen] = useState(false);
+    const [driverSupportStep, setDriverSupportStep] = useState<
+        'menu' | 'form' | 'done'
+    >('menu');
     const [membershipPrevTab, setMembershipPrevTab] = useState<
         'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
     >('available');
@@ -703,6 +801,50 @@ export default function DriverDashboard() {
         }
     }
 
+    async function openBidQuoteChat(trip: Trip) {
+        if (!user?.id) return;
+        try {
+            const data = (await chatsAPI.ensureQuoteRoom(
+                trip.id,
+                user.id
+            )) as { room?: { id?: string } };
+            const roomId = data.room?.id;
+            if (!roomId) {
+                alert('채팅방을 열 수 없습니다.');
+                return;
+            }
+            setChatFocusRoomId(roomId);
+            setMyBidDetail(null);
+            setActiveTab('chat');
+        } catch (error: unknown) {
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : '채팅방을 준비하지 못했습니다.'
+            );
+        }
+    }
+
+    async function withdrawBidFromDetail(trip: Trip) {
+        if (!confirm('이 입찰을 철회하시겠습니까?')) {
+            return;
+        }
+
+        const myBid = trip.bids.find(
+            (bid: Bid) => bid.bidder.id === user?.id && bid.status === 'open'
+        );
+        if (!myBid) return;
+
+        try {
+            await bidsAPI.withdraw(myBid.id);
+            setMyBidDetail(null);
+            await loadData();
+        } catch (error) {
+            console.error('Error withdrawing bid:', error);
+            alert('입찰 철회에 실패했습니다');
+        }
+    }
+
     function openDateFilterPicker() {
         const input = dateFilterInputRef.current;
         if (!input) return;
@@ -821,12 +963,64 @@ export default function DriverDashboard() {
         return `${md} (${weekday})`;
     }
 
+    function biddingScheduleSubtitle(trip: Trip) {
+        if (trip.companionType === 'with_schedule') return '일정 포함';
+        if (trip.companionType === 'depart_return') return '당일 왕복';
+        return '당일 일정';
+    }
+
+    function parseBidNoteForDisplay(note?: string | null) {
+        if (!note?.trim()) return { vehicleTag: null as string | null };
+        const vehicleMatch = note.match(/\[차종\]\s*(.+)/m);
+        const yearMatch = note.match(/\[연식\]\s*(\d{4})\s*년?/m);
+        let vehicleTag: string | null = null;
+        if (vehicleMatch?.[1]) {
+            const v = vehicleMatch[1].split('\n')[0].trim();
+            const y = yearMatch?.[1];
+            vehicleTag = y ? `${v} (${y})` : v;
+        }
+        return { vehicleTag };
+    }
+
+    function formatBidAgeLabel(createdAt?: string | null) {
+        if (!createdAt) return null;
+        const t = new Date(createdAt).getTime();
+        if (Number.isNaN(t)) return null;
+        const days = Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000));
+        if (days <= 0) return '오늘 입찰';
+        return `${days}일 전 입찰`;
+    }
+
+    function biddingTripKm(
+        trip: Trip,
+        partner: Trip | undefined,
+        distances: Record<string, number | null>
+    ) {
+        const d1 = distances[trip.id];
+        if (partner) {
+            const d2 = distances[partner.id];
+            if (d1 != null && d2 != null) return Math.round(d1 + d2);
+            if (d1 != null) return Math.round(d1);
+            if (d2 != null) return Math.round(d2);
+            return null;
+        }
+        return d1 != null ? Math.round(d1) : null;
+    }
+
+    const tripsForDistance = useMemo(() => {
+        const byId = new Map<string, Trip>();
+        for (const t of trips) byId.set(t.id, t);
+        for (const t of myBids) byId.set(t.id, t);
+        for (const t of awardedTrips) byId.set(t.id, t);
+        return Array.from(byId.values());
+    }, [trips, myBids, awardedTrips]);
+
     useEffect(() => {
         let cancelled = false;
 
         async function calculateDistances() {
             const results: Record<string, number | null> = {};
-            for (const trip of trips) {
+            for (const trip of tripsForDistance) {
                 const originPoint =
                     typeof trip.originX === 'number' &&
                     typeof trip.originY === 'number'
@@ -854,7 +1048,7 @@ export default function DriverDashboard() {
             }
         }
 
-        if (trips.length > 0) {
+        if (tripsForDistance.length > 0) {
             calculateDistances();
         } else {
             setDistanceByTripId({});
@@ -863,13 +1057,94 @@ export default function DriverDashboard() {
         return () => {
             cancelled = true;
         };
-    }, [trips]);
+    }, [tripsForDistance]);
 
     useEffect(() => {
         const urls = bidPhotoFiles.map((f) => URL.createObjectURL(f));
         setBidPhotoUrls(urls);
         return () => urls.forEach((url) => URL.revokeObjectURL(url));
     }, [bidPhotoFiles]);
+
+    const contractReservationTrips = useMemo(
+        () =>
+            awardedTrips.filter(
+                (trip) => new Date(trip.dateTime).getTime() >= Date.now()
+            ),
+        [awardedTrips]
+    );
+
+    /** 예약주문: 미래 낙찰만, 왕복은 출발이 빠른 편만 한 장으로 표시 */
+    const contractReservationCardTrips = useMemo(() => {
+        const sorted = [...contractReservationTrips].sort(
+            (a, b) =>
+                new Date(a.dateTime).getTime() -
+                new Date(b.dateTime).getTime()
+        );
+        const consumed = new Set<string>();
+        return sorted.filter((trip) => {
+            if (consumed.has(trip.id)) return false;
+            const partner = getRoundPartnerTrip(trip, sorted);
+            if (partner) {
+                const base =
+                    new Date(trip.dateTime).getTime() <=
+                    new Date(partner.dateTime).getTime()
+                        ? trip
+                        : partner;
+                consumed.add(trip.id);
+                consumed.add(partner.id);
+                return trip.id === base.id;
+            }
+            consumed.add(trip.id);
+            return true;
+        });
+    }, [contractReservationTrips]);
+    const contractCompletedTrips = useMemo(
+        () =>
+            awardedTrips.filter(
+                (trip) => new Date(trip.dateTime).getTime() < Date.now()
+            ),
+        [awardedTrips]
+    );
+    const contractCompletedCardTrips = useMemo(() => {
+        const sorted = [...contractCompletedTrips].sort(
+            (a, b) =>
+                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+        );
+        const consumed = new Set<string>();
+        return sorted.filter((trip) => {
+            if (consumed.has(trip.id)) return false;
+            const partner = getRoundPartnerTrip(trip, sorted);
+            if (partner) {
+                const base =
+                    new Date(trip.dateTime).getTime() <=
+                    new Date(partner.dateTime).getTime()
+                        ? trip
+                        : partner;
+                consumed.add(trip.id);
+                consumed.add(partner.id);
+                return trip.id === base.id;
+            }
+            consumed.add(trip.id);
+            return true;
+        });
+    }, [contractCompletedTrips]);
+
+    const driverSupportBoardRows = useMemo(() => {
+        const base =
+            driverSupportBoardTab === 'notice'
+                ? [...DRIVER_SUPPORT_NOTICE_ROWS]
+                : [...DRIVER_SUPPORT_FAQ_ROWS];
+        base.sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            const na = a.no ?? 0;
+            const nb = b.no ?? 0;
+            return nb - na;
+        });
+        const q = driverSupportBoardQuery.trim().toLowerCase();
+        if (!q) return base;
+        return base.filter((r) => r.title.toLowerCase().includes(q));
+    }, [driverSupportBoardTab, driverSupportBoardQuery]);
 
     const bidDialogTrip = selectedTrip;
     const bidPartner = bidTripPartner;
@@ -932,7 +1207,7 @@ export default function DriverDashboard() {
                 </div>
             )}
 
-            <div className="max-w-4xl mx-auto px-4 sm:px-5 py-5 sm:py-6">
+            <div className="mx-auto max-w-4xl space-y-4 px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] pt-5 sm:px-5 sm:pt-6">
 
                 <Dialog
                     open={verificationDialogOpen}
@@ -1000,6 +1275,110 @@ export default function DriverDashboard() {
                         </Button>
                     </DialogContent>
                 </Dialog>
+
+                <Dialog
+                    open={driverSupportOpen}
+                    onOpenChange={(open) => {
+                        setDriverSupportOpen(open);
+                        if (!open) setDriverSupportStep('menu');
+                    }}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>문의하기</DialogTitle>
+                            <DialogDescription>
+                                문의 유형을 선택해주세요.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {driverSupportStep === 'menu' && (
+                            <div className="space-y-3">
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    입찰·견적 문의
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    자격증·인증 문의
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportStep('form')}
+                                >
+                                    기타 문의
+                                </Button>
+                            </div>
+                        )}
+                        {driverSupportStep === 'form' && (
+                            <div className="space-y-4">
+                                <div>
+                                    <Label>문의 내용</Label>
+                                    <Textarea placeholder="문의 내용을 입력하세요" />
+                                </div>
+                                <Button onClick={() => setDriverSupportStep('done')}>
+                                    문의하기
+                                </Button>
+                            </div>
+                        )}
+                        {driverSupportStep === 'done' && (
+                            <div className="space-y-4 text-sm text-gray-600">
+                                문의가 접수되었습니다. 빠르게 답변드리겠습니다.
+                                <Button
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => setDriverSupportOpen(false)}
+                                >
+                                    닫기
+                                </Button>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {myBidDetail &&
+                    (() => {
+                        const { trip, partner, bidStatus } = myBidDetail;
+                        const myBid = trip.bids.find(
+                            (bid: Bid) =>
+                                bid.bidder.id === user?.id &&
+                                bid.status === bidStatus
+                        );
+                        if (!myBid) return null;
+                        return (
+                            <MyBidQuoteDetailDialog
+                                open
+                                onOpenChange={(open) => {
+                                    if (!open) setMyBidDetail(null);
+                                }}
+                                trip={trip}
+                                partnerTrip={partner}
+                                km={biddingTripKm(
+                                    trip,
+                                    partner,
+                                    distanceByTripId
+                                )}
+                                myBid={{
+                                    price: Number(myBid.price),
+                                    note: myBid.note,
+                                }}
+                                busPreferenceLabel={getBusLabel(trip.busSize)}
+                                onChatWithPassenger={() =>
+                                    openBidQuoteChat(trip)
+                                }
+                                onWithdrawBid={() =>
+                                    withdrawBidFromDetail(trip)
+                                }
+                                onHome={() => setActiveTab('available')}
+                                showWithdrawButton={bidStatus === 'open'}
+                            />
+                        );
+                    })()}
 
                 {activeTab === 'available' && (
                     <div>
@@ -1080,88 +1459,117 @@ export default function DriverDashboard() {
                                         visibleTrips
                                     );
                                     const isRound = Boolean(partner);
-                                    const distance =
-                                        distanceByTripId[trip.id] ?? null;
+                                    const km = biddingTripKm(
+                                        trip,
+                                        partner,
+                                        distanceByTripId
+                                    );
                                     const bidCount = isRound
-                                        ? (trip.bids?.length || 0) +
-                                          (partner?.bids?.length || 0)
-                                        : trip.bids?.length || 0;
+                                        ? (trip.bids?.filter(
+                                              (b: Bid) => b.status === 'open'
+                                          ).length || 0) +
+                                          (partner?.bids?.filter(
+                                              (b: Bid) => b.status === 'open'
+                                          ).length || 0)
+                                        : trip.bids?.filter(
+                                              (b: Bid) => b.status === 'open'
+                                          ).length || 0;
                                     const servicePurpose = getServicePurposeLabel(
                                         trip.servicePurpose
                                     );
                                     return (
-                                <div
-                                    key={trip.id}
-                                    className="border-b border-gray-200 px-3 py-2 last:border-b-0"
-                                >
-                                    <div className="pb-1">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="space-y-2">
-                                                <div className="flex items-center gap-2 text-sm text-gray-700">
-                                                    <span className="font-semibold text-gray-900">
-                                                        {formatTripDateLine(
-                                                            trip.dateTime
+                                        <div
+                                            key={trip.id}
+                                            className="border-b border-gray-100 p-4 last:border-b-0"
+                                        >
+                                            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                                                <p className="text-sm font-semibold leading-snug text-gray-900">
+                                                    {formatTripDateLine(
+                                                        trip.dateTime
+                                                    )}{' '}
+                                                    <span className="font-normal text-gray-600">
+                                                        {biddingScheduleSubtitle(
+                                                            trip
                                                         )}
                                                     </span>
-                                                    <span className="text-gray-500">
-                                                        당일 일정
-                                                    </span>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <p className="text-[15px] font-semibold leading-snug">
-                                                        {trip.origin}
-                                                    </p>
-                                                    <p className="text-[15px] font-semibold leading-snug">
-                                                        {trip.destination}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[18px] font-semibold">
-                                                    {trip.paxCount}명
                                                 </p>
+                                                <span className="shrink-0 text-sm font-semibold text-gray-900">
+                                                    {trip.paxCount}명
+                                                </span>
+                                            </div>
+
+                                            <div className="flex gap-3 py-3">
+                                                <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                                                    <ArrowUpDown
+                                                        className="h-5 w-5 text-gray-500"
+                                                        strokeWidth={1.75}
+                                                        aria-hidden
+                                                    />
+                                                    <span className="mt-1 text-xs font-semibold text-gray-800">
+                                                        {isRound
+                                                            ? '왕복'
+                                                            : '편도'}
+                                                    </span>
+                                                    {km != null ? (
+                                                        <span className="mt-0.5 text-[11px] text-gray-500">
+                                                            {km}km
+                                                        </span>
+                                                    ) : (
+                                                        <span className="mt-0.5 text-[11px] text-gray-400">
+                                                            —
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0 flex-1 space-y-2 text-sm">
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            출발지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
+                                                            {trip.origin}
+                                                        </span>
+                                                    </p>
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            도착지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
+                                                            {trip.destination}
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {servicePurpose ? (
+                                                        <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
+                                                            {servicePurpose}
+                                                        </span>
+                                                    ) : null}
+                                                    <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
+                                                        {getBusLabel(
+                                                            trip.busSize
+                                                        )}
+                                                    </span>
+                                                    <span className="rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                                                        입찰 {bidCount}
+                                                    </span>
+                                                </div>
+
+                                                <Button
+                                                    type="button"
+                                                    className="h-9 rounded-md bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-black"
+                                                    onClick={() =>
+                                                        handleBidButtonClick(
+                                                            trip
+                                                        )
+                                                    }
+                                                >
+                                                    입찰하기
+                                                </Button>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2 pb-1">
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-2 text-gray-700">
-                                                <span className="text-sm leading-none">
-                                                    ↕
-                                                </span>
-                                                <span className="text-xs font-medium">
-                                                    {isRound ? '왕복' : '편도'}
-                                                </span>
-                                                {typeof distance === 'number' && (
-                                                    <span className="text-[14px] text-gray-500">
-                                                        {distance}km
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="flex flex-wrap items-center justify-end gap-2">
-                                                {servicePurpose && (
-                                                    <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600">
-                                                        {servicePurpose}
-                                                    </span>
-                                                )}
-                                                <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-600">
-                                                    {getBusLabel(trip.busSize)}
-                                                </span>
-                                                <span className="rounded-full border border-red-200 px-2 py-0.5 text-[11px] font-semibold text-red-500">
-                                                    입찰 {bidCount}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <Button
-                                            className="mt-1 h-8 rounded-md px-3 text-xs"
-                                            onClick={() =>
-                                                handleBidButtonClick(trip)
-                                            }
-                                        >
-                                            입찰하기
-                                        </Button>
-                                    </div>
-                                </div>
                                     );
                                 });
                             })()}
@@ -1887,193 +2295,635 @@ export default function DriverDashboard() {
                 )}
 
                 {activeTab === 'contract' && (
-                    <>
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold mb-4">
-                                낙찰된 여정
-                            </h2>
-                            {awardedTrips.length > 0 ? (
-                                <div className="grid gap-6">
-                                    {awardedTrips.map((trip) => {
-                                        const myBid = trip.bids.find(
-                                            (bid: Bid) =>
-                                                bid.bidder.id === user?.id &&
-                                                bid.status === 'awarded'
-                                        );
-                                        return (
-                                            <Card
-                                                key={trip.id}
-                                                className="border-green-500"
-                                            >
-                                                <CardHeader>
-                                                    <div className="flex justify-between">
-                                                        <div>
-                                                            <CardTitle>
-                                                                {trip.origin} →{' '}
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                            <p className="text-sm text-gray-600">
-                                                                {format(
-                                                                    new Date(
-                                                                        trip.dateTime
-                                                                    ),
-                                                                    'PPP p'
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                        <Badge className="bg-green-500">
-                                                            낙찰됨
-                                                        </Badge>
-                                                    </div>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p>
-                                                        승객 수: {trip.paxCount}
-                                                    </p>
-                                                    <p>
-                                                        버스 크기:{' '}
-                                                        {trip.busSize === 'small'
-                                                            ? '소형'
-                                                            : trip.busSize ===
-                                                                'medium'
-                                                              ? '중형'
-                                                              : '대형'}
-                                                    </p>
-                                                    <div className="mt-4 p-3 bg-green-100 rounded">
-                                                        <p className="font-bold text-green-800">
-                                                            🎉 낙찰가:{' '}
-                                                            {Number(
-                                                                myBid?.price ??
-                                                                    0
-                                                            ).toLocaleString()}
-                                                            만원
-                                                        </p>
-                                                        {myBid?.note && (
-                                                            <p className="text-sm text-gray-600 mt-1">
-                                                                {myBid.note}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">
-                                    낙찰된 여정이 없습니다
-                                </p>
-                            )}
+                    <div className="mx-auto w-full max-w-xl">
+                        <div className="mb-6 grid grid-cols-3 border-b border-gray-200 bg-white">
+                            <button
+                                type="button"
+                                onClick={() => setContractSubTab('reservation')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    contractSubTab === 'reservation'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                예약주문
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setContractSubTab('bidding')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    contractSubTab === 'bidding'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                입찰
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setContractSubTab('completed')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    contractSubTab === 'completed'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                운행완료
+                            </button>
                         </div>
 
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold mb-4">
-                                내 입찰
-                            </h2>
-                            {myBids.length > 0 ? (
-                                <div className="grid gap-6">
-                                    {myBids.map((trip) => {
-                                        const myBid = trip.bids.find(
-                                            (bid: Bid) =>
-                                                bid.bidder.id === user?.id &&
-                                                bid.status === 'open'
-                                        );
-                                        return (
-                                            <Card key={trip.id} className="border-gray-200 shadow-sm">
-                                                <CardHeader>
-                                                    <div className="flex justify-between">
-                                                        <div>
-                                                            <CardTitle>
-                                                                {trip.origin} →{' '}
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                            <p className="text-sm text-gray-600">
-                                                                {format(
-                                                                    new Date(
-                                                                        trip.dateTime
-                                                                    ),
-                                                                    'PPP p'
+                        {contractSubTab === 'reservation' && (
+                            <>
+                                <p className="mb-2 text-left text-sm text-gray-500">
+                                    낙찰완료 ({contractReservationCardTrips.length})
+                                </p>
+                                {contractReservationCardTrips.length > 0 ? (
+                                    <div className="divide-y divide-gray-100 overflow-hidden border border-gray-200 bg-white shadow-sm">
+                                        {contractReservationCardTrips.map(
+                                            (trip) => {
+                                                const myBid = trip.bids.find(
+                                                    (bid: Bid) =>
+                                                        bid.bidder.id ===
+                                                            user?.id &&
+                                                        bid.status === 'awarded'
+                                                );
+                                                const partner =
+                                                    getRoundPartnerTrip(
+                                                        trip,
+                                                        contractReservationTrips
+                                                    );
+                                                const isRound =
+                                                    Boolean(partner);
+                                                const km = biddingTripKm(
+                                                    trip,
+                                                    partner,
+                                                    distanceByTripId
+                                                );
+                                                const { vehicleTag } =
+                                                    parseBidNoteForDisplay(
+                                                        myBid?.note
+                                                    );
+                                                const vehicleLabel =
+                                                    vehicleTag ||
+                                                    getBusLabel(trip.busSize);
+                                                const isCancelled =
+                                                    trip.status === 'cancelled';
+
+                                                return (
+                                                    <div
+                                                        key={trip.id}
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        className="cursor-pointer p-4 transition-colors hover:bg-gray-50/80 active:bg-gray-50"
+                                                        onClick={() =>
+                                                            setMyBidDetail({
+                                                                trip,
+                                                                partner,
+                                                                bidStatus:
+                                                                    'awarded',
+                                                            })
+                                                        }
+                                                        onKeyDown={(e) => {
+                                                            if (
+                                                                e.key ===
+                                                                    'Enter' ||
+                                                                e.key === ' '
+                                                            ) {
+                                                                e.preventDefault();
+                                                                setMyBidDetail({
+                                                                    trip,
+                                                                    partner,
+                                                                    bidStatus:
+                                                                        'awarded',
+                                                                });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                                                            <p className="text-sm font-semibold leading-snug text-gray-900">
+                                                                {formatTripDateLine(
+                                                                    trip.dateTime
+                                                                )}{' '}
+                                                                <span className="font-normal text-gray-600">
+                                                                    {biddingScheduleSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            </p>
+                                                            <span className="shrink-0 text-sm font-semibold text-gray-900">
+                                                                {trip.paxCount}
+                                                                명
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-3 py-3">
+                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                                                                <ArrowUpDown
+                                                                    className="h-5 w-5 text-gray-500"
+                                                                    strokeWidth={
+                                                                        1.75
+                                                                    }
+                                                                    aria-hidden
+                                                                />
+                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
+                                                                    {isRound
+                                                                        ? '왕복'
+                                                                        : '편도'}
+                                                                </span>
+                                                                {km != null ? (
+                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
+                                                                        {km}km
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
+                                                                        —
+                                                                    </span>
                                                                 )}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1 space-y-2 text-sm">
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        출발지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.origin
+                                                                        }
+                                                                    </span>
+                                                                </p>
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        도착지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.destination
+                                                                        }
+                                                                    </span>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                    {Number(
+                                                                        myBid?.price ??
+                                                                            0
+                                                                    ).toLocaleString()}
+                                                                    만원
+                                                                </span>
+                                                                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                    {
+                                                                        vehicleLabel
+                                                                    }
+                                                                </span>
+                                                            </div>
+                                                            {isCancelled ? (
+                                                                <span className="shrink-0 rounded-full border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600">
+                                                                    승객취소
+                                                                </span>
+                                                            ) : (
+                                                                <span className="shrink-0 rounded-full border border-green-500 bg-white px-2.5 py-1 text-xs font-medium text-green-600">
+                                                                    낙찰완료
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="py-8 text-center text-gray-500">
+                                        예약된 낙찰 여정이 없습니다
+                                    </p>
+                                )}
+                            </>
+                        )}
+
+                        {contractSubTab === 'bidding' && (
+                            <>
+                                <p className="mb-2 text-left text-xs font-medium text-gray-600">
+                                    입찰진행중 ({myBids.length})
+                                </p>
+                                {myBids.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {myBids.map((trip) => {
+                                            const myBid = trip.bids.find(
+                                                (bid: Bid) =>
+                                                    bid.bidder.id === user?.id &&
+                                                    bid.status === 'open'
+                                            );
+                                            const partner = getRoundPartnerTrip(
+                                                trip,
+                                                myBids
+                                            );
+                                            const isRound = Boolean(partner);
+                                            const km = biddingTripKm(
+                                                trip,
+                                                partner,
+                                                distanceByTripId
+                                            );
+                                            const { vehicleTag } =
+                                                parseBidNoteForDisplay(
+                                                    myBid?.note
+                                                );
+                                            const bidAge = formatBidAgeLabel(
+                                                myBid?.createdAt
+                                            );
+                                            const vehicleLabel =
+                                                vehicleTag ||
+                                                getBusLabel(trip.busSize);
+                                            return (
+                                                <div
+                                                    key={trip.id}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    className="cursor-pointer border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:bg-gray-50/80 active:bg-gray-50"
+                                                    onClick={() =>
+                                                        setMyBidDetail({
+                                                            trip,
+                                                            partner,
+                                                            bidStatus: 'open',
+                                                        })
+                                                    }
+                                                    onKeyDown={(e) => {
+                                                        if (
+                                                            e.key ===
+                                                                'Enter' ||
+                                                            e.key === ' '
+                                                        ) {
+                                                            e.preventDefault();
+                                                            setMyBidDetail({
+                                                                trip,
+                                                                partner,
+                                                                bidStatus:
+                                                                    'open',
+                                                            });
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                                                        <p className="text-sm font-semibold leading-snug text-gray-900">
+                                                            {formatTripDateLine(
+                                                                trip.dateTime
+                                                            )}{' '}
+                                                            <span className="font-normal text-gray-600">
+                                                                {biddingScheduleSubtitle(
+                                                                    trip
+                                                                )}
+                                                            </span>
+                                                        </p>
+                                                        <span className="shrink-0 text-sm font-medium text-gray-900">
+                                                            {trip.paxCount}명
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex gap-3 py-3">
+                                                        <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                                                            <ArrowUpDown
+                                                                className="h-5 w-5 text-gray-500"
+                                                                strokeWidth={
+                                                                    1.75
+                                                                }
+                                                                aria-hidden
+                                                            />
+                                                            <span className="mt-1 text-xs font-semibold text-gray-800">
+                                                                {isRound
+                                                                    ? '왕복'
+                                                                    : '편도'}
+                                                            </span>
+                                                            {km != null ? (
+                                                                <span className="mt-0.5 text-[11px] text-gray-500">
+                                                                    {km}km
+                                                                </span>
+                                                            ) : (
+                                                                <span className="mt-0.5 text-[11px] text-gray-400">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1 space-y-2 text-sm">
+                                                            <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                    출발지
+                                                                </span>
+                                                                <span className="min-w-0 font-medium">
+                                                                    {trip.origin}
+                                                                </span>
+                                                            </p>
+                                                            <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                    도착지
+                                                                </span>
+                                                                <span className="min-w-0 font-medium">
+                                                                    {
+                                                                        trip.destination
+                                                                    }
+                                                                </span>
                                                             </p>
                                                         </div>
-                                                        <Badge>입찰 완료</Badge>
                                                     </div>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p>
-                                                        승객 수: {trip.paxCount}
-                                                    </p>
-                                                    <p>
-                                                        버스 크기:{' '}
-                                                        {trip.busSize === 'small'
-                                                            ? '소형'
-                                                            : trip.busSize ===
-                                                                'medium'
-                                                              ? '중형'
-                                                              : '대형'}
-                                                    </p>
-                                                    <div className="mt-4 p-3 bg-green-50 rounded">
-                                                        <p className="font-semibold text-green-700">
-                                                            내 입찰가:{' '}
-                                                            {Number(
-                                                                myBid?.price ??
-                                                                    0
-                                                            ).toLocaleString()}
-                                                            만원
-                                                        </p>
-                                                        {myBid?.note && (
-                                                            <p className="text-sm text-gray-600 mt-1">
-                                                                {myBid.note}
-                                                            </p>
-                                                        )}
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                {Number(
+                                                                    myBid?.price ??
+                                                                        0
+                                                                ).toLocaleString()}
+                                                                만원
+                                                            </span>
+                                                            <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                {vehicleLabel}
+                                                            </span>
+                                                            {bidAge && (
+                                                                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                                                                    {bidAge}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <Button
+                                                            type="button"
+                                                            className="shrink-0 rounded-md border-0 bg-amber-300 px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-amber-400"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleWithdrawBid(
+                                                                    trip
+                                                                );
+                                                            }}
+                                                        >
+                                                            입찰취소하기
+                                                        </Button>
                                                     </div>
-                                                    <Button
-                                                        variant="destructive"
-                                                        className="mt-4"
-                                                        onClick={() =>
-                                                            handleWithdrawBid(
-                                                                trip
-                                                            )
-                                                        }
-                                                    >
-                                                        입찰 철회
-                                                    </Button>
-                                                </CardContent>
-                                            </Card>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">
-                                    입찰한 내역이 없습니다
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="py-8 text-center text-gray-500">
+                                        입찰 진행 중인 여정이 없습니다
+                                    </p>
+                                )}
+                            </>
+                        )}
+
+                        {contractSubTab === 'completed' && (
+                            <>
+                                <p className="mb-2 text-left text-sm text-gray-500">
+                                    종료됨 ({contractCompletedCardTrips.length})
                                 </p>
-                            )}
-                        </div>
-                    </>
+                                {contractCompletedCardTrips.length > 0 ? (
+                                    <div className="divide-y divide-gray-100 overflow-hidden border border-gray-200 bg-white shadow-sm">
+                                        {contractCompletedCardTrips.map(
+                                            (trip) => {
+                                                const myBid = trip.bids.find(
+                                                    (bid: Bid) =>
+                                                        bid.bidder.id ===
+                                                            user?.id &&
+                                                        bid.status === 'awarded'
+                                                );
+                                                const partner =
+                                                    getRoundPartnerTrip(
+                                                        trip,
+                                                        contractCompletedTrips
+                                                    );
+                                                const isRound =
+                                                    Boolean(partner);
+                                                const km = biddingTripKm(
+                                                    trip,
+                                                    partner,
+                                                    distanceByTripId
+                                                );
+                                                const { vehicleTag } =
+                                                    parseBidNoteForDisplay(
+                                                        myBid?.note
+                                                    );
+                                                const vehicleLabel =
+                                                    vehicleTag ||
+                                                    getBusLabel(trip.busSize);
+                                                return (
+                                                    <div
+                                                        key={trip.id}
+                                                        className="p-4"
+                                                    >
+                                                        <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                                                            <p className="text-sm font-semibold leading-snug text-gray-900">
+                                                                {formatTripDateLine(
+                                                                    trip.dateTime
+                                                                )}{' '}
+                                                                <span className="font-normal text-gray-600">
+                                                                    {biddingScheduleSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            </p>
+                                                            <span className="shrink-0 text-sm font-semibold text-gray-900">
+                                                                {trip.paxCount}
+                                                                명
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex gap-3 py-3">
+                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                                                                <ArrowUpDown
+                                                                    className="h-5 w-5 text-gray-500"
+                                                                    strokeWidth={
+                                                                        1.75
+                                                                    }
+                                                                    aria-hidden
+                                                                />
+                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
+                                                                    {isRound
+                                                                        ? '왕복'
+                                                                        : '편도'}
+                                                                </span>
+                                                                {km != null ? (
+                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
+                                                                        {km}km
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
+                                                                        —
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="min-w-0 flex-1 space-y-2 text-sm">
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        출발지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.origin
+                                                                        }
+                                                                    </span>
+                                                                </p>
+                                                                <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                                    <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                                        도착지
+                                                                    </span>
+                                                                    <span className="min-w-0 font-medium">
+                                                                        {
+                                                                            trip.destination
+                                                                        }
+                                                                    </span>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                    {Number(
+                                                                        myBid?.price ??
+                                                                            0
+                                                                    ).toLocaleString()}
+                                                                    만원
+                                                                </span>
+                                                                <span className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-800">
+                                                                    {
+                                                                        vehicleLabel
+                                                                    }
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="py-8 text-center text-gray-500">
+                                        운행 완료된 여정이 없습니다
+                                    </p>
+                                )}
+                            </>
+                        )}
+                    </div>
                 )}
 
                 {activeTab === 'chat' && (
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            <ChatPanel />
+                    <Card className="mx-auto w-full max-w-xl gap-0 rounded-none border-gray-200 py-0 shadow-sm">
+                        <CardContent className="p-0">
+                            <ChatPanel
+                                fillRoomHeight
+                                focusRoomId={chatFocusRoomId}
+                                onFocusRoomConsumed={() =>
+                                    setChatFocusRoomId(null)
+                                }
+                            />
                         </CardContent>
                     </Card>
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            고객센터 문의 영역입니다. 문의 유형별로 분류하고
-                            처리 상태를 추적하도록 확장할 수 있습니다.
-                            <Button className="mt-2 w-full sm:w-auto">
-                                문의하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="mx-auto w-full max-w-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
+                        <h2 className="border-b border-gray-200 py-4 text-center text-lg font-bold tracking-tight text-gray-900">
+                            고객센터
+                        </h2>
+                        <div className="grid grid-cols-2 border-b border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => setDriverSupportBoardTab('notice')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    driverSupportBoardTab === 'notice'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                공지사항
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDriverSupportBoardTab('faq')}
+                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
+                                    driverSupportBoardTab === 'faq'
+                                        ? 'border-gray-900 font-semibold text-gray-900'
+                                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                                }`}
+                            >
+                                자주 하는 질문
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 border-b border-gray-200 px-2 py-2.5 text-[11px] font-medium text-gray-500 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs">
+                            <span className="text-center">No</span>
+                            <span>제목</span>
+                            <span className="text-right">글쓴이</span>
+                            <span className="text-right">작성일</span>
+                        </div>
+
+                        <ul className="divide-y divide-gray-100">
+                            {driverSupportBoardRows.length === 0 ? (
+                                <li className="px-3 py-8 text-center text-sm text-gray-500">
+                                    검색 결과가 없습니다.
+                                </li>
+                            ) : (
+                                driverSupportBoardRows.map((row) => (
+                                    <li
+                                        key={row.id}
+                                        className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 px-2 py-2.5 text-[11px] text-gray-800 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs"
+                                    >
+                                        <div className="flex justify-center">
+                                            {row.pinned ? (
+                                                <Flag
+                                                    className="h-3.5 w-3.5 text-amber-600"
+                                                    strokeWidth={2}
+                                                    aria-label="고정"
+                                                />
+                                            ) : (
+                                                <span className="tabular-nums text-gray-600">
+                                                    {row.no ?? '—'}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="min-w-0 truncate font-medium text-gray-900">
+                                            {row.title}
+                                        </p>
+                                        <span className="truncate text-right text-gray-600">
+                                            {row.author}
+                                        </span>
+                                        <span className="truncate text-right text-gray-500">
+                                            {row.date}
+                                        </span>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+
+                        <div className="space-y-3 border-t border-gray-200 p-3">
+                            <div className="relative w-full">
+                                <Input
+                                    type="search"
+                                    value={driverSupportBoardQuery}
+                                    onChange={(e) =>
+                                        setDriverSupportBoardQuery(
+                                            e.target.value,
+                                        )
+                                    }
+                                    placeholder="제목 검색"
+                                    className="h-9 w-full pr-9 text-sm"
+                                    aria-label="게시글 검색"
+                                />
+                                <Search
+                                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                                    strokeWidth={2}
+                                    aria-hidden
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-center text-sm text-gray-600">
+                                    추가로 궁금하신 점이 있으신가요?
+                                </p>
+                                <Button
+                                    type="button"
+                                    className="h-10 w-full rounded-md bg-gray-900 text-sm font-semibold text-white hover:bg-black"
+                                    onClick={() => {
+                                        setDriverSupportOpen(true);
+                                        setDriverSupportStep('menu');
+                                    }}
+                                >
+                                    문의하기
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
 
@@ -2781,7 +3631,7 @@ export default function DriverDashboard() {
         )}
         {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="mx-auto flex w-full max-w-4xl items-center gap-2 px-4 py-2.5 sm:px-5">
+                <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
                         variant="ghost"
                         onClick={() => setActiveTab('available')}

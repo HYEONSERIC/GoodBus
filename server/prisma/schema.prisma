@@ -178,6 +178,12 @@ model ChatRoom {
   passenger   User     @relation("PassengerChatRooms", fields: [passengerId], references: [id], onDelete: Cascade)
   bidderId    String
   bidder      User     @relation("BidderChatRooms", fields: [bidderId], references: [id], onDelete: Cascade)
+  passengerLeftAt DateTime?
+  bidderLeftAt    DateTime?
+  /// 승객 본인 목록·헤더 전용 표시 제목
+  passengerPrivateTitle String?
+  /// 입찰자(기사·업체) 본인 목록·헤더 전용 표시 제목
+  bidderPrivateTitle    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
