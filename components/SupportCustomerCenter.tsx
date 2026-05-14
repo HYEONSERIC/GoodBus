@@ -240,11 +240,7 @@ export function SupportCustomerCenter({
                 }}
             >
                 <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-                    {detailLoading && !detail ? (
-                        <p className="py-8 text-center text-sm text-gray-500">
-                            불러오는 중…
-                        </p>
-                    ) : detail ? (
+                    {detail ? (
                         <>
                             <DialogHeader>
                                 <DialogTitle className="text-left leading-snug">
@@ -260,7 +256,20 @@ export function SupportCustomerCenter({
                                 {detail.body}
                             </div>
                         </>
-                    ) : null}
+                    ) : (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle className="sr-only">
+                                    게시글 상세
+                                </DialogTitle>
+                            </DialogHeader>
+                            {detailLoading ? (
+                                <p className="py-8 text-center text-sm text-gray-500">
+                                    불러오는 중…
+                                </p>
+                            ) : null}
+                        </>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>
