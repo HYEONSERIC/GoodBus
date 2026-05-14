@@ -251,6 +251,10 @@ export default function AdminPage() {
     const [editBody, setEditBody] = useState('');
     const [editPinned, setEditPinned] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
+    const [faqSectionTab, setFaqSectionTab] = useState<'posts' | 'inquiries'>(
+        'posts',
+    );
+    const [newPostDialogOpen, setNewPostDialogOpen] = useState(false);
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -326,6 +330,10 @@ export default function AdminPage() {
             cancelled = true;
         };
     }, [activeTab]);
+
+    useEffect(() => {
+        if (faqSectionTab !== 'posts') setNewPostDialogOpen(false);
+    }, [faqSectionTab]);
 
     useEffect(() => {
         if (!editPost) return;
@@ -1631,242 +1639,353 @@ export default function AdminPage() {
             )}
 
             {activeTab === 'faq' && (
-                <>
-                    <div className="space-y-8">
+                <div className="mx-auto w-full max-w-3xl space-y-6">
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div
+                            className="grid grid-cols-2 border-b border-slate-200"
+                            role="tablist"
+                            aria-label="FAQ·문의 하위 메뉴"
+                        >
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={faqSectionTab === 'posts'}
+                                onClick={() => setFaqSectionTab('posts')}
+                                className={`border-b-[3px] py-3.5 text-center text-sm transition-colors ${
+                                    faqSectionTab === 'posts'
+                                        ? 'border-slate-900 font-semibold text-slate-900'
+                                        : 'border-transparent font-medium text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                게시글 관리
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={faqSectionTab === 'inquiries'}
+                                onClick={() => setFaqSectionTab('inquiries')}
+                                className={`border-b-[3px] py-3.5 text-center text-sm transition-colors ${
+                                    faqSectionTab === 'inquiries'
+                                        ? 'border-slate-900 font-semibold text-slate-900'
+                                        : 'border-transparent font-medium text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                문의사항
+                            </button>
+                        </div>
+                    </div>
+
+                    {faqSectionTab === 'inquiries' ? (
                         <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                             <div>
                                 <h2 className="text-lg font-semibold text-slate-900">
-                                    공지 / FAQ 등록
+                                    1:1 문의
                                 </h2>
                                 <p className="mt-1 text-sm text-slate-600">
-                                    승객·기사·업체 고객센터에 노출됩니다.
+                                    사용자 문의 접수·답변 기능은 추후
+                                    연동됩니다.
                                 </p>
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <div>
-                                    <Label>게시 유형</Label>
-                                    <select
-                                        className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                                        value={newPostKind}
-                                        onChange={(e) =>
-                                            setNewPostKind(
-                                                e.target.value as
-                                                    | 'notice'
-                                                    | 'faq',
-                                            )
-                                        }
+                            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center text-sm text-slate-500">
+                                문의 목록 / 상세 / 답변 UI가 들어올 자리입니다.
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {faqSectionTab === 'posts' ? (
+                        <>
+                            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                                <h2 className="text-lg font-semibold text-slate-900">
+                                    게시글 목록
+                                </h2>
+                                {supportPostsLoading ? (
+                                    <p className="mt-4 text-sm text-slate-500">
+                                        불러오는 중…
+                                    </p>
+                                ) : supportPosts.length === 0 ? (
+                                    <p className="mt-4 text-sm text-slate-500">
+                                        등록된 글이 없습니다.
+                                    </p>
+                                ) : (
+                                    <div className="mt-4 overflow-x-auto">
+                                        <table className="w-full min-w-[600px] text-left text-sm">
+                                            <thead>
+                                                <tr className="border-b text-xs text-slate-500">
+                                                    <th className="pb-2 pr-2">
+                                                        유형
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        중요
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        제목
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        글쓴이
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        작성일
+                                                    </th>
+                                                    <th className="pb-2">관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {supportPosts.map((p) => (
+                                                    <tr
+                                                        key={p.id}
+                                                        className="border-b border-slate-100"
+                                                    >
+                                                        <td className="whitespace-nowrap py-2 pr-2">
+                                                            {p.kind === 'faq'
+                                                                ? 'FAQ'
+                                                                : '공지'}
+                                                        </td>
+                                                        <td className="py-2 pr-2">
+                                                            {p.pinned ? (
+                                                                <Flag
+                                                                    className="h-3.5 w-3.5 text-amber-600"
+                                                                    strokeWidth={2}
+                                                                    aria-label="중요"
+                                                                />
+                                                            ) : (
+                                                                <span className="text-slate-400">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="max-w-[220px] truncate py-2 pr-2">
+                                                            {p.title}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-600">
+                                                            {p.authorLabel}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-500">
+                                                            {p.createdAt.slice(
+                                                                0,
+                                                                10,
+                                                            )}
+                                                        </td>
+                                                        <td className="space-x-2 whitespace-nowrap py-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    setEditPost(
+                                                                        p,
+                                                                    )
+                                                                }
+                                                            >
+                                                                수정
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="text-red-600"
+                                                                onClick={async () => {
+                                                                    if (
+                                                                        !confirm(
+                                                                            '이 글을 삭제할까요?',
+                                                                        )
+                                                                    )
+                                                                        return;
+                                                                    setError('');
+                                                                    try {
+                                                                        await adminAPI.deleteSupportPost(
+                                                                            p.id,
+                                                                        );
+                                                                        const data =
+                                                                            await adminAPI.getSupportPosts();
+                                                                        setSupportPosts(
+                                                                            data.posts ||
+                                                                                [],
+                                                                        );
+                                                                    } catch (err: unknown) {
+                                                                        setError(
+                                                                            getErrorMessage(
+                                                                                err,
+                                                                                '삭제에 실패했습니다.',
+                                                                            ),
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                삭제
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            setError('');
+                                            setNewPostKind('notice');
+                                            setNewPostTitle('');
+                                            setNewPostBody('');
+                                            setNewPostPinned(false);
+                                            setNewPostDialogOpen(true);
+                                        }}
                                     >
-                                        <option value="notice">
-                                            공지사항
-                                        </option>
-                                        <option value="faq">
-                                            자주 하는 질문
-                                        </option>
-                                    </select>
-                                </div>
-                                <div className="flex items-end pb-1">
-                                    <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 rounded border-slate-300"
-                                            checked={newPostPinned}
-                                            onChange={(e) =>
-                                                setNewPostPinned(
-                                                    e.target.checked,
-                                                )
-                                            }
-                                        />
-                                        중요 표시 (목록에 깃발)
-                                    </label>
+                                        글쓰기
+                                    </Button>
                                 </div>
                             </div>
-                            <div>
-                                <Label htmlFor="support-new-title">제목</Label>
-                                <Input
-                                    id="support-new-title"
-                                    className="mt-1"
-                                    value={newPostTitle}
-                                    onChange={(e) =>
-                                        setNewPostTitle(e.target.value)
-                                    }
-                                    maxLength={200}
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="support-new-body">본문</Label>
-                                <Textarea
-                                    id="support-new-body"
-                                    className="mt-1 min-h-[160px]"
-                                    value={newPostBody}
-                                    onChange={(e) =>
-                                        setNewPostBody(e.target.value)
-                                    }
-                                />
-                            </div>
-                            <p className="text-xs text-slate-500">
-                                글쓴이는 현재 로그인한 관리자 계정의 역할로 자동
-                                저장됩니다.
-                            </p>
-                            <Button
-                                disabled={creatingPost}
-                                onClick={async () => {
-                                    setCreatingPost(true);
-                                    setError('');
-                                    try {
-                                        await adminAPI.createSupportPost({
-                                            kind: newPostKind,
-                                            title: newPostTitle.trim(),
-                                            body: newPostBody.trim(),
-                                            pinned: newPostPinned,
-                                        });
-                                        setNewPostTitle('');
-                                        setNewPostBody('');
-                                        setNewPostPinned(false);
-                                        const data =
-                                            await adminAPI.getSupportPosts();
-                                        setSupportPosts(data.posts || []);
-                                    } catch (err: unknown) {
-                                        setError(
-                                            getErrorMessage(
-                                                err,
-                                                '등록에 실패했습니다.',
-                                            ),
-                                        );
-                                    } finally {
-                                        setCreatingPost(false);
-                                    }
+
+                            <Dialog
+                                open={newPostDialogOpen}
+                                onOpenChange={(open) => {
+                                    setNewPostDialogOpen(open);
                                 }}
                             >
-                                등록하기
-                            </Button>
-                        </div>
-
-                        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <h2 className="text-lg font-semibold text-slate-900">
-                                게시글 목록
-                            </h2>
-                            {supportPostsLoading ? (
-                                <p className="mt-4 text-sm text-slate-500">
-                                    불러오는 중…
-                                </p>
-                            ) : supportPosts.length === 0 ? (
-                                <p className="mt-4 text-sm text-slate-500">
-                                    등록된 글이 없습니다.
-                                </p>
-                            ) : (
-                                <div className="mt-4 overflow-x-auto">
-                                    <table className="w-full min-w-[600px] text-left text-sm">
-                                        <thead>
-                                            <tr className="border-b text-xs text-slate-500">
-                                                <th className="pb-2 pr-2">
-                                                    유형
-                                                </th>
-                                                <th className="pb-2 pr-2">
-                                                    중요
-                                                </th>
-                                                <th className="pb-2 pr-2">
-                                                    제목
-                                                </th>
-                                                <th className="pb-2 pr-2">
-                                                    글쓴이
-                                                </th>
-                                                <th className="pb-2 pr-2">
-                                                    작성일
-                                                </th>
-                                                <th className="pb-2">관리</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {supportPosts.map((p) => (
-                                                <tr
-                                                    key={p.id}
-                                                    className="border-b border-slate-100"
+                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                                    <DialogHeader>
+                                        <DialogTitle>
+                                            공지 / FAQ 등록
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            승객·기사·업체 고객센터에 노출됩니다.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-2">
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div>
+                                                <Label>게시 유형</Label>
+                                                <select
+                                                    className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                                    value={newPostKind}
+                                                    onChange={(e) =>
+                                                        setNewPostKind(
+                                                            e.target
+                                                                .value as
+                                                                | 'notice'
+                                                                | 'faq',
+                                                        )
+                                                    }
                                                 >
-                                                    <td className="whitespace-nowrap py-2 pr-2">
-                                                        {p.kind === 'faq'
-                                                            ? 'FAQ'
-                                                            : '공지'}
-                                                    </td>
-                                                    <td className="py-2 pr-2">
-                                                        {p.pinned ? (
-                                                            <Flag
-                                                                className="h-3.5 w-3.5 text-amber-600"
-                                                                strokeWidth={2}
-                                                                aria-label="중요"
-                                                            />
-                                                        ) : (
-                                                            <span className="text-slate-400">
-                                                                —
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="max-w-[220px] truncate py-2 pr-2">
-                                                        {p.title}
-                                                    </td>
-                                                    <td className="whitespace-nowrap py-2 pr-2 text-slate-600">
-                                                        {p.authorLabel}
-                                                    </td>
-                                                    <td className="whitespace-nowrap py-2 pr-2 text-slate-500">
-                                                        {p.createdAt.slice(
-                                                            0,
-                                                            10,
-                                                        )}
-                                                    </td>
-                                                    <td className="space-x-2 whitespace-nowrap py-2">
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setEditPost(p)
-                                                            }
-                                                        >
-                                                            수정
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="text-red-600"
-                                                            onClick={async () => {
-                                                                if (
-                                                                    !confirm(
-                                                                        '이 글을 삭제할까요?',
-                                                                    )
-                                                                )
-                                                                    return;
-                                                                setError('');
-                                                                try {
-                                                                    await adminAPI.deleteSupportPost(
-                                                                        p.id,
-                                                                    );
-                                                                    const data =
-                                                                        await adminAPI.getSupportPosts();
-                                                                    setSupportPosts(
-                                                                        data.posts ||
-                                                                            [],
-                                                                    );
-                                                                } catch (err: unknown) {
-                                                                    setError(
-                                                                        getErrorMessage(
-                                                                            err,
-                                                                            '삭제에 실패했습니다.',
-                                                                        ),
-                                                                    );
-                                                                }
-                                                            }}
-                                                        >
-                                                            삭제
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                                                    <option value="notice">
+                                                        공지사항
+                                                    </option>
+                                                    <option value="faq">
+                                                        자주 하는 질문
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div className="flex items-end pb-1">
+                                                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-slate-300"
+                                                        checked={newPostPinned}
+                                                        onChange={(e) =>
+                                                            setNewPostPinned(
+                                                                e.target
+                                                                    .checked,
+                                                            )
+                                                        }
+                                                    />
+                                                    중요 표시 (목록에 깃발)
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="support-new-title">
+                                                제목
+                                            </Label>
+                                            <Input
+                                                id="support-new-title"
+                                                className="mt-1"
+                                                value={newPostTitle}
+                                                onChange={(e) =>
+                                                    setNewPostTitle(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                maxLength={200}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="support-new-body">
+                                                본문
+                                            </Label>
+                                            <Textarea
+                                                id="support-new-body"
+                                                className="mt-1 min-h-[160px]"
+                                                value={newPostBody}
+                                                onChange={(e) =>
+                                                    setNewPostBody(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-500">
+                                            글쓴이는 현재 로그인한 관리자 계정의
+                                            역할로 자동 저장됩니다.
+                                        </p>
+                                        <div className="flex justify-end gap-2 pt-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() =>
+                                                    setNewPostDialogOpen(false)
+                                                }
+                                            >
+                                                취소
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                disabled={creatingPost}
+                                                onClick={async () => {
+                                                    setCreatingPost(true);
+                                                    setError('');
+                                                    try {
+                                                        await adminAPI.createSupportPost(
+                                                            {
+                                                                kind: newPostKind,
+                                                                title: newPostTitle.trim(),
+                                                                body: newPostBody.trim(),
+                                                                pinned: newPostPinned,
+                                                            },
+                                                        );
+                                                        setNewPostTitle('');
+                                                        setNewPostBody('');
+                                                        setNewPostPinned(
+                                                            false,
+                                                        );
+                                                        setNewPostDialogOpen(
+                                                            false,
+                                                        );
+                                                        const data =
+                                                            await adminAPI.getSupportPosts();
+                                                        setSupportPosts(
+                                                            data.posts || [],
+                                                        );
+                                                    } catch (err: unknown) {
+                                                        setError(
+                                                            getErrorMessage(
+                                                                err,
+                                                                '등록에 실패했습니다.',
+                                                            ),
+                                                        );
+                                                    } finally {
+                                                        setCreatingPost(false);
+                                                    }
+                                                }}
+                                            >
+                                                등록하기
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        </>
+                    ) : null}
 
                     <Dialog
                         open={Boolean(editPost)}
@@ -1986,7 +2105,7 @@ export default function AdminPage() {
                             ) : null}
                         </DialogContent>
                     </Dialog>
-                </>
+                </div>
             )}
 
             {activeTab === 'adminCreate' && adminRole === 'Super' && (
