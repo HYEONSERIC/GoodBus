@@ -278,12 +278,31 @@ export const adminAPI = {
         fetchAPI(`/admin/support-posts/${id}`, {
             method: 'DELETE',
         }),
+    getSupportInquiries: async () => fetchAPI('/admin/support-inquiries'),
+    getSupportInquiry: async (id: string) =>
+        fetchAPI(`/admin/support-inquiries/${id}`),
 };
 
 export const supportAPI = {
     listPosts: async (params: { kind: 'notice' | 'faq'; q?: string }) =>
         fetchAPI(`/support/posts${toQuery(params)}`),
     getPost: async (id: string) => fetchAPI(`/support/posts/${id}`),
+    createInquiry: async (body: {
+        category:
+            | 'quote_amount'
+            | 'reservation_progress'
+            | 'verification'
+            | 'other';
+        title: string;
+        body: string;
+    }) =>
+        fetchAPI('/support/inquiries', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    listMyInquiries: async () => fetchAPI('/support/my-inquiries'),
+    getMyInquiry: async (id: string) =>
+        fetchAPI(`/support/my-inquiries/${id}`),
 };
 
 export const verificationAPI = {

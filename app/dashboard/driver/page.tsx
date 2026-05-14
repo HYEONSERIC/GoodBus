@@ -11,6 +11,7 @@ import {
     chatsAPI,
     verificationAPI,
     profileAPI,
+    supportAPI,
 } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -140,6 +141,15 @@ export default function DriverDashboard() {
     const [driverSupportStep, setDriverSupportStep] = useState<
         'menu' | 'form' | 'done'
     >('menu');
+    const [driverSupportCategory, setDriverSupportCategory] = useState<
+        'quote_amount' | 'verification' | 'other' | null
+    >(null);
+    const [driverInquiryTitle, setDriverInquiryTitle] = useState('');
+    const [driverInquiryBody, setDriverInquiryBody] = useState('');
+    const [driverInquirySubmitting, setDriverInquirySubmitting] =
+        useState(false);
+    const [driverInquiryFormError, setDriverInquiryFormError] = useState('');
+    const [driverInquiryListKey, setDriverInquiryListKey] = useState(0);
     const [membershipPrevTab, setMembershipPrevTab] = useState<
         'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
     >('available');
@@ -1189,10 +1199,16 @@ export default function DriverDashboard() {
                     open={driverSupportOpen}
                     onOpenChange={(open) => {
                         setDriverSupportOpen(open);
-                        if (!open) setDriverSupportStep('menu');
+                        if (!open) {
+                            setDriverSupportStep('menu');
+                            setDriverSupportCategory(null);
+                            setDriverInquiryTitle('');
+                            setDriverInquiryBody('');
+                            setDriverInquiryFormError('');
+                        }
                     }}
                 >
-                    <DialogContent>
+                    <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>문의하기</DialogTitle>
                             <DialogDescription>
@@ -1204,21 +1220,37 @@ export default function DriverDashboard() {
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory(
+                                            'quote_amount',
+                                        );
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     입찰·견적 문의
                                 </Button>
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory(
+                                            'verification',
+                                        );
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     자격증·인증 문의
                                 </Button>
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory('other');
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     기타 문의
                                 </Button>
@@ -1226,13 +1258,112 @@ export default function DriverDashboard() {
                         )}
                         {driverSupportStep === 'form' && (
                             <div className="space-y-4">
+                                {driverInquiryFormError ? (
+                                    <p className="text-sm text-red-600">
+                                        {driverInquiryFormError}
+                                    </p>
+                                ) : null}
                                 <div>
-                                    <Label>문의 내용</Label>
-                                    <Textarea placeholder="문의 내용을 입력하세요" />
+                                    <Label htmlFor="driver-inquiry-title">
+                                        제목
+                                    </Label>
+                                    <Input
+                                        id="driver-inquiry-title"
+                                        className="mt-1"
+                                        value={driverInquiryTitle}
+                                        onChange={(e) =>
+                                            setDriverInquiryTitle(
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="문의 제목을 입력하세요"
+                                        maxLength={200}
+                                    />
                                 </div>
-                                <Button onClick={() => setDriverSupportStep('done')}>
-                                    문의하기
-                                </Button>
+                                <div>
+                                    <Label htmlFor="driver-inquiry-body">
+                                        문의 내용
+                                    </Label>
+                                    <Textarea
+                                        id="driver-inquiry-body"
+                                        className="mt-1 min-h-[140px]"
+                                        placeholder="문의 내용을 입력하세요"
+                                        value={driverInquiryBody}
+                                        onChange={(e) =>
+                                            setDriverInquiryBody(
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setDriverSupportStep('menu');
+                                            setDriverInquiryFormError('');
+                                        }}
+                                    >
+                                        이전
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        disabled={
+                                            driverInquirySubmitting ||
+                                            !driverSupportCategory
+                                        }
+                                        onClick={async () => {
+                                            const title =
+                                                driverInquiryTitle.trim();
+                                            const body =
+                                                driverInquiryBody.trim();
+                                            if (!title) {
+                                                setDriverInquiryFormError(
+                                                    '제목을 입력해주세요.',
+                                                );
+                                                return;
+                                            }
+                                            if (!body) {
+                                                setDriverInquiryFormError(
+                                                    '문의 내용을 입력해주세요.',
+                                                );
+                                                return;
+                                            }
+                                            setDriverInquirySubmitting(true);
+                                            setDriverInquiryFormError('');
+                                            try {
+                                                await supportAPI.createInquiry(
+                                                    {
+                                                        category:
+                                                            driverSupportCategory!,
+                                                        title,
+                                                        body,
+                                                    },
+                                                );
+                                                setDriverInquiryListKey(
+                                                    (k) => k + 1,
+                                                );
+                                                setDriverInquiryTitle('');
+                                                setDriverInquiryBody('');
+                                                setDriverSupportCategory(null);
+                                                setDriverSupportStep('done');
+                                            } catch (e) {
+                                                setDriverInquiryFormError(
+                                                    e instanceof Error
+                                                        ? e.message
+                                                        : '문의 접수에 실패했습니다.',
+                                                );
+                                            } finally {
+                                                setDriverInquirySubmitting(
+                                                    false,
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        문의하기
+                                    </Button>
+                                </div>
                             </div>
                         )}
                         {driverSupportStep === 'done' && (
@@ -2725,6 +2856,7 @@ export default function DriverDashboard() {
                     <SupportCustomerCenter
                         heading="고객센터"
                         showInquiry
+                        refreshMyInquiriesKey={driverInquiryListKey}
                         onInquiryClick={() => {
                             setDriverSupportOpen(true);
                             setDriverSupportStep('menu');

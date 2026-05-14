@@ -10,7 +10,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, chatsAPI, tripsAPI } from '@/lib/api';
+import { authAPI, chatsAPI, tripsAPI, supportAPI } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -116,6 +116,15 @@ export default function PassengerDashboard() {
     const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
         'menu',
     );
+    const [supportCategory, setSupportCategory] = useState<
+        'quote_amount' | 'reservation_progress' | 'other' | null
+    >(null);
+    const [supportInquiryTitle, setSupportInquiryTitle] = useState('');
+    const [supportInquiryBody, setSupportInquiryBody] = useState('');
+    const [supportInquirySubmitting, setSupportInquirySubmitting] =
+        useState(false);
+    const [supportInquiryFormError, setSupportInquiryFormError] = useState('');
+    const [supportInquiryListKey, setSupportInquiryListKey] = useState(0);
     const [newTrip, setNewTrip] = useState({
         origin: '',
         originX: null as number | null,
@@ -2692,6 +2701,7 @@ export default function PassengerDashboard() {
                     <SupportCustomerCenter
                         heading="고객센터"
                         showInquiry
+                        refreshMyInquiriesKey={supportInquiryListKey}
                         onInquiryClick={() => {
                             setSupportOpen(true);
                             setSupportStep('menu');
@@ -2773,8 +2783,20 @@ export default function PassengerDashboard() {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
-                <DialogContent>
+            <Dialog
+                open={supportOpen}
+                onOpenChange={(open) => {
+                    setSupportOpen(open);
+                    if (!open) {
+                        setSupportStep('menu');
+                        setSupportCategory(null);
+                        setSupportInquiryTitle('');
+                        setSupportInquiryBody('');
+                        setSupportInquiryFormError('');
+                    }
+                }}
+            >
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>문의하기</DialogTitle>
                         <DialogDescription>
@@ -2786,21 +2808,33 @@ export default function PassengerDashboard() {
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('quote_amount');
+                                    setSupportStep('form');
+                                }}
                             >
                                 견적 금액 문의
                             </Button>
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('reservation_progress');
+                                    setSupportStep('form');
+                                }}
                             >
                                 예약 진행 문의
                             </Button>
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('other');
+                                    setSupportStep('form');
+                                }}
                             >
                                 기타 문의
                             </Button>
@@ -2808,13 +2842,99 @@ export default function PassengerDashboard() {
                     )}
                     {supportStep === 'form' && (
                         <div className="space-y-4">
+                            {supportInquiryFormError ? (
+                                <p className="text-sm text-red-600">
+                                    {supportInquiryFormError}
+                                </p>
+                            ) : null}
                             <div>
-                                <Label>문의 내용</Label>
-                                <Textarea placeholder="문의 내용을 입력하세요" />
+                                <Label htmlFor="passenger-inquiry-title">
+                                    제목
+                                </Label>
+                                <Input
+                                    id="passenger-inquiry-title"
+                                    className="mt-1"
+                                    value={supportInquiryTitle}
+                                    onChange={(e) =>
+                                        setSupportInquiryTitle(e.target.value)
+                                    }
+                                    placeholder="문의 제목을 입력하세요"
+                                    maxLength={200}
+                                />
                             </div>
-                            <Button onClick={() => setSupportStep('done')}>
-                                문의하기
-                            </Button>
+                            <div>
+                                <Label htmlFor="passenger-inquiry-body">
+                                    문의 내용
+                                </Label>
+                                <Textarea
+                                    id="passenger-inquiry-body"
+                                    className="mt-1 min-h-[140px]"
+                                    placeholder="문의 내용을 입력하세요"
+                                    value={supportInquiryBody}
+                                    onChange={(e) =>
+                                        setSupportInquiryBody(e.target.value)
+                                    }
+                                />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSupportStep('menu');
+                                        setSupportInquiryFormError('');
+                                    }}
+                                >
+                                    이전
+                                </Button>
+                                <Button
+                                    type="button"
+                                    disabled={
+                                        supportInquirySubmitting ||
+                                        !supportCategory
+                                    }
+                                    onClick={async () => {
+                                        const title = supportInquiryTitle.trim();
+                                        const body = supportInquiryBody.trim();
+                                        if (!title) {
+                                            setSupportInquiryFormError(
+                                                '제목을 입력해주세요.',
+                                            );
+                                            return;
+                                        }
+                                        if (!body) {
+                                            setSupportInquiryFormError(
+                                                '문의 내용을 입력해주세요.',
+                                            );
+                                            return;
+                                        }
+                                        setSupportInquirySubmitting(true);
+                                        setSupportInquiryFormError('');
+                                        try {
+                                            await supportAPI.createInquiry({
+                                                category: supportCategory!,
+                                                title,
+                                                body,
+                                            });
+                                            setSupportInquiryListKey((k) => k + 1);
+                                            setSupportInquiryTitle('');
+                                            setSupportInquiryBody('');
+                                            setSupportCategory(null);
+                                            setSupportStep('done');
+                                        } catch (e) {
+                                            setSupportInquiryFormError(
+                                                e instanceof Error
+                                                    ? e.message
+                                                    : '문의 접수에 실패했습니다.',
+                                            );
+                                        } finally {
+                                            setSupportInquirySubmitting(false);
+                                        }
+                                    }}
+                                >
+                                    문의하기
+                                </Button>
+                            </div>
                         </div>
                     )}
                     {supportStep === 'done' && (

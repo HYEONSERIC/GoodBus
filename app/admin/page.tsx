@@ -28,6 +28,33 @@ interface SupportAdminPostRow {
     updatedAt: string;
 }
 
+interface SupportInquiryAdminRow {
+    id: string;
+    title: string;
+    category: string;
+    categoryLabel: string;
+    createdAt: string;
+    authorEmail: string;
+    authorRole: string;
+    authorDisplay: string;
+}
+
+interface SupportInquiryDetail {
+    id: string;
+    title: string;
+    body: string;
+    category: string;
+    categoryLabel: string;
+    createdAt: string;
+    user: {
+        email: string;
+        role: string;
+        displayName: string | null;
+        companyName: string | null;
+        phoneNumber: string | null;
+    };
+}
+
 interface OverviewResponse {
     counts: {
         users: number;
@@ -255,6 +282,17 @@ export default function AdminPage() {
         'posts',
     );
     const [newPostDialogOpen, setNewPostDialogOpen] = useState(false);
+    const [supportInquiries, setSupportInquiries] = useState<
+        SupportInquiryAdminRow[]
+    >([]);
+    const [supportInquiriesLoading, setSupportInquiriesLoading] =
+        useState(false);
+    const [supportInquiryDetailOpen, setSupportInquiryDetailOpen] =
+        useState(false);
+    const [supportInquiryDetail, setSupportInquiryDetail] =
+        useState<SupportInquiryDetail | null>(null);
+    const [supportInquiryDetailLoading, setSupportInquiryDetailLoading] =
+        useState(false);
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -334,6 +372,32 @@ export default function AdminPage() {
     useEffect(() => {
         if (faqSectionTab !== 'posts') setNewPostDialogOpen(false);
     }, [faqSectionTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'faq' || faqSectionTab !== 'inquiries') return;
+        let cancelled = false;
+        (async () => {
+            setSupportInquiriesLoading(true);
+            try {
+                const data = await adminAPI.getSupportInquiries();
+                if (!cancelled) setSupportInquiries(data.inquiries || []);
+            } catch (err: unknown) {
+                if (!cancelled) {
+                    setError(
+                        getErrorMessage(
+                            err,
+                            '문의 목록을 불러오지 못했습니다.',
+                        ),
+                    );
+                }
+            } finally {
+                if (!cancelled) setSupportInquiriesLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, faqSectionTab]);
 
     useEffect(() => {
         if (!editPost) return;
@@ -1676,20 +1740,184 @@ export default function AdminPage() {
                     </div>
 
                     {faqSectionTab === 'inquiries' ? (
-                        <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                            <div>
-                                <h2 className="text-lg font-semibold text-slate-900">
-                                    1:1 문의
-                                </h2>
-                                <p className="mt-1 text-sm text-slate-600">
-                                    사용자 문의 접수·답변 기능은 추후
-                                    연동됩니다.
-                                </p>
+                        <>
+                            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-slate-900">
+                                        1:1 문의
+                                    </h2>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        사용자가 문의하기로 접수한 내용입니다.
+                                        제목을 누르면 전체 내용을 볼 수 있습니다.
+                                    </p>
+                                </div>
+                                {supportInquiriesLoading ? (
+                                    <p className="text-sm text-slate-500">
+                                        불러오는 중…
+                                    </p>
+                                ) : supportInquiries.length === 0 ? (
+                                    <p className="text-sm text-slate-500">
+                                        접수된 문의가 없습니다.
+                                    </p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full min-w-[520px] text-left text-sm">
+                                            <thead>
+                                                <tr className="border-b text-xs text-slate-500">
+                                                    <th className="pb-2 pr-2">
+                                                        제목
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        유형
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        작성자
+                                                    </th>
+                                                    <th className="pb-2">
+                                                        접수일
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {supportInquiries.map((row) => (
+                                                    <tr
+                                                        key={row.id}
+                                                        className="border-b border-slate-100"
+                                                    >
+                                                        <td className="max-w-[200px] py-2 pr-2">
+                                                            <button
+                                                                type="button"
+                                                                className="w-full truncate text-left font-medium text-slate-900 underline-offset-2 hover:underline"
+                                                                onClick={async () => {
+                                                                    setSupportInquiryDetailOpen(
+                                                                        true,
+                                                                    );
+                                                                    setSupportInquiryDetail(
+                                                                        null,
+                                                                    );
+                                                                    setSupportInquiryDetailLoading(
+                                                                        true,
+                                                                    );
+                                                                    try {
+                                                                        const data =
+                                                                            await adminAPI.getSupportInquiry(
+                                                                                row.id,
+                                                                            );
+                                                                        setSupportInquiryDetail(
+                                                                            data.inquiry,
+                                                                        );
+                                                                    } catch (err: unknown) {
+                                                                        setError(
+                                                                            getErrorMessage(
+                                                                                err,
+                                                                                '문의를 불러오지 못했습니다.',
+                                                                            ),
+                                                                        );
+                                                                        setSupportInquiryDetailOpen(
+                                                                            false,
+                                                                        );
+                                                                    } finally {
+                                                                        setSupportInquiryDetailLoading(
+                                                                            false,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {row.title}
+                                                            </button>
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-600">
+                                                            {row.categoryLabel}
+                                                        </td>
+                                                        <td className="max-w-[160px] truncate py-2 pr-2 text-slate-600">
+                                                            {row.authorDisplay}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 text-slate-500">
+                                                            {row.createdAt.slice(
+                                                                0,
+                                                                10,
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
-                            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center text-sm text-slate-500">
-                                문의 목록 / 상세 / 답변 UI가 들어올 자리입니다.
-                            </div>
-                        </div>
+
+                            <Dialog
+                                open={supportInquiryDetailOpen}
+                                onOpenChange={(open) => {
+                                    setSupportInquiryDetailOpen(open);
+                                    if (!open) setSupportInquiryDetail(null);
+                                }}
+                            >
+                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                                    {supportInquiryDetailLoading &&
+                                    !supportInquiryDetail ? (
+                                        <>
+                                            <DialogHeader>
+                                                <DialogTitle className="sr-only">
+                                                    문의 상세
+                                                </DialogTitle>
+                                            </DialogHeader>
+                                            <p className="py-6 text-center text-sm text-slate-500">
+                                                불러오는 중…
+                                            </p>
+                                        </>
+                                    ) : supportInquiryDetail ? (
+                                        <>
+                                            <DialogHeader>
+                                                <DialogTitle className="text-left leading-snug">
+                                                    {supportInquiryDetail.title}
+                                                </DialogTitle>
+                                                <DialogDescription className="text-left text-slate-600">
+                                                    {supportInquiryDetail.categoryLabel}{' '}
+                                                    ·{' '}
+                                                    {supportInquiryDetail.createdAt.slice(
+                                                        0,
+                                                        10,
+                                                    )}
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-3 text-sm">
+                                                <div className="rounded-md border border-slate-100 bg-slate-50/80 p-3 text-slate-700">
+                                                    <p className="text-xs font-medium text-slate-500">
+                                                        작성자
+                                                    </p>
+                                                    <p className="mt-0.5 break-all">
+                                                        {
+                                                            supportInquiryDetail
+                                                                .user.email
+                                                        }
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500">
+                                                        역할:{' '}
+                                                        {
+                                                            supportInquiryDetail
+                                                                .user.role
+                                                        }
+                                                        {supportInquiryDetail
+                                                            .user.phoneNumber
+                                                            ? ` · ${supportInquiryDetail.user.phoneNumber}`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-medium text-slate-500">
+                                                        문의 내용
+                                                    </p>
+                                                    <div className="mt-1 whitespace-pre-wrap break-words rounded-md border border-slate-100 bg-white p-3 text-slate-800">
+                                                        {supportInquiryDetail.body}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : null}
+                                </DialogContent>
+                            </Dialog>
+                        </>
                     ) : null}
 
                     {faqSectionTab === 'posts' ? (
@@ -1765,11 +1993,12 @@ export default function AdminPage() {
                                                                 10,
                                                             )}
                                                         </td>
-                                                        <td className="space-x-2 whitespace-nowrap py-2">
+                                                        <td className="whitespace-nowrap py-2">
+                                                            <div className="flex flex-wrap items-center gap-2">
                                                             <Button
                                                                 type="button"
                                                                 variant="outline"
-                                                                size="sm"
+                                                                className="h-9 border-slate-300 bg-white px-3 font-medium text-slate-800 hover:bg-slate-50"
                                                                 onClick={() =>
                                                                     setEditPost(
                                                                         p,
@@ -1781,8 +2010,7 @@ export default function AdminPage() {
                                                             <Button
                                                                 type="button"
                                                                 variant="outline"
-                                                                size="sm"
-                                                                className="text-red-600"
+                                                                className="h-9 border-red-200 bg-white px-3 font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
                                                                 onClick={async () => {
                                                                     if (
                                                                         !confirm(
@@ -1813,6 +2041,7 @@ export default function AdminPage() {
                                                             >
                                                                 삭제
                                                             </Button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -1823,6 +2052,7 @@ export default function AdminPage() {
                                 <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
                                     <Button
                                         type="button"
+                                        className="h-9 min-w-[5.5rem] bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-black"
                                         onClick={() => {
                                             setError('');
                                             setNewPostKind('notice');
@@ -1843,7 +2073,7 @@ export default function AdminPage() {
                                     setNewPostDialogOpen(open);
                                 }}
                             >
-                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
                                     <DialogHeader>
                                         <DialogTitle>
                                             공지 / FAQ 등록
@@ -1932,6 +2162,7 @@ export default function AdminPage() {
                                             <Button
                                                 type="button"
                                                 variant="outline"
+                                                className="h-9 border-slate-300"
                                                 onClick={() =>
                                                     setNewPostDialogOpen(false)
                                                 }
@@ -1941,6 +2172,7 @@ export default function AdminPage() {
                                             <Button
                                                 type="button"
                                                 disabled={creatingPost}
+                                                className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
                                                 onClick={async () => {
                                                     setCreatingPost(true);
                                                     setError('');
@@ -1993,7 +2225,7 @@ export default function AdminPage() {
                             if (!open) setEditPost(null);
                         }}
                     >
-                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
                             <DialogHeader>
                                 <DialogTitle>게시글 수정</DialogTitle>
                                 <DialogDescription>
@@ -2059,6 +2291,7 @@ export default function AdminPage() {
                                         <Button
                                             type="button"
                                             variant="outline"
+                                            className="h-9 border-slate-300"
                                             onClick={() => setEditPost(null)}
                                         >
                                             취소
@@ -2066,6 +2299,7 @@ export default function AdminPage() {
                                         <Button
                                             type="button"
                                             disabled={savingEdit}
+                                            className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
                                             onClick={async () => {
                                                 if (!editPost) return;
                                                 setSavingEdit(true);

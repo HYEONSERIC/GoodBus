@@ -7,6 +7,7 @@ import {
     formatSupportAuthorLabel,
     parseSupportPostKind,
 } from '../utils/supportPost';
+import { formatSupportInquiryCategory } from '../utils/supportInquiry';
 import {
     attachNotificationHistoryDetails,
     buildReadAtFilter,
@@ -826,6 +827,109 @@ router.delete(
             res.json({ ok: true });
         } catch (e) {
             console.error('admin support delete', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.get(
+    '/support-inquiries',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (_req, res) => {
+        try {
+            const rows = await prisma.supportInquiry.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 300,
+                select: {
+                    id: true,
+                    title: true,
+                    category: true,
+                    createdAt: true,
+                    user: {
+                        select: {
+                            email: true,
+                            role: true,
+                            displayName: true,
+                            companyName: true,
+                        },
+                    },
+                },
+            });
+
+            res.json({
+                inquiries: rows.map((r) => ({
+                    id: r.id,
+                    title: r.title,
+                    category: r.category,
+                    categoryLabel: formatSupportInquiryCategory(r.category),
+                    createdAt: r.createdAt.toISOString(),
+                    authorEmail: r.user.email,
+                    authorRole: r.user.role,
+                    authorDisplay:
+                        r.user.displayName ||
+                        r.user.companyName ||
+                        r.user.email,
+                })),
+            });
+        } catch (e) {
+            console.error('admin support inquiries list', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.get(
+    '/support-inquiries/:id',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const id = String(req.params.id || '').trim();
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+
+            const row = await prisma.supportInquiry.findUnique({
+                where: { id },
+                select: {
+                    id: true,
+                    title: true,
+                    body: true,
+                    category: true,
+                    createdAt: true,
+                    user: {
+                        select: {
+                            email: true,
+                            role: true,
+                            displayName: true,
+                            companyName: true,
+                            phoneNumber: true,
+                        },
+                    },
+                },
+            });
+            if (!row) {
+                return res.status(404).json({ error: 'Not found' });
+            }
+
+            res.json({
+                inquiry: {
+                    id: row.id,
+                    title: row.title,
+                    body: row.body,
+                    category: row.category,
+                    categoryLabel: formatSupportInquiryCategory(row.category),
+                    createdAt: row.createdAt.toISOString(),
+                    user: {
+                        email: row.user.email,
+                        role: row.user.role,
+                        displayName: row.user.displayName,
+                        companyName: row.user.companyName,
+                        phoneNumber: row.user.phoneNumber,
+                    },
+                },
+            });
+        } catch (e) {
+            console.error('admin support inquiry detail', e);
             res.status(500).json({ error: 'Internal server error' });
         }
     },

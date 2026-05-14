@@ -60,6 +60,13 @@ enum SupportPostKind {
   faq
 }
 
+enum SupportInquiryCategory {
+  quote_amount
+  reservation_progress
+  verification
+  other
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -94,6 +101,7 @@ model User {
   chatRoomsAsBidder    ChatRoom[] @relation("BidderChatRooms")
   chatMessages         ChatMessage[] @relation("ChatMessageSender")
   supportPostsCreated  SupportPost[] @relation("SupportPostAuthor")
+  supportInquiries     SupportInquiry[]
 }
 
 model SupportPost {
@@ -110,6 +118,19 @@ model SupportPost {
 
   @@index([kind, createdAt])
   @@index([kind, pinned, createdAt])
+}
+
+model SupportInquiry {
+  id        String                  @id @default(cuid())
+  userId    String
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  SupportInquiryCategory
+  title     String
+  body      String                  @db.Text
+  createdAt DateTime                @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model Trip {
