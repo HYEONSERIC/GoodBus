@@ -249,6 +249,41 @@ export const adminAPI = {
             method: 'PATCH',
             body: JSON.stringify({ status, reason }),
         }),
+    getSupportPosts: async (params?: { kind?: string }) =>
+        fetchAPI(`/admin/support-posts${toQuery(params)}`),
+    createSupportPost: async (body: {
+        kind: 'notice' | 'faq';
+        title: string;
+        body: string;
+        pinned: boolean;
+    }) =>
+        fetchAPI('/admin/support-posts', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    updateSupportPost: async (
+        id: string,
+        body: Partial<{
+            kind: 'notice' | 'faq';
+            title: string;
+            body: string;
+            pinned: boolean;
+        }>
+    ) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+    deleteSupportPost: async (id: string) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'DELETE',
+        }),
+};
+
+export const supportAPI = {
+    listPosts: async (params: { kind: 'notice' | 'faq'; q?: string }) =>
+        fetchAPI(`/support/posts${toQuery(params)}`),
+    getPost: async (id: string) => fetchAPI(`/support/posts/${id}`),
 };
 
 export const verificationAPI = {

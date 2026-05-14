@@ -2,7 +2,11 @@ import express from 'express';
 import path from 'path';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole, AdminRole } from '@prisma/client';
+import { UserRole, AdminRole, SupportPostKind } from '@prisma/client';
+import {
+    formatSupportAuthorLabel,
+    parseSupportPostKind,
+} from '../utils/supportPost';
 import {
     attachNotificationHistoryDetails,
     buildReadAtFilter,
@@ -588,6 +592,243 @@ router.post(
 
         res.status(201).json({ admin });
     }
+);
+
+router.get(
+    '/support-posts',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const kindParam = req.query.kind;
+            const kind =
+                kindParam === undefined || String(kindParam).trim() === ''
+                    ? undefined
+                    : parseSupportPostKind(kindParam);
+            if (kindParam !== undefined && String(kindParam).trim() !== '' && !kind) {
+                return res.status(400).json({ error: 'Invalid kind' });
+            }
+
+            const posts = await prisma.supportPost.findMany({
+                where: kind ? { kind } : {},
+                orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+                take: 200,
+                select: {
+                    id: true,
+                    kind: true,
+                    title: true,
+                    body: true,
+                    pinned: true,
+                    authorRole: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+
+            res.json({
+                posts: posts.map((p) => ({
+                    id: p.id,
+                    kind: p.kind,
+                    title: p.title,
+                    body: p.body,
+                    pinned: p.pinned,
+                    authorLabel: formatSupportAuthorLabel(p.authorRole),
+                    authorRole: p.authorRole,
+                    createdAt: p.createdAt.toISOString(),
+                    updatedAt: p.updatedAt.toISOString(),
+                })),
+            });
+        } catch (e) {
+            console.error('admin support list', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.post(
+    '/support-posts',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const adminUser = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: { role: true, adminRole: true },
+            });
+            if (
+                adminUser?.role !== UserRole.Admin ||
+                !adminUser.adminRole
+            ) {
+                return res
+                    .status(403)
+                    .json({ error: '관리자 역할이 없는 계정입니다.' });
+            }
+
+            const kind = parseSupportPostKind(req.body?.kind);
+            if (!kind) {
+                return res
+                    .status(400)
+                    .json({ error: 'kind must be notice or faq' });
+            }
+
+            const title = String(req.body?.title || '').trim();
+            const body = String(req.body?.body || '').trim();
+            const pinned = Boolean(req.body?.pinned);
+
+            if (!title || !body) {
+                return res
+                    .status(400)
+                    .json({ error: '제목과 본문을 입력하세요.' });
+            }
+            if (title.length > 200) {
+                return res
+                    .status(400)
+                    .json({ error: '제목은 200자 이하입니다.' });
+            }
+            if (body.length > 20000) {
+                return res
+                    .status(400)
+                    .json({ error: '본문은 20000자 이하입니다.' });
+            }
+
+            const post = await prisma.supportPost.create({
+                data: {
+                    kind,
+                    title,
+                    body,
+                    pinned,
+                    authorRole: adminUser.adminRole,
+                    createdById: req.user!.userId,
+                },
+                select: {
+                    id: true,
+                    kind: true,
+                    title: true,
+                    body: true,
+                    pinned: true,
+                    authorRole: true,
+                    createdAt: true,
+                },
+            });
+
+            res.status(201).json({
+                post: {
+                    ...post,
+                    authorLabel: formatSupportAuthorLabel(post.authorRole),
+                    createdAt: post.createdAt.toISOString(),
+                },
+            });
+        } catch (e) {
+            console.error('admin support create', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.patch(
+    '/support-posts/:id',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const id = String(req.params.id || '').trim();
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+
+            const existing = await prisma.supportPost.findUnique({
+                where: { id },
+            });
+            if (!existing) {
+                return res.status(404).json({ error: 'Not found' });
+            }
+
+            const data: {
+                kind?: SupportPostKind;
+                title?: string;
+                body?: string;
+                pinned?: boolean;
+            } = {};
+
+            if (Object.prototype.hasOwnProperty.call(req.body, 'kind')) {
+                const kind = parseSupportPostKind(req.body?.kind);
+                if (!kind) {
+                    return res
+                        .status(400)
+                        .json({ error: 'kind must be notice or faq' });
+                }
+                data.kind = kind;
+            }
+            if (Object.prototype.hasOwnProperty.call(req.body, 'title')) {
+                const title = String(req.body?.title || '').trim();
+                if (!title || title.length > 200) {
+                    return res
+                        .status(400)
+                        .json({ error: '제목은 1~200자입니다.' });
+                }
+                data.title = title;
+            }
+            if (Object.prototype.hasOwnProperty.call(req.body, 'body')) {
+                const body = String(req.body?.body || '').trim();
+                if (!body || body.length > 20000) {
+                    return res
+                        .status(400)
+                        .json({ error: '본문은 1~20000자입니다.' });
+                }
+                data.body = body;
+            }
+            if (Object.prototype.hasOwnProperty.call(req.body, 'pinned')) {
+                data.pinned = Boolean(req.body?.pinned);
+            }
+
+            if (Object.keys(data).length === 0) {
+                return res.status(400).json({ error: 'No fields to update' });
+            }
+
+            const post = await prisma.supportPost.update({
+                where: { id },
+                data,
+                select: {
+                    id: true,
+                    kind: true,
+                    title: true,
+                    body: true,
+                    pinned: true,
+                    authorRole: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+
+            res.json({
+                post: {
+                    ...post,
+                    authorLabel: formatSupportAuthorLabel(post.authorRole),
+                    createdAt: post.createdAt.toISOString(),
+                    updatedAt: post.updatedAt.toISOString(),
+                },
+            });
+        } catch (e) {
+            console.error('admin support patch', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.delete(
+    '/support-posts/:id',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const id = String(req.params.id || '').trim();
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+
+            await prisma.supportPost.deleteMany({ where: { id } });
+            res.json({ ok: true });
+        } catch (e) {
+            console.error('admin support delete', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
 );
 
 export default router;

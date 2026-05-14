@@ -55,6 +55,11 @@ enum BidStatus {
   lost
 }
 
+enum SupportPostKind {
+  notice
+  faq
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -88,6 +93,23 @@ model User {
   chatRoomsAsPassenger ChatRoom[] @relation("PassengerChatRooms")
   chatRoomsAsBidder    ChatRoom[] @relation("BidderChatRooms")
   chatMessages         ChatMessage[] @relation("ChatMessageSender")
+  supportPostsCreated  SupportPost[] @relation("SupportPostAuthor")
+}
+
+model SupportPost {
+  id          String           @id @default(cuid())
+  kind        SupportPostKind
+  title       String
+  body        String           @db.Text
+  pinned      Boolean          @default(false)
+  authorRole  AdminRole
+  createdById String?
+  createdBy   User?            @relation("SupportPostAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([kind, createdAt])
+  @@index([kind, pinned, createdAt])
 }
 
 model Trip {

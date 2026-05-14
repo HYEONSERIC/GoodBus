@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
+import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
@@ -1346,15 +1347,12 @@ export default function CompanyDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            고객센터 문의 영역입니다. 문의 유형별로 분류하고
-                            처리 상태를 추적하도록 확장할 수 있습니다.
-                            <Button className="mt-2 w-full sm:w-auto">
-                                문의하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="mx-auto w-full max-w-xl">
+                        <SupportCustomerCenter
+                            heading="고객센터"
+                            showInquiry={false}
+                        />
+                    </div>
                 )}
 
 
