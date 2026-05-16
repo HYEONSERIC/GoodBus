@@ -128,6 +128,7 @@ router.get('/my-inquiries', requireAuth, async (req, res) => {
                 title: true,
                 category: true,
                 createdAt: true,
+                repliedAt: true,
             },
         });
 
@@ -138,6 +139,9 @@ router.get('/my-inquiries', requireAuth, async (req, res) => {
                 category: r.category,
                 categoryLabel: formatSupportInquiryCategory(r.category),
                 createdAt: r.createdAt.toISOString(),
+                repliedAt: r.repliedAt
+                    ? r.repliedAt.toISOString()
+                    : null,
             })),
         });
     } catch (e) {
@@ -165,6 +169,8 @@ router.get('/my-inquiries/:id', requireAuth, async (req, res) => {
                 body: true,
                 category: true,
                 createdAt: true,
+                adminReply: true,
+                repliedAt: true,
             },
         });
         if (!row) {
@@ -179,6 +185,10 @@ router.get('/my-inquiries/:id', requireAuth, async (req, res) => {
                 category: row.category,
                 categoryLabel: formatSupportInquiryCategory(row.category),
                 createdAt: row.createdAt.toISOString(),
+                adminReply: row.adminReply,
+                repliedAt: row.repliedAt
+                    ? row.repliedAt.toISOString()
+                    : null,
             },
         });
     } catch (e) {

@@ -2,12 +2,16 @@ import express from 'express';
 import path from 'path';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole, AdminRole, SupportPostKind } from '@prisma/client';
+import { UserRole, AdminRole, SupportPostKind, TripStatus } from '@prisma/client';
 import {
     formatSupportAuthorLabel,
     parseSupportPostKind,
 } from '../utils/supportPost';
 import { formatSupportInquiryCategory } from '../utils/supportInquiry';
+import {
+    groupTripsForDisplay,
+    summarizePassengerTrips,
+} from '../utils/tripGroups';
 import {
     attachNotificationHistoryDetails,
     buildReadAtFilter,
@@ -19,13 +23,16 @@ import {
 const router = express.Router();
 
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
+    const activeTripWhere = { status: { not: TripStatus.cancelled } };
+
     const [userCount, tripCount, bidCount] = await Promise.all([
         prisma.user.count(),
-        prisma.trip.count(),
+        prisma.trip.count({ where: activeTripWhere }),
         prisma.bid.count(),
     ]);
 
     const recentTrips = await prisma.trip.findMany({
+        where: activeTripWhere,
         take: 20,
         orderBy: { createdAt: 'desc' },
         include: {
@@ -244,7 +251,9 @@ router.get(
                 createdAt: true,
                 _count: {
                     select: {
-                        tripsAsPassenger: true,
+                        tripsAsPassenger: {
+                            where: { status: { not: TripStatus.cancelled } },
+                        },
                         bids: true,
                     },
                 },
@@ -255,7 +264,26 @@ router.get(
             return res.status(404).json({ error: 'User not found' });
         }
 
-        res.json({ user });
+        let tripSummary: ReturnType<typeof summarizePassengerTrips> | null =
+            null;
+        if (user.role === UserRole.Passenger) {
+            const passengerTrips = await prisma.trip.findMany({
+                where: {
+                    passengerId: user.id,
+                    status: { not: TripStatus.cancelled },
+                },
+                select: {
+                    id: true,
+                    origin: true,
+                    destination: true,
+                    dateTime: true,
+                    status: true,
+                },
+            });
+            tripSummary = summarizePassengerTrips(passengerTrips);
+        }
+
+        res.json({ user, tripSummary });
     }
 );
 
@@ -267,18 +295,29 @@ router.get(
         const userId = req.params.id;
         const take = Math.min(Number(req.query.take) || 10, 50);
 
-        const trips = await prisma.trip.findMany({
-            where: { passengerId: userId },
+        const now = new Date();
+        const tripRows = await prisma.trip.findMany({
+            where: {
+                passengerId: userId,
+                status: { not: TripStatus.cancelled },
+                OR: [
+                    { status: { not: TripStatus.open } },
+                    { dateTime: { gte: now } },
+                ],
+            },
             orderBy: { createdAt: 'desc' },
-            take,
+            take: 50,
             select: {
                 id: true,
                 origin: true,
                 destination: true,
+                dateTime: true,
                 status: true,
                 createdAt: true,
             },
         });
+
+        const trips = groupTripsForDisplay(tripRows).slice(0, take);
 
         const bids = await prisma.bid.findMany({
             where: { bidderId: userId },
@@ -846,6 +885,7 @@ router.get(
                     title: true,
                     category: true,
                     createdAt: true,
+                    repliedAt: true,
                     user: {
                         select: {
                             email: true,
@@ -864,6 +904,9 @@ router.get(
                     category: r.category,
                     categoryLabel: formatSupportInquiryCategory(r.category),
                     createdAt: r.createdAt.toISOString(),
+                    repliedAt: r.repliedAt
+                        ? r.repliedAt.toISOString()
+                        : null,
                     authorEmail: r.user.email,
                     authorRole: r.user.role,
                     authorDisplay:
@@ -896,6 +939,8 @@ router.get(
                     body: true,
                     category: true,
                     createdAt: true,
+                    adminReply: true,
+                    repliedAt: true,
                     user: {
                         select: {
                             email: true,
@@ -919,6 +964,10 @@ router.get(
                     category: row.category,
                     categoryLabel: formatSupportInquiryCategory(row.category),
                     createdAt: row.createdAt.toISOString(),
+                    adminReply: row.adminReply,
+                    repliedAt: row.repliedAt
+                        ? row.repliedAt.toISOString()
+                        : null,
                     user: {
                         email: row.user.email,
                         role: row.user.role,
@@ -930,6 +979,90 @@ router.get(
             });
         } catch (e) {
             console.error('admin support inquiry detail', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+router.patch(
+    '/support-inquiries/:id',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const id = String(req.params.id || '').trim();
+            if (!id) return res.status(400).json({ error: 'Missing id' });
+
+            const raw = String(req.body?.adminReply ?? '');
+            const adminReply = raw.trim();
+            if (adminReply.length > 20000) {
+                return res.status(400).json({
+                    error: '답변은 20,000자 이하로 입력해주세요.',
+                });
+            }
+            if (!adminReply) {
+                return res.status(400).json({
+                    error: '답변 내용을 입력해주세요.',
+                });
+            }
+
+            const existing = await prisma.supportInquiry.findUnique({
+                where: { id },
+                select: { id: true },
+            });
+            if (!existing) {
+                return res.status(404).json({ error: 'Not found' });
+            }
+
+            const row = await prisma.supportInquiry.update({
+                where: { id },
+                data: {
+                    adminReply,
+                    repliedAt: new Date(),
+                },
+                select: {
+                    id: true,
+                    title: true,
+                    body: true,
+                    category: true,
+                    createdAt: true,
+                    adminReply: true,
+                    repliedAt: true,
+                    user: {
+                        select: {
+                            email: true,
+                            role: true,
+                            displayName: true,
+                            companyName: true,
+                            phoneNumber: true,
+                        },
+                    },
+                },
+            });
+
+            res.json({
+                inquiry: {
+                    id: row.id,
+                    title: row.title,
+                    body: row.body,
+                    category: row.category,
+                    categoryLabel: formatSupportInquiryCategory(row.category),
+                    createdAt: row.createdAt.toISOString(),
+                    adminReply: row.adminReply,
+                    repliedAt: row.repliedAt
+                        ? row.repliedAt.toISOString()
+                        : null,
+                    user: {
+                        email: row.user.email,
+                        role: row.user.role,
+                        displayName: row.user.displayName,
+                        companyName: row.user.companyName,
+                        phoneNumber: row.user.phoneNumber,
+                    },
+                },
+            });
+        } catch (e) {
+            console.error('admin support inquiry reply', e);
             res.status(500).json({ error: 'Internal server error' });
         }
     },

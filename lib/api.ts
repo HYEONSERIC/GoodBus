@@ -281,6 +281,11 @@ export const adminAPI = {
     getSupportInquiries: async () => fetchAPI('/admin/support-inquiries'),
     getSupportInquiry: async (id: string) =>
         fetchAPI(`/admin/support-inquiries/${id}`),
+    replySupportInquiry: async (id: string, body: { adminReply: string }) =>
+        fetchAPI(`/admin/support-inquiries/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
 };
 
 export const supportAPI = {

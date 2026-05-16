@@ -37,6 +37,7 @@ interface SupportInquiryAdminRow {
     authorEmail: string;
     authorRole: string;
     authorDisplay: string;
+    repliedAt: string | null;
 }
 
 interface SupportInquiryDetail {
@@ -46,6 +47,8 @@ interface SupportInquiryDetail {
     category: string;
     categoryLabel: string;
     createdAt: string;
+    adminReply: string | null;
+    repliedAt: string | null;
     user: {
         email: string;
         role: string;
@@ -83,6 +86,15 @@ interface AdminUser {
     role: string;
     status: 'Active' | 'Blocked';
     createdAt: string;
+}
+
+interface PassengerTripSummary {
+    quoteOpen: number;
+    quoteExpired?: number;
+    reservationUpcoming: number;
+    completed: number;
+    totalGrouped: number;
+    totalRaw: number;
 }
 
 interface AdminUserDetail extends AdminUser {
@@ -206,6 +218,8 @@ export default function AdminPage() {
     const [error, setError] = useState('');
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+    const [passengerTripSummary, setPassengerTripSummary] =
+        useState<PassengerTripSummary | null>(null);
     const [selectedUserActivity, setSelectedUserActivity] =
         useState<AdminUserActivity | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -293,6 +307,12 @@ export default function AdminPage() {
         useState<SupportInquiryDetail | null>(null);
     const [supportInquiryDetailLoading, setSupportInquiryDetailLoading] =
         useState(false);
+    const [supportInquiryReplyDraft, setSupportInquiryReplyDraft] =
+        useState('');
+    const [supportInquiryReplySaving, setSupportInquiryReplySaving] =
+        useState(false);
+    const [supportInquiryReplyError, setSupportInquiryReplyError] =
+        useState('');
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -407,6 +427,16 @@ export default function AdminPage() {
         setEditPinned(editPost.pinned);
     }, [editPost]);
 
+    useEffect(() => {
+        if (!supportInquiryDetail) {
+            setSupportInquiryReplyDraft('');
+            setSupportInquiryReplyError('');
+            return;
+        }
+        setSupportInquiryReplyDraft(supportInquiryDetail.adminReply ?? '');
+        setSupportInquiryReplyError('');
+    }, [supportInquiryDetail]);
+
     const handleLogout = async () => {
         await authAPI.logout();
         router.push('/login');
@@ -436,6 +466,7 @@ export default function AdminPage() {
                 adminAPI.getUserActivity(userId, take),
             ]);
             setSelectedUser(detailData.user);
+            setPassengerTripSummary(detailData.tripSummary ?? null);
             setSelectedUserActivity(activityData);
         } catch (err: unknown) {
             setError(getErrorMessage(err, 'Failed to load user details'));
@@ -991,9 +1022,32 @@ export default function AdminPage() {
                                 </div>
                                 <div>
                                     <span className="font-medium">
-                                        생성한 여정:
+                                        등록·진행 여정:
                                     </span>{' '}
-                                    {selectedUser._count.tripsAsPassenger}
+                                    {selectedUser.role === 'Passenger' &&
+                                    passengerTripSummary
+                                        ? passengerTripSummary.totalGrouped
+                                        : selectedUser._count.tripsAsPassenger}
+                                    건
+                                    {selectedUser.role === 'Passenger' &&
+                                    passengerTripSummary ? (
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            견적 {passengerTripSummary.quoteOpen} ·
+                                            예약{' '}
+                                            {
+                                                passengerTripSummary.reservationUpcoming
+                                            }{' '}
+                                            · 완료 {passengerTripSummary.completed}
+                                            {passengerTripSummary.quoteExpired
+                                                ? ` · 만료 견적 ${passengerTripSummary.quoteExpired}`
+                                                : ''}{' '}
+                                            (승객 앱 기준, 왕복 1건·출발 전만)
+                                        </p>
+                                    ) : (
+                                        <span className="ml-1 text-xs text-gray-500">
+                                            (취소·삭제 제외)
+                                        </span>
+                                    )}
                                 </div>
                                 <div>
                                     <span className="font-medium">입찰 수:</span>{' '}
@@ -1761,7 +1815,7 @@ export default function AdminPage() {
                                     </p>
                                 ) : (
                                     <div className="overflow-x-auto">
-                                        <table className="w-full min-w-[520px] text-left text-sm">
+                                        <table className="w-full min-w-[640px] text-left text-sm">
                                             <thead>
                                                 <tr className="border-b text-xs text-slate-500">
                                                     <th className="pb-2 pr-2">
@@ -1772,6 +1826,9 @@ export default function AdminPage() {
                                                     </th>
                                                     <th className="pb-2 pr-2">
                                                         작성자
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        상태
                                                     </th>
                                                     <th className="pb-2">
                                                         접수일
@@ -1832,6 +1889,19 @@ export default function AdminPage() {
                                                         <td className="max-w-[160px] truncate py-2 pr-2 text-slate-600">
                                                             {row.authorDisplay}
                                                         </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2">
+                                                            <span
+                                                                className={
+                                                                    row.repliedAt
+                                                                        ? 'rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800'
+                                                                        : 'rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800'
+                                                                }
+                                                            >
+                                                                {row.repliedAt
+                                                                    ? '답변 완료'
+                                                                    : '답변 대기'}
+                                                            </span>
+                                                        </td>
                                                         <td className="whitespace-nowrap py-2 text-slate-500">
                                                             {row.createdAt.slice(
                                                                 0,
@@ -1850,7 +1920,11 @@ export default function AdminPage() {
                                 open={supportInquiryDetailOpen}
                                 onOpenChange={(open) => {
                                     setSupportInquiryDetailOpen(open);
-                                    if (!open) setSupportInquiryDetail(null);
+                                    if (!open) {
+                                        setSupportInquiryDetail(null);
+                                        setSupportInquiryReplyDraft('');
+                                        setSupportInquiryReplyError('');
+                                    }
                                 }}
                             >
                                 <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
@@ -1911,6 +1985,124 @@ export default function AdminPage() {
                                                     <div className="mt-1 whitespace-pre-wrap break-words rounded-md border border-slate-100 bg-white p-3 text-slate-800">
                                                         {supportInquiryDetail.body}
                                                     </div>
+                                                </div>
+                                                <div className="space-y-2 border-t border-slate-100 pt-3">
+                                                    <Label
+                                                        htmlFor="support-inquiry-reply"
+                                                        className="text-xs font-medium text-slate-500"
+                                                    >
+                                                        관리자 답변
+                                                        {supportInquiryDetail.repliedAt
+                                                            ? ` (등록: ${supportInquiryDetail.repliedAt.slice(0, 10)})`
+                                                            : ''}
+                                                    </Label>
+                                                    <Textarea
+                                                        id="support-inquiry-reply"
+                                                        className="min-h-[140px] resize-y text-sm"
+                                                        placeholder="사용자에게 전달할 답변을 입력하세요."
+                                                        value={
+                                                            supportInquiryReplyDraft
+                                                        }
+                                                        onChange={(e) => {
+                                                            setSupportInquiryReplyDraft(
+                                                                e.target.value,
+                                                            );
+                                                            if (
+                                                                supportInquiryReplyError
+                                                            ) {
+                                                                setSupportInquiryReplyError(
+                                                                    '',
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={
+                                                            supportInquiryReplySaving
+                                                        }
+                                                    />
+                                                    {supportInquiryReplyError ? (
+                                                        <p className="text-xs text-red-600">
+                                                            {
+                                                                supportInquiryReplyError
+                                                            }
+                                                        </p>
+                                                    ) : null}
+                                                    <Button
+                                                        type="button"
+                                                        className="w-full sm:w-auto"
+                                                        disabled={
+                                                            supportInquiryReplySaving
+                                                        }
+                                                        onClick={async () => {
+                                                            if (
+                                                                !supportInquiryDetail
+                                                            )
+                                                                return;
+                                                            const text =
+                                                                supportInquiryReplyDraft.trim();
+                                                            if (!text) {
+                                                                setSupportInquiryReplyError(
+                                                                    '답변 내용을 입력해주세요.',
+                                                                );
+                                                                return;
+                                                            }
+                                                            setSupportInquiryReplySaving(
+                                                                true,
+                                                            );
+                                                            setSupportInquiryReplyError(
+                                                                '',
+                                                            );
+                                                            try {
+                                                                const data =
+                                                                    await adminAPI.replySupportInquiry(
+                                                                        supportInquiryDetail.id,
+                                                                        {
+                                                                            adminReply:
+                                                                                text,
+                                                                        },
+                                                                    );
+                                                                setSupportInquiryDetail(
+                                                                    data.inquiry,
+                                                                );
+                                                                setSupportInquiries(
+                                                                    (prev) =>
+                                                                        prev.map(
+                                                                            (
+                                                                                r,
+                                                                            ) =>
+                                                                                r.id ===
+                                                                                data
+                                                                                    .inquiry
+                                                                                    .id
+                                                                                    ? {
+                                                                                          ...r,
+                                                                                          repliedAt:
+                                                                                              data
+                                                                                                  .inquiry
+                                                                                                  .repliedAt,
+                                                                                      }
+                                                                                    : r,
+                                                                        ),
+                                                                );
+                                                            } catch (err: unknown) {
+                                                                setSupportInquiryReplyError(
+                                                                    getErrorMessage(
+                                                                        err,
+                                                                        '답변 저장에 실패했습니다.',
+                                                                    ),
+                                                                );
+                                                            } finally {
+                                                                setSupportInquiryReplySaving(
+                                                                    false,
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        {supportInquiryReplySaving
+                                                            ? '저장 중…'
+                                                            : supportInquiryDetail.repliedAt
+                                                              ? '답변 수정'
+                                                              : '답변 등록'}
+                                                    </Button>
                                                 </div>
                                             </div>
                                         </>

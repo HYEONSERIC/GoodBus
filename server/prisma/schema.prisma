@@ -121,13 +121,15 @@ model SupportPost {
 }
 
 model SupportInquiry {
-  id        String                  @id @default(cuid())
-  userId    String
-  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category  SupportInquiryCategory
-  title     String
-  body      String                  @db.Text
-  createdAt DateTime                @default(now())
+  id         String                  @id @default(cuid())
+  userId     String
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   SupportInquiryCategory
+  title      String
+  body       String                  @db.Text
+  adminReply String?                 @db.Text
+  repliedAt  DateTime?
+  createdAt  DateTime                @default(now())
 
   @@index([createdAt])
   @@index([userId, createdAt])

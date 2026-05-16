@@ -4,6 +4,8 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
 import { sendBidAwardedEmail } from '../utils/email';
+import { deleteTripFully } from '../utils/tripDelete';
+import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
 
 const router = express.Router();
 
@@ -29,6 +31,10 @@ const createTripSchema = z.object({
 
 router.get('/', requireAuth, async (req, res) => {
     const { status } = req.query;
+
+    if (req.user!.role === UserRole.Passenger) {
+        await expireExpiredOpenTripsForPassenger(req.user!.userId);
+    }
 
     const trips = await prisma.trip.findMany({
         where: status ? { status: status as TripStatus } : undefined,
@@ -594,24 +600,11 @@ router.patch(
                     .json({ error: 'Only open or awarded trips can be cancelled' });
             }
 
-            // Cancel the trip and all related bids
-            await prisma.$transaction([
-                prisma.trip.update({
-                    where: { id: trip.id },
-                    data: { status: 'cancelled' },
-                }),
-                prisma.bid.updateMany({
-                    where: {
-                        tripId: trip.id,
-                        status: {
-                            in: ['open', 'awarded'],
-                        },
-                    },
-                    data: { status: 'withdrawn' },
-                }),
-            ]);
+            await prisma.$transaction(async (tx) => {
+                await deleteTripFully(trip.id, tx);
+            });
 
-            res.json({ message: 'Trip cancelled successfully' });
+            res.json({ message: 'Trip deleted successfully' });
         } catch (error) {
             console.error('Cancel trip error:', error);
             res.status(500).json({ error: 'Internal server error' });

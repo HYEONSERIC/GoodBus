@@ -371,10 +371,9 @@ export default function CompanyDashboard() {
         return `${md} (${weekday})`;
     }
 
-    function biddingScheduleSubtitle(trip: Trip) {
-        if (trip.companionType === 'with_schedule') return '일정 포함';
-        if (trip.companionType === 'depart_return') return '당일 왕복';
-        return '당일 일정';
+    function biddingCompanionSubtitle(trip: Trip): string | null {
+        if (trip.companionType === 'with_schedule') return '일정 동행';
+        return null;
     }
 
     function parseBidNoteForDisplay(note?: string | null) {
@@ -1158,12 +1157,17 @@ export default function CompanyDashboard() {
                                                         <p className="text-sm font-semibold leading-snug text-gray-900">
                                                             {formatTripDateLine(
                                                                 trip.dateTime
-                                                            )}{' '}
-                                                            <span className="font-normal text-gray-600">
-                                                                {biddingScheduleSubtitle(
-                                                                    trip
-                                                                )}
-                                                            </span>
+                                                            )}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            ) ? (
+                                                                <span className="font-normal text-gray-600">
+                                                                    {' '}
+                                                                    {biddingCompanionSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            ) : null}
                                                         </p>
                                                         <span className="shrink-0 text-sm font-medium text-gray-900">
                                                             {trip.paxCount}명

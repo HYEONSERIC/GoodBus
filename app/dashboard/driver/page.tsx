@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
-import { ArrowUpDown, CalendarDays } from 'lucide-react';
+import { ArrowRight, ArrowUpDown, CalendarDays } from 'lucide-react';
 
 interface Trip {
     id: string;
@@ -378,9 +378,28 @@ export default function DriverDashboard() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'contract') {
+        if (activeTab === 'contract' || activeTab === 'available') {
             loadData();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        const refreshOnFocus = () => {
+            if (activeTab === 'available') {
+                loadData();
+            }
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshOnFocus();
+            }
+        };
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
     }, [activeTab]);
 
     async function loadData() {
@@ -502,25 +521,7 @@ export default function DriverDashboard() {
     }
 
     function getAvailableTripCards(): Trip[] {
-        const visibleTrips = filterTrips(trips);
-        const consumed = new Set<string>();
-        return visibleTrips.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, visibleTrips);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                const other = base.id === trip.id ? partner : trip;
-                consumed.add(base.id);
-                consumed.add(other.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
+        return groupTripCardsForDisplay(filterTrips(trips), openTripsPool);
     }
 
     function assembleBidNote(pricePerVehicle: number, vehicleCount: number) {
@@ -610,8 +611,7 @@ export default function DriverDashboard() {
             setVerificationDialogOpen(true);
             return;
         }
-        const visibleTrips = filterTrips(trips);
-        setBidTripPartner(getRoundPartnerTrip(trip, visibleTrips));
+        setBidTripPartner(getRoundPartnerTrip(trip, openTripsPool));
         setBidUiStep('fee');
         setExtendedBid(defaultExtendedBidForm());
         setBidPhotoFiles([]);
@@ -863,6 +863,7 @@ export default function DriverDashboard() {
         const reverseTrips = list.filter(
             (other) =>
                 other.id !== baseTrip.id &&
+                other.status === baseTrip.status &&
                 other.origin === baseTrip.destination &&
                 other.destination === baseTrip.origin
         );
@@ -873,6 +874,35 @@ export default function DriverDashboard() {
             const bDiff = Math.abs(new Date(b.dateTime).getTime() - baseTime);
             return aDiff - bDiff;
         })[0];
+    }
+
+    /** 왕복 여정 카드: 출발이 빠른 편을 대표로 (정렬 없이 묶으면 카드가 사라질 수 있음) */
+    function groupTripCardsForDisplay(
+        list: Trip[],
+        partnerPool?: Trip[],
+    ): Trip[] {
+        const pool = partnerPool ?? list;
+        const sorted = [...list].sort(
+            (a, b) =>
+                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime(),
+        );
+        const consumed = new Set<string>();
+        return sorted.filter((trip) => {
+            if (consumed.has(trip.id)) return false;
+            const partner = getRoundPartnerTrip(trip, pool);
+            if (partner) {
+                const base =
+                    new Date(trip.dateTime).getTime() <=
+                    new Date(partner.dateTime).getTime()
+                        ? trip
+                        : partner;
+                consumed.add(trip.id);
+                consumed.add(partner.id);
+                return trip.id === base.id;
+            }
+            consumed.add(trip.id);
+            return true;
+        });
     }
 
     function getBusLabel(busSize: string) {
@@ -899,10 +929,10 @@ export default function DriverDashboard() {
         return `${md} (${weekday})`;
     }
 
-    function biddingScheduleSubtitle(trip: Trip) {
-        if (trip.companionType === 'with_schedule') return '일정 포함';
-        if (trip.companionType === 'depart_return') return '당일 왕복';
-        return '당일 일정';
+    /** 기사 동행 방식(출발·귀환만 / 일정 동행). 편도·왕복 운행 구분과 무관 */
+    function biddingCompanionSubtitle(trip: Trip): string | null {
+        if (trip.companionType === 'with_schedule') return '일정 동행';
+        return null;
     }
 
     function parseBidNoteForDisplay(note?: string | null) {
@@ -943,7 +973,8 @@ export default function DriverDashboard() {
         return d1 != null ? Math.round(d1) : null;
     }
 
-    const tripsForDistance = useMemo(() => {
+    /** 거리 계산용 */
+    const allKnownTrips = useMemo(() => {
         const byId = new Map<string, Trip>();
         for (const t of trips) byId.set(t.id, t);
         for (const t of myBids) byId.set(t.id, t);
@@ -951,12 +982,20 @@ export default function DriverDashboard() {
         return Array.from(byId.values());
     }, [trips, myBids, awardedTrips]);
 
+    /** open 견적끼리만 왕복 짝 (낙찰된 반대편 여정과 섞이지 않도록) */
+    const openTripsPool = useMemo(() => {
+        const byId = new Map<string, Trip>();
+        for (const t of trips) byId.set(t.id, t);
+        for (const t of myBids) byId.set(t.id, t);
+        return Array.from(byId.values());
+    }, [trips, myBids]);
+
     useEffect(() => {
         let cancelled = false;
 
         async function calculateDistances() {
             const results: Record<string, number | null> = {};
-            for (const trip of tripsForDistance) {
+            for (const trip of allKnownTrips) {
                 const originPoint =
                     typeof trip.originX === 'number' &&
                     typeof trip.originY === 'number'
@@ -984,7 +1023,7 @@ export default function DriverDashboard() {
             }
         }
 
-        if (tripsForDistance.length > 0) {
+        if (allKnownTrips.length > 0) {
             calculateDistances();
         } else {
             setDistanceByTripId({});
@@ -993,7 +1032,7 @@ export default function DriverDashboard() {
         return () => {
             cancelled = true;
         };
-    }, [tripsForDistance]);
+    }, [allKnownTrips]);
 
     useEffect(() => {
         const urls = bidPhotoFiles.map((f) => URL.createObjectURL(f));
@@ -1010,30 +1049,14 @@ export default function DriverDashboard() {
     );
 
     /** 예약주문: 미래 낙찰만, 왕복은 출발이 빠른 편만 한 장으로 표시 */
-    const contractReservationCardTrips = useMemo(() => {
-        const sorted = [...contractReservationTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() -
-                new Date(b.dateTime).getTime()
-        );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [contractReservationTrips]);
+    const contractReservationCardTrips = useMemo(
+        () =>
+            groupTripCardsForDisplay(
+                contractReservationTrips,
+                contractReservationTrips,
+            ),
+        [contractReservationTrips]
+    );
     const contractCompletedTrips = useMemo(
         () =>
             awardedTrips.filter(
@@ -1041,29 +1064,54 @@ export default function DriverDashboard() {
             ),
         [awardedTrips]
     );
-    const contractCompletedCardTrips = useMemo(() => {
-        const sorted = [...contractCompletedTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+    const contractCompletedCardTrips = useMemo(
+        () =>
+            groupTripCardsForDisplay(
+                contractCompletedTrips,
+                contractCompletedTrips,
+            ),
+        [contractCompletedTrips]
+    );
+    const myBidCardTrips = useMemo(
+        () => groupTripCardsForDisplay(myBids, openTripsPool),
+        [myBids, openTripsPool]
+    );
+
+    function TripRouteTypeColumn({
+        isRound,
+        km,
+    }: {
+        isRound: boolean;
+        km: number | null | undefined;
+    }) {
+        return (
+            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                {isRound ? (
+                    <ArrowUpDown
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                ) : (
+                    <ArrowRight
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                )}
+                <span className="mt-1 text-xs font-semibold text-gray-800">
+                    {isRound ? '왕복' : '편도'}
+                </span>
+                {km != null ? (
+                    <span className="mt-0.5 text-[11px] text-gray-500">
+                        {km}km
+                    </span>
+                ) : (
+                    <span className="mt-0.5 text-[11px] text-gray-400">—</span>
+                )}
+            </div>
         );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [contractCompletedTrips]);
+    }
 
     const bidDialogTrip = selectedTrip;
     const bidPartner = bidTripPartner;
@@ -1458,9 +1506,10 @@ export default function DriverDashboard() {
                                         setSelectedDate('');
                                         setMinPax('');
                                         setMaxPax('');
+                                        loadData();
                                     }}
-                                    title="필터 초기화"
-                                    aria-label="필터 초기화"
+                                    title="필터 초기화 및 목록 새로고침"
+                                    aria-label="필터 초기화 및 목록 새로고침"
                                     className="h-9 w-9 rounded-none px-0 text-gray-800 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     ↻
@@ -1469,34 +1518,26 @@ export default function DriverDashboard() {
                         </div>
                         <div className="w-full max-w-xl mx-auto border border-gray-200 bg-white">
                             {(() => {
-                                const visibleTrips = filterTrips(trips);
-                                const consumed = new Set<string>();
-                                const cards = visibleTrips.filter((trip) => {
-                                    if (consumed.has(trip.id)) return false;
-                                    const partner = getRoundPartnerTrip(
-                                        trip,
-                                        visibleTrips
-                                    );
-                                    if (partner) {
-                                        const base =
-                                            new Date(trip.dateTime).getTime() <=
-                                            new Date(partner.dateTime).getTime()
-                                                ? trip
-                                                : partner;
-                                        const other =
-                                            base.id === trip.id ? partner : trip;
-                                        consumed.add(base.id);
-                                        consumed.add(other.id);
-                                        return trip.id === base.id;
-                                    }
-                                    consumed.add(trip.id);
-                                    return true;
-                                });
+                                const filteredTrips = filterTrips(trips);
+                                const cardTrips = groupTripCardsForDisplay(
+                                    filteredTrips,
+                                    openTripsPool,
+                                );
 
-                                return cards.map((trip) => {
+                                if (cardTrips.length === 0) {
+                                    return (
+                                        <p className="px-4 py-12 text-center text-sm text-gray-500">
+                                            {trips.length === 0
+                                                ? '입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다. ↻ 버튼으로 새로고침할 수 있어요.'
+                                                : '조건에 맞는 여정이 없습니다. 필터를 바꾸거나 ↻로 새로고침해 보세요.'}
+                                        </p>
+                                    );
+                                }
+
+                                return cardTrips.map((trip) => {
                                     const partner = getRoundPartnerTrip(
                                         trip,
-                                        visibleTrips
+                                        openTripsPool,
                                     );
                                     const isRound = Boolean(partner);
                                     const km = biddingTripKm(
@@ -1526,12 +1567,17 @@ export default function DriverDashboard() {
                                                 <p className="text-sm font-semibold leading-snug text-gray-900">
                                                     {formatTripDateLine(
                                                         trip.dateTime
-                                                    )}{' '}
-                                                    <span className="font-normal text-gray-600">
-                                                        {biddingScheduleSubtitle(
-                                                            trip
-                                                        )}
-                                                    </span>
+                                                    )}
+                                                    {biddingCompanionSubtitle(
+                                                        trip
+                                                    ) ? (
+                                                        <span className="font-normal text-gray-600">
+                                                            {' '}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            )}
+                                                        </span>
+                                                    ) : null}
                                                 </p>
                                                 <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                     {trip.paxCount}명
@@ -1539,27 +1585,10 @@ export default function DriverDashboard() {
                                             </div>
 
                                             <div className="flex gap-3 py-3">
-                                                <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                    <ArrowUpDown
-                                                        className="h-5 w-5 text-gray-500"
-                                                        strokeWidth={1.75}
-                                                        aria-hidden
-                                                    />
-                                                    <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                        {isRound
-                                                            ? '왕복'
-                                                            : '편도'}
-                                                    </span>
-                                                    {km != null ? (
-                                                        <span className="mt-0.5 text-[11px] text-gray-500">
-                                                            {km}km
-                                                        </span>
-                                                    ) : (
-                                                        <span className="mt-0.5 text-[11px] text-gray-400">
-                                                            —
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <TripRouteTypeColumn
+                                                    isRound={isRound}
+                                                    km={km}
+                                                />
                                                 <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                     <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                         <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2390,7 +2419,7 @@ export default function DriverDashboard() {
                                                 const partner =
                                                     getRoundPartnerTrip(
                                                         trip,
-                                                        contractReservationTrips
+                                                        contractReservationTrips,
                                                     );
                                                 const isRound =
                                                     Boolean(partner);
@@ -2443,12 +2472,17 @@ export default function DriverDashboard() {
                                                             <p className="text-sm font-semibold leading-snug text-gray-900">
                                                                 {formatTripDateLine(
                                                                     trip.dateTime
-                                                                )}{' '}
-                                                                <span className="font-normal text-gray-600">
-                                                                    {biddingScheduleSubtitle(
-                                                                        trip
-                                                                    )}
-                                                                </span>
+                                                                )}
+                                                                {biddingCompanionSubtitle(
+                                                                    trip
+                                                                ) ? (
+                                                                    <span className="font-normal text-gray-600">
+                                                                        {' '}
+                                                                        {biddingCompanionSubtitle(
+                                                                            trip
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
                                                             </p>
                                                             <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                                 {trip.paxCount}
@@ -2456,29 +2490,10 @@ export default function DriverDashboard() {
                                                             </span>
                                                         </div>
                                                         <div className="flex gap-3 py-3">
-                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                                <ArrowUpDown
-                                                                    className="h-5 w-5 text-gray-500"
-                                                                    strokeWidth={
-                                                                        1.75
-                                                                    }
-                                                                    aria-hidden
-                                                                />
-                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {km != null ? (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                        {km}km
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                        —
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            <TripRouteTypeColumn
+                                                                isRound={isRound}
+                                                                km={km}
+                                                            />
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                                 <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                     <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2543,11 +2558,11 @@ export default function DriverDashboard() {
                         {contractSubTab === 'bidding' && (
                             <>
                                 <p className="mb-2 text-left text-xs font-medium text-gray-600">
-                                    입찰진행중 ({myBids.length})
+                                    입찰진행중 ({myBidCardTrips.length})
                                 </p>
-                                {myBids.length > 0 ? (
+                                {myBidCardTrips.length > 0 ? (
                                     <div className="space-y-3">
-                                        {myBids.map((trip) => {
+                                        {myBidCardTrips.map((trip) => {
                                             const myBid = trip.bids.find(
                                                 (bid: Bid) =>
                                                     bid.bidder.id === user?.id &&
@@ -2555,7 +2570,7 @@ export default function DriverDashboard() {
                                             );
                                             const partner = getRoundPartnerTrip(
                                                 trip,
-                                                myBids
+                                                openTripsPool,
                                             );
                                             const isRound = Boolean(partner);
                                             const km = biddingTripKm(
@@ -2606,41 +2621,27 @@ export default function DriverDashboard() {
                                                         <p className="text-sm font-semibold leading-snug text-gray-900">
                                                             {formatTripDateLine(
                                                                 trip.dateTime
-                                                            )}{' '}
-                                                            <span className="font-normal text-gray-600">
-                                                                {biddingScheduleSubtitle(
-                                                                    trip
-                                                                )}
-                                                            </span>
+                                                            )}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            ) ? (
+                                                                <span className="font-normal text-gray-600">
+                                                                    {' '}
+                                                                    {biddingCompanionSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            ) : null}
                                                         </p>
                                                         <span className="shrink-0 text-sm font-medium text-gray-900">
                                                             {trip.paxCount}명
                                                         </span>
                                                     </div>
                                                     <div className="flex gap-3 py-3">
-                                                        <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                            <ArrowUpDown
-                                                                className="h-5 w-5 text-gray-500"
-                                                                strokeWidth={
-                                                                    1.75
-                                                                }
-                                                                aria-hidden
-                                                            />
-                                                            <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                {isRound
-                                                                    ? '왕복'
-                                                                    : '편도'}
-                                                            </span>
-                                                            {km != null ? (
-                                                                <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                    {km}km
-                                                                </span>
-                                                            ) : (
-                                                                <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                    —
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                        <TripRouteTypeColumn
+                                                            isRound={isRound}
+                                                            km={km}
+                                                        />
                                                         <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                             <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                 <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2723,7 +2724,7 @@ export default function DriverDashboard() {
                                                 const partner =
                                                     getRoundPartnerTrip(
                                                         trip,
-                                                        contractCompletedTrips
+                                                        contractCompletedTrips,
                                                     );
                                                 const isRound =
                                                     Boolean(partner);
@@ -2748,12 +2749,17 @@ export default function DriverDashboard() {
                                                             <p className="text-sm font-semibold leading-snug text-gray-900">
                                                                 {formatTripDateLine(
                                                                     trip.dateTime
-                                                                )}{' '}
-                                                                <span className="font-normal text-gray-600">
-                                                                    {biddingScheduleSubtitle(
-                                                                        trip
-                                                                    )}
-                                                                </span>
+                                                                )}
+                                                                {biddingCompanionSubtitle(
+                                                                    trip
+                                                                ) ? (
+                                                                    <span className="font-normal text-gray-600">
+                                                                        {' '}
+                                                                        {biddingCompanionSubtitle(
+                                                                            trip
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
                                                             </p>
                                                             <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                                 {trip.paxCount}
@@ -2761,29 +2767,10 @@ export default function DriverDashboard() {
                                                             </span>
                                                         </div>
                                                         <div className="flex gap-3 py-3">
-                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                                <ArrowUpDown
-                                                                    className="h-5 w-5 text-gray-500"
-                                                                    strokeWidth={
-                                                                        1.75
-                                                                    }
-                                                                    aria-hidden
-                                                                />
-                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {km != null ? (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                        {km}km
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                        —
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            <TripRouteTypeColumn
+                                                                isRound={isRound}
+                                                                km={km}
+                                                            />
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                                 <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                     <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">

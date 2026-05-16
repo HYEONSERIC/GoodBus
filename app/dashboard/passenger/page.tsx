@@ -96,6 +96,15 @@ interface KakaoPlace {
     y?: string;
 }
 
+function toDatetimeLocalInputValue(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${d}T${h}:${min}`;
+}
+
 export default function PassengerDashboard() {
     const [user, setUser] = useState<any>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
@@ -105,7 +114,7 @@ export default function PassengerDashboard() {
         'quote' | 'booking' | 'chat' | 'support'
     >('quote');
     const [bookingSubTab, setBookingSubTab] = useState<
-        'reservation' | 'bidding' | 'completed'
+        'reservation' | 'completed'
     >('reservation');
     const [chatOpen, setChatOpen] = useState(false);
     /** 견적 상세에서 채팅하기로 들어왔을 때 자동 선택할 방 */
@@ -238,6 +247,31 @@ export default function PassengerDashboard() {
                 return;
             }
 
+            const goingAt = new Date(newTrip.goingDateTime);
+            if (Number.isNaN(goingAt.getTime())) {
+                alert('가는날 시간을 올바르게 입력해주세요.');
+                return;
+            }
+            if (goingAt.getTime() < Date.now()) {
+                alert(
+                    '가는날 시간은 현재 시각 이후여야 합니다.\n다른 날짜·시간을 입력해 주세요.',
+                );
+                return;
+            }
+            if (newTrip.tripType === 'round') {
+                const returnAt = new Date(newTrip.returnDateTime);
+                if (Number.isNaN(returnAt.getTime())) {
+                    alert('오는날 시간을 올바르게 입력해주세요.');
+                    return;
+                }
+                if (returnAt.getTime() < goingAt.getTime()) {
+                    alert(
+                        '오는날 시간은 가는날 시간 이후여야 합니다.\n다른 날짜·시간을 입력해 주세요.',
+                    );
+                    return;
+                }
+            }
+
             // 왕복은 기존 DB 구조상 "편도 2개(방향 반대)"로 생성합니다.
             const goingTripPayload = {
                 origin: newTrip.origin,
@@ -264,13 +298,6 @@ export default function PassengerDashboard() {
             if (newTrip.tripType === 'oneway') {
                 await tripsAPI.create(goingTripPayload);
             } else {
-                const goingAt = new Date(newTrip.goingDateTime);
-                const returnAt = new Date(newTrip.returnDateTime);
-                if (returnAt.getTime() < goingAt.getTime()) {
-                    alert('오는날 시간이 가는날보다 빠를 수 없습니다.');
-                    return;
-                }
-
                 // 1) 가는 방향
                 await tripsAPI.create(goingTripPayload);
                 // 2) 오는 방향(원점/목적지 반전)
@@ -444,6 +471,7 @@ export default function PassengerDashboard() {
         const reverseTrips = sourceTrips.filter(
             (other) =>
                 other.id !== trip.id &&
+                other.status === trip.status &&
                 other.origin === trip.destination &&
                 other.destination === trip.origin,
         );
@@ -739,31 +767,6 @@ export default function PassengerDashboard() {
         });
     }, [passengerAwardedCompletedTrips]);
 
-    const passengerOpenCardTrips = useMemo(() => {
-        const sorted = [...passengerOpenTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() -
-                new Date(b.dateTime).getTime(),
-        );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [passengerOpenTrips]);
-
     function renderPassengerAwardedBookingCard(
         trip: Trip,
         variant: 'upcoming' | 'completed',
@@ -924,6 +927,12 @@ export default function PassengerDashboard() {
             </Card>
         );
     }
+
+    const goingScheduleMin = toDatetimeLocalInputValue(new Date());
+    const returnScheduleMin =
+        newTrip.goingDateTime && newTrip.goingDateTime >= goingScheduleMin
+            ? newTrip.goingDateTime
+            : goingScheduleMin;
 
     return (
         <div className="min-h-screen bg-[#f3f3f5]">
@@ -1232,6 +1241,7 @@ export default function PassengerDashboard() {
                                                 <Input
                                                     ref={goingDateTimeRef}
                                                     type="datetime-local"
+                                                    min={goingScheduleMin}
                                                     value={newTrip.goingDateTime}
                                                     className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                         !newTrip.goingDateTime
@@ -1304,6 +1314,7 @@ export default function PassengerDashboard() {
                                                     <Input
                                                         ref={goingDateTimeRef}
                                                         type="datetime-local"
+                                                        min={goingScheduleMin}
                                                         value={newTrip.goingDateTime}
                                                         className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.goingDateTime
@@ -1342,6 +1353,7 @@ export default function PassengerDashboard() {
                                                     <Input
                                                         ref={returnDateTimeRef}
                                                         type="datetime-local"
+                                                        min={returnScheduleMin}
                                                         value={newTrip.returnDateTime}
                                                         className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.returnDateTime
@@ -2032,7 +2044,19 @@ export default function PassengerDashboard() {
                     <div className="grid gap-4 w-full max-w-xl mx-auto">
                         {(() => {
                             const consumed = new Set<string>();
-                            const quoteTrips = trips.filter((t) => t.status === 'open');
+                            const nowMs = Date.now();
+                            const quoteTrips = trips
+                                .filter(
+                                    (t) =>
+                                        t.status === 'open' &&
+                                        new Date(t.dateTime).getTime() >=
+                                            nowMs,
+                                )
+                                .sort(
+                                    (a, b) =>
+                                        new Date(a.dateTime).getTime() -
+                                        new Date(b.dateTime).getTime(),
+                                );
                             if (quoteTrips.length === 0) {
                                 return (
                                     <Card className="rounded-none">
@@ -2460,7 +2484,7 @@ export default function PassengerDashboard() {
 
                 {activeTab === 'booking' && (
                     <div className="mx-auto w-full max-w-xl">
-                        <div className="mb-4 grid grid-cols-3 border-b border-gray-200 bg-white shadow-sm">
+                        <div className="mb-4 grid grid-cols-2 border-b border-gray-200 bg-white shadow-sm">
                             <button
                                 type="button"
                                 onClick={() => setBookingSubTab('reservation')}
@@ -2471,17 +2495,6 @@ export default function PassengerDashboard() {
                                 }`}
                             >
                                 예약주문
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setBookingSubTab('bidding')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    bookingSubTab === 'bidding'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                입찰
                             </button>
                             <button
                                 type="button"
@@ -2521,134 +2534,6 @@ export default function PassengerDashboard() {
                                                     'upcoming',
                                                 ),
                                         )
-                                    )}
-                                </div>
-                            </>
-                        )}
-
-                        {bookingSubTab === 'bidding' && (
-                            <>
-                                <p className="mb-2 text-left text-sm text-gray-500">
-                                    견적·입찰 (
-                                    {passengerOpenCardTrips.length})
-                                </p>
-                                <div className="grid gap-4">
-                                    {passengerOpenCardTrips.length === 0 ? (
-                                        <Card className="rounded-none">
-                                            <CardContent className="p-6 text-sm text-gray-600">
-                                                견적·입찰 중인 여정이 없습니다.
-                                                상단의 &apos;견적 신청&apos;으로
-                                                새 여정을 등록해 보세요.
-                                            </CardContent>
-                                        </Card>
-                                    ) : (
-                                        passengerOpenCardTrips.map((trip) => {
-                                            const partner =
-                                                getRoundPartnerTrip(
-                                                    trip,
-                                                    passengerOpenTrips,
-                                                );
-                                            const isRound = Boolean(partner);
-                                            const openBidRows =
-                                                collectOpenBidsForCard(
-                                                    trip,
-                                                    partner,
-                                                );
-                                            const openBidCount =
-                                                openBidRows.length;
-                                            const distance =
-                                                distanceByTripId[trip.id] ??
-                                                null;
-                                            return (
-                                                <Card
-                                                    key={trip.id}
-                                                    className="rounded-none border-gray-200 shadow-sm"
-                                                >
-                                                    <CardHeader className="pb-2">
-                                                        <div className="space-y-1">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[11px] font-semibold text-white">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {typeof distance ===
-                                                                    'number' && (
-                                                                    <span className="rounded-full border border-sky-300 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
-                                                                        {distance}
-                                                                        km
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <CardTitle className="text-[16px] font-semibold leading-snug">
-                                                                {trip.origin}
-                                                            </CardTitle>
-                                                            <CardTitle className="text-[16px] font-semibold leading-snug">
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                        </div>
-                                                    </CardHeader>
-                                                    <CardContent className="space-y-3 text-sm text-gray-700">
-                                                        <div className="space-y-1">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                                                                    출발
-                                                                </span>
-                                                                <span>
-                                                                    {formatTripDateLine(
-                                                                        trip.dateTime,
-                                                                    )}{' '}
-                                                                    {formatTripTime(
-                                                                        trip.dateTime,
-                                                                    )}{' '}
-                                                                    탑승
-                                                                </span>
-                                                            </div>
-                                                            {isRound &&
-                                                                partner && (
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                                                                            귀환
-                                                                        </span>
-                                                                        <span>
-                                                                            {formatTripDateLine(
-                                                                                partner.dateTime,
-                                                                            )}{' '}
-                                                                            {formatTripTime(
-                                                                                partner.dateTime,
-                                                                            )}{' '}
-                                                                            탑승
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                        </div>
-                                                        <p className="text-sm text-gray-600">
-                                                            받은 입찰{' '}
-                                                            <span className="font-semibold text-gray-900">
-                                                                {openBidCount}
-                                                            </span>
-                                                            건 · 입찰 비교·선택은
-                                                            견적 탭에서 할 수
-                                                            있어요.
-                                                        </p>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className="w-full rounded-lg border-gray-900 font-semibold text-gray-900"
-                                                            onClick={() =>
-                                                                setActiveTab(
-                                                                    'quote',
-                                                                )
-                                                            }
-                                                        >
-                                                            견적 탭으로 이동
-                                                        </Button>
-                                                    </CardContent>
-                                                </Card>
-                                            );
-                                        })
                                     )}
                                 </div>
                             </>

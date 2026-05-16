@@ -41,6 +41,7 @@ type MyInquiryRow = {
     category: string;
     categoryLabel: string;
     createdAt: string;
+    repliedAt: string | null;
 };
 
 type MyInquiryDetail = {
@@ -49,6 +50,8 @@ type MyInquiryDetail = {
     body: string;
     categoryLabel: string;
     createdAt: string;
+    adminReply: string | null;
+    repliedAt: string | null;
 };
 
 function formatListDate(iso: string) {
@@ -274,8 +277,21 @@ export function SupportCustomerCenter({
                                             void openMyInquiryDetail(row.id)
                                         }
                                     >
-                                        <span className="min-w-0 truncate font-medium text-gray-900">
-                                            {row.title}
+                                        <span className="flex min-w-0 items-center gap-1.5">
+                                            <span className="min-w-0 truncate font-medium text-gray-900">
+                                                {row.title}
+                                            </span>
+                                            <span
+                                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium sm:text-[10px] ${
+                                                    row.repliedAt
+                                                        ? 'bg-emerald-50 text-emerald-800'
+                                                        : 'bg-amber-50 text-amber-800'
+                                                }`}
+                                            >
+                                                {row.repliedAt
+                                                    ? '답변 완료'
+                                                    : '답변 대기'}
+                                            </span>
                                         </span>
                                         <span className="truncate text-right text-gray-600">
                                             {row.categoryLabel}
@@ -450,6 +466,24 @@ export function SupportCustomerCenter({
                                     {myInquiryDetail.body}
                                 </div>
                             </div>
+                            {myInquiryDetail.adminReply ? (
+                                <div>
+                                    <p className="text-xs font-medium text-gray-500">
+                                        관리자 답변
+                                        {myInquiryDetail.repliedAt
+                                            ? ` · ${formatListDate(myInquiryDetail.repliedAt)}`
+                                            : ''}
+                                    </p>
+                                    <div className="mt-1 whitespace-pre-wrap break-words rounded-md border border-emerald-100 bg-emerald-50/40 p-3 text-sm text-gray-800">
+                                        {myInquiryDetail.adminReply}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="rounded-md border border-dashed border-gray-200 bg-gray-50/30 px-3 py-4 text-center text-xs text-gray-500">
+                                    아직 등록된 답변이 없습니다. 확인 후
+                                    곧 안내드리겠습니다.
+                                </p>
+                            )}
                         </>
                     ) : (
                         <>
