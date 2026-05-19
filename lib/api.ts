@@ -323,6 +323,20 @@ export const verificationAPI = {
     },
 };
 
+export const reviewsAPI = {
+    listForTrips: async (tripIds: string[]) => {
+        if (tripIds.length === 0) return { reviews: [] };
+        return fetchAPI(`/reviews?tripIds=${tripIds.join(',')}`);
+    },
+    create: async (formData: FormData) =>
+        fetchAPI('/reviews', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        }),
+    getDriverMe: async () => fetchAPI('/reviews/driver/me'),
+};
+
 export const profileAPI = {
     getMe: async () => fetchAPI('/profile/me'),
     update: async (formData: FormData) =>

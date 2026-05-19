@@ -10,7 +10,11 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, chatsAPI, tripsAPI, supportAPI } from '@/lib/api';
+import { authAPI, chatsAPI, tripsAPI, supportAPI, reviewsAPI } from '@/lib/api';
+import {
+    TripReviewSection,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -134,6 +138,9 @@ export default function PassengerDashboard() {
         useState(false);
     const [supportInquiryFormError, setSupportInquiryFormError] = useState('');
     const [supportInquiryListKey, setSupportInquiryListKey] = useState(0);
+    const [tripReviewsByTripId, setTripReviewsByTripId] = useState<
+        Record<string, TripReviewRecord>
+    >({});
     const [newTrip, setNewTrip] = useState({
         origin: '',
         originX: null as number | null,
@@ -211,9 +218,34 @@ export default function PassengerDashboard() {
                 );
             });
             setTrips(myTrips);
+            await loadTripReviews(myTrips);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';
+        }
+    }
+
+    async function loadTripReviews(tripList: Trip[]) {
+        const completedIds = tripList
+            .filter(
+                (t) =>
+                    t.status === 'awarded' &&
+                    new Date(t.dateTime).getTime() < Date.now(),
+            )
+            .map((t) => t.id);
+        if (completedIds.length === 0) {
+            setTripReviewsByTripId({});
+            return;
+        }
+        try {
+            const data = await reviewsAPI.listForTrips(completedIds);
+            const map: Record<string, TripReviewRecord> = {};
+            for (const r of data.reviews || []) {
+                map[r.tripId] = r;
+            }
+            setTripReviewsByTripId(map);
+        } catch {
+            /* ignore */
         }
     }
 
@@ -887,26 +919,39 @@ export default function PassengerDashboard() {
                     </div>
 
                     {awardedBid ? (
-                        <div className="flex gap-2">
-                            <Button
-                                className="h-10 flex-1 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-black/90"
-                                onClick={() =>
-                                    openQuoteChat(trip, awardedBid)
-                                }
-                            >
-                                기사와 채팅하기
-                            </Button>
-                            {showCancel ? (
+                        <div className="space-y-3">
+                            <div className="flex gap-2">
                                 <Button
-                                    type="button"
-                                    className="h-10 flex-1 rounded-lg border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
-                                    onClick={() => {
-                                        setCancelDialogTrip(trip);
-                                        setCancelReason('');
-                                    }}
+                                    className="h-10 flex-1 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-black/90"
+                                    onClick={() =>
+                                        openQuoteChat(trip, awardedBid)
+                                    }
                                 >
-                                    낙찰 취소
+                                    기사와 채팅하기
                                 </Button>
+                                {showCancel ? (
+                                    <Button
+                                        type="button"
+                                        className="h-10 flex-1 rounded-lg border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                        onClick={() => {
+                                            setCancelDialogTrip(trip);
+                                            setCancelReason('');
+                                        }}
+                                    >
+                                        낙찰 취소
+                                    </Button>
+                                ) : null}
+                            </div>
+                            {variant === 'completed' ? (
+                                <TripReviewSection
+                                    tripId={trip.id}
+                                    existing={tripReviewsByTripId[trip.id]}
+                                    servicePurpose={trip.servicePurpose}
+                                    onSubmitted={() => loadTripReviews(trips)}
+                                    resolveImageUrl={(url) =>
+                                        resolveMediaUrl(url) ?? url
+                                    }
+                                />
                             ) : null}
                         </div>
                     ) : (

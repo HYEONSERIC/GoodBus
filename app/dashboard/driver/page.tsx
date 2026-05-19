@@ -16,6 +16,13 @@ import {
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
+import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
+import {
+    DriverReviewsList,
+    formatDriverRatingStars,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
+import { reviewsAPI } from '@/lib/api';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
@@ -123,6 +130,7 @@ export default function DriverDashboard() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -151,7 +159,22 @@ export default function DriverDashboard() {
     const [driverInquiryFormError, setDriverInquiryFormError] = useState('');
     const [driverInquiryListKey, setDriverInquiryListKey] = useState(0);
     const [membershipPrevTab, setMembershipPrevTab] = useState<
-        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'paymentCards'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentCardsPrevTab, setPaymentCardsPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'profile'
+        | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -253,6 +276,21 @@ export default function DriverDashboard() {
     const [profileSection, setProfileSection] = useState<'details' | 'review'>(
         'details'
     );
+    const [driverReviews, setDriverReviews] = useState<
+        Array<
+            TripReviewRecord & {
+                trip?: {
+                    origin: string;
+                    destination: string;
+                    dateTime: string;
+                };
+            }
+        >
+    >([]);
+    const [driverReviewStats, setDriverReviewStats] = useState<{
+        avgRating: number | null;
+        count: number;
+    }>({ avgRating: null, count: 0 });
     const [garageResults, setGarageResults] = useState<KakaoPlace[]>([]);
     const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 기사';
@@ -376,6 +414,23 @@ export default function DriverDashboard() {
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
+        reviewsAPI
+            .getDriverMe()
+            .then((data) => {
+                setDriverReviews(data.reviews || []);
+                setDriverReviewStats({
+                    avgRating: data.avgRating ?? null,
+                    count: data.count ?? 0,
+                });
+            })
+            .catch(() => {
+                setDriverReviews([]);
+                setDriverReviewStats({ avgRating: null, count: 0 });
+            });
+    }, [activeTab]);
 
     useEffect(() => {
         if (activeTab === 'contract' || activeTab === 'available') {
@@ -1138,6 +1193,32 @@ export default function DriverDashboard() {
                                     </button>
                                 </div>
                                 <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : activeTab === 'paymentCards' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() =>
+                                            setActiveTab(paymentCardsPrevTab)
+                                        }
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    결제카드
+                                </span>
                                 <div className="absolute right-3 sm:right-4">
                                     <button
                                         type="button"
@@ -2906,7 +2987,14 @@ export default function DriverDashboard() {
                                             {displayName}
                                         </p>
                                         <p className="text-sm text-gray-500">
-                                            ★★★★☆ (4.9)
+                                            {(() => {
+                                                const { stars, label } =
+                                                    formatDriverRatingStars(
+                                                        driverReviewStats.avgRating,
+                                                        driverReviewStats.count,
+                                                    );
+                                                return `${stars} ${label}`;
+                                            })()}
                                         </p>
                                         <div className="mt-4 grid grid-cols-3 gap-4 text-xs text-gray-600">
                                             <div>
@@ -3028,9 +3116,13 @@ export default function DriverDashboard() {
                                             </div>
                                         ) : (
                                             <div className="py-4">
-                                                <div className="rounded-lg border p-4 text-sm text-gray-600">
-                                                    아직 등록된 리뷰가 없습니다.
-                                                </div>
+                                                <DriverReviewsList
+                                                    reviews={driverReviews}
+                                                    resolveImageUrl={(url) =>
+                                                        resolveMediaUrl(url) ??
+                                                        url
+                                                    }
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -3427,6 +3519,10 @@ export default function DriverDashboard() {
                     </>
                 )}
 
+                {activeTab === 'paymentCards' && (
+                    <PaymentCardsPanel userId={user?.id} />
+                )}
+
                 {activeTab === 'membership' && (
                     <div className="space-y-4">
                         <div>
@@ -3539,6 +3635,21 @@ export default function DriverDashboard() {
                         <button
                             type="button"
                             className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                            onClick={() => {
+                                setPaymentCardsPrevTab(
+                                    activeTab === 'paymentCards'
+                                        ? 'available'
+                                        : activeTab,
+                                );
+                                setActiveTab('paymentCards');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            결제카드
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={handleLogout}
                         >
                             로그아웃
@@ -3554,7 +3665,9 @@ export default function DriverDashboard() {
                 </div>
             </div>
         )}
-        {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+        {activeTab !== 'profile' &&
+            activeTab !== 'profileEdit' &&
+            activeTab !== 'paymentCards' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
                 <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
@@ -3599,7 +3712,7 @@ export default function DriverDashboard() {
                                 : 'text-gray-700'
                         }`}
                     >
-                        고객센터
+                        문의
                     </Button>
                 </div>
             </div>

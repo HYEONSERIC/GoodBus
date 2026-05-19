@@ -102,6 +102,8 @@ model User {
   chatMessages         ChatMessage[] @relation("ChatMessageSender")
   supportPostsCreated  SupportPost[] @relation("SupportPostAuthor")
   supportInquiries     SupportInquiry[]
+  reviewsWritten       TripReview[] @relation("PassengerReviews")
+  reviewsReceived      TripReview[] @relation("DriverReviews")
 }
 
 model SupportPost {
@@ -159,6 +161,24 @@ model Trip {
   
   bids Bid[]
   chatRooms ChatRoom[]
+  review TripReview?
+}
+
+model TripReview {
+  id          String   @id @default(cuid())
+  tripId      String   @unique
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerId String
+  passenger   User     @relation("PassengerReviews", fields: [passengerId], references: [id], onDelete: Cascade)
+  driverId    String
+  driver      User     @relation("DriverReviews", fields: [driverId], references: [id], onDelete: Cascade)
+  rating      Int
+  comment     String?  @db.Text
+  imageUrls   String[] @default([])
+  createdAt   DateTime @default(now())
+
+  @@index([driverId, createdAt])
+  @@index([passengerId])
 }
 
 model Bid {

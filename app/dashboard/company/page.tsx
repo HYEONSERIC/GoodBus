@@ -15,6 +15,7 @@ import {
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
+import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
@@ -86,6 +87,7 @@ export default function CompanyDashboard() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -100,7 +102,22 @@ export default function CompanyDashboard() {
         null
     );
     const [membershipPrevTab, setMembershipPrevTab] = useState<
-        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'paymentCards'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentCardsPrevTab, setPaymentCardsPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'profile'
+        | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -691,6 +708,32 @@ export default function CompanyDashboard() {
                                     </button>
                                 </div>
                                 <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : activeTab === 'paymentCards' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() =>
+                                            setActiveTab(paymentCardsPrevTab)
+                                        }
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    결제카드
+                                </span>
                                 <div className="absolute right-3 sm:right-4">
                                     <button
                                         type="button"
@@ -1837,6 +1880,10 @@ export default function CompanyDashboard() {
                     </>
                 )}
 
+                {activeTab === 'paymentCards' && (
+                    <PaymentCardsPanel userId={user?.id} />
+                )}
+
                 {activeTab === 'membership' && (
                     <div className="space-y-4">
                         <div>
@@ -1949,6 +1996,21 @@ export default function CompanyDashboard() {
                         <button
                             type="button"
                             className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                            onClick={() => {
+                                setPaymentCardsPrevTab(
+                                    activeTab === 'paymentCards'
+                                        ? 'available'
+                                        : activeTab,
+                                );
+                                setActiveTab('paymentCards');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            결제카드
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={handleLogout}
                         >
                             로그아웃
@@ -1964,7 +2026,9 @@ export default function CompanyDashboard() {
                 </div>
             </div>
         )}
-        {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+        {activeTab !== 'profile' &&
+            activeTab !== 'profileEdit' &&
+            activeTab !== 'paymentCards' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
                 <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button

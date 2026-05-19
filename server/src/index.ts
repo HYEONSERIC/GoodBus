@@ -13,6 +13,7 @@ import chatsRoutes from './routes/chats';
 import verificationRoutes from './routes/verification';
 import profileRoutes from './routes/profile';
 import supportRoutes from './routes/support';
+import reviewsRoutes from './routes/reviews';
 
 dotenv.config({
     path: path.resolve(__dirname, '../.env'),
@@ -47,6 +48,7 @@ app.use('/chats', chatsRoutes);
 app.use('/verification', verificationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/support', supportRoutes);
+app.use('/reviews', reviewsRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
