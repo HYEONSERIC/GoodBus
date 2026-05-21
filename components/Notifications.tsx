@@ -78,9 +78,7 @@ function formatPrice(item: NotificationHistory) {
     return Number(item.bid.price).toLocaleString();
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-    return error instanceof Error ? error.message : fallback;
-}
+import { getErrorMessage } from '@/lib/errors';
 
 export function Notifications() {
     const [notifications, setNotifications] = useState<Notification[]>([]);

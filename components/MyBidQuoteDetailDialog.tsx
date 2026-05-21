@@ -123,9 +123,13 @@ function CostRow({
     );
 }
 
+export type MyBidQuoteDetailRole = 'driver' | 'company';
+
 export interface MyBidQuoteDetailDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    /** 기사·회사 대시보드 구분(현재 UI 동일, 확장용) */
+    role?: MyBidQuoteDetailRole;
     trip: BidQuoteTrip;
     partnerTrip?: BidQuoteTrip | null;
     km: number | null;
@@ -140,6 +144,7 @@ export interface MyBidQuoteDetailDialogProps {
 export function MyBidQuoteDetailDialog({
     open,
     onOpenChange,
+    role: _role,
     trip,
     partnerTrip,
     km,
