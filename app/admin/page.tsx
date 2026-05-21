@@ -211,6 +211,34 @@ interface VerificationRow {
     createdAt: string;
 }
 
+function verificationKindForUser(
+    user: VerificationRow,
+): 'driver' | 'company' {
+    return user.role === 'BusCompany' ? 'company' : 'driver';
+}
+
+function verificationDisplayForUser(user: VerificationRow) {
+    const kind = verificationKindForUser(user);
+    if (kind === 'company') {
+        return {
+            kind,
+            imagePath: user.companyRegistrationUrl,
+            status: user.companyRegistrationStatus,
+            note: user.companyRegistrationNote,
+            docLabel: '사업자등록증',
+            roleLabel: '버스회사',
+        };
+    }
+    return {
+        kind,
+        imagePath: user.driverLicenseUrl,
+        status: user.driverLicenseStatus,
+        note: user.driverLicenseNote,
+        docLabel: '버스면허증',
+        roleLabel: '기사',
+    };
+}
+
 export default function AdminPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -265,9 +293,9 @@ export default function AdminPage() {
     const [notificationTotalPages, setNotificationTotalPages] = useState(1);
     const [notificationLoading, setNotificationLoading] = useState(false);
     const [notificationError, setNotificationError] = useState('');
-    const [verificationType, setVerificationType] = useState<'driver' | 'company'>(
-        'driver'
-    );
+    const [verificationType, setVerificationType] = useState<
+        'all' | 'driver' | 'company'
+    >('all');
     const [verificationStatus, setVerificationStatus] = useState('pending');
     const [verificationList, setVerificationList] = useState<VerificationRow[]>(
         []
@@ -563,16 +591,16 @@ export default function AdminPage() {
     };
 
     const updateVerificationStatus = async (
-        userId: string,
-        status: 'approved' | 'rejected'
+        user: VerificationRow,
+        status: 'approved' | 'rejected',
     ) => {
         await adminAPI.updateVerification(
-            userId,
-            verificationType,
+            user.id,
+            verificationKindForUser(user),
             status,
-            verificationReason[userId]
+            verificationReason[user.id],
         );
-        setVerificationReason((prev) => ({ ...prev, [userId]: '' }));
+        setVerificationReason((prev) => ({ ...prev, [user.id]: '' }));
         await loadVerifications();
     };
 
@@ -596,7 +624,7 @@ export default function AdminPage() {
         users: '사용자',
         bids: '입찰/낙찰 관리',
         notifications: '알림 히스토리',
-        verification: '기사 승인',
+        verification: '기사/회사 승인',
         revenue: '매출 (예정)',
         faq: 'FAQ/문의',
         adminCreate: '관리자 계정 생성',
@@ -663,7 +691,7 @@ export default function AdminPage() {
                         className={navItemClass('verification')}
                         onClick={() => setActiveTab('verification')}
                     >
-                        기사 승인
+                        기사/회사 승인
                     </button>
                     {adminRole !== 'CustomerSupport' ? (
                         <button
@@ -1544,12 +1572,14 @@ export default function AdminPage() {
                                 value={verificationType}
                                 onChange={(e) =>
                                     setVerificationType(
-                                        e.target.value === 'company'
-                                            ? 'company'
-                                            : 'driver'
+                                        e.target.value as
+                                            | 'all'
+                                            | 'driver'
+                                            | 'company',
                                     )
                                 }
                             >
+                                <option value="all">전체</option>
                                 <option value="driver">기사</option>
                                 <option value="company">버스회사</option>
                             </select>
@@ -1582,18 +1612,14 @@ export default function AdminPage() {
                     ) : (
                         <div className="grid gap-4">
                             {verificationList.map((user) => {
-                                const imagePath =
-                                    verificationType === 'driver'
-                                        ? user.driverLicenseUrl
-                                        : user.companyRegistrationUrl;
-                                const status =
-                                    verificationType === 'driver'
-                                        ? user.driverLicenseStatus
-                                        : user.companyRegistrationStatus;
-                                const note =
-                                    verificationType === 'driver'
-                                        ? user.driverLicenseNote
-                                        : user.companyRegistrationNote;
+                                const {
+                                    kind,
+                                    imagePath,
+                                    status,
+                                    note,
+                                    docLabel,
+                                    roleLabel,
+                                } = verificationDisplayForUser(user);
                                 return (
                                     <div
                                         key={user.id}
@@ -1607,7 +1633,9 @@ export default function AdminPage() {
                                                             {user.email}
                                                         </p>
                                                         <p className="text-xs text-gray-500">
-                                                            상태: {status}
+                                                            {roleLabel} ·{' '}
+                                                            {docLabel} · 상태:{' '}
+                                                            {status}
                                                         </p>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -1616,8 +1644,8 @@ export default function AdminPage() {
                                                             variant="outline"
                                                             onClick={() =>
                                                                 updateVerificationStatus(
-                                                                    user.id,
-                                                                    'approved'
+                                                                    user,
+                                                                    'approved',
                                                                 )
                                                             }
                                                         >
@@ -1628,8 +1656,8 @@ export default function AdminPage() {
                                                             variant="outline"
                                                             onClick={() =>
                                                                 updateVerificationStatus(
-                                                                    user.id,
-                                                                    'rejected'
+                                                                    user,
+                                                                    'rejected',
                                                                 )
                                                             }
                                                         >
@@ -1668,7 +1696,7 @@ export default function AdminPage() {
                                                         <div className="rounded border bg-white p-2">
                                                             <img
                                                                 src={`${uploadBaseUrl}${imagePath}`}
-                                                                alt="인증 이미지"
+                                                                alt={docLabel}
                                                                 className="h-56 w-full object-contain"
                                                                 onClick={() =>
                                                                     setPreviewUrl(
@@ -1682,7 +1710,7 @@ export default function AdminPage() {
                                                                 클릭하면 확대됩니다.
                                                             </span>
                                                             <a
-                                                                href={`/api/admin/verifications/${user.id}/download?type=${verificationType}`}
+                                                                href={`/api/admin/verifications/${user.id}/download?type=${kind}`}
                                                                 download
                                                                 className="text-blue-600 hover:underline"
                                                             >

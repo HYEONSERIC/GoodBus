@@ -17,31 +17,35 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
+import { OpenTripBidDialog } from '@/components/OpenTripBidDialog';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
-import { ArrowUpDown, CalendarDays } from 'lucide-react';
+import { ArrowRight, ArrowUpDown, CalendarDays } from 'lucide-react';
 
 interface Trip {
     id: string;
     origin: string;
+    originX?: number | null;
+    originY?: number | null;
     destination: string;
+    destinationX?: number | null;
+    destinationY?: number | null;
     dateTime: string;
     paxCount: number;
     busSize: string;
     status: string;
     companionType?: 'depart_return' | 'with_schedule' | null;
     servicePurpose?: string | null;
-    paymentMethod?: string | null;
+    paymentMethod?: 'cash' | 'card' | null;
     additionalRequest?: string | null;
     itineraryDetail?: string | null;
     stopoverDetail?: string | null;
@@ -74,7 +78,13 @@ export default function CompanyDashboard() {
     const [trips, setTrips] = useState<Trip[]>([]);
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
-    const [bidData, setBidData] = useState({ price: 0, note: '' });
+    const [bidDialogTrip, setBidDialogTrip] = useState<Trip | null>(null);
+    const [bidTripPartner, setBidTripPartner] = useState<Trip | undefined>(
+        undefined,
+    );
+    const [distanceByTripId, setDistanceByTripId] = useState<
+        Record<string, number | null>
+    >({});
     const [verification, setVerification] = useState<any>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
     const [verificationFile, setVerificationFile] = useState<File | null>(null);
@@ -376,6 +386,175 @@ export default function CompanyDashboard() {
         })[0];
     }
 
+    function groupTripCardsForDisplay(
+        list: Trip[],
+        partnerPool?: Trip[],
+    ): Trip[] {
+        const pool = partnerPool ?? list;
+        const sorted = [...list].sort(
+            (a, b) =>
+                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime(),
+        );
+        const consumed = new Set<string>();
+        return sorted.filter((trip) => {
+            if (consumed.has(trip.id)) return false;
+            const partner = getRoundPartnerTrip(trip, pool);
+            if (partner) {
+                const base =
+                    new Date(trip.dateTime).getTime() <=
+                    new Date(partner.dateTime).getTime()
+                        ? trip
+                        : partner;
+                consumed.add(trip.id);
+                consumed.add(partner.id);
+                return trip.id === base.id;
+            }
+            consumed.add(trip.id);
+            return true;
+        });
+    }
+
+    function getServicePurposeLabel(purpose?: string | null) {
+        if (!purpose) return null;
+        if (purpose === 'MT/학교') return '학교 행사/MT';
+        return purpose;
+    }
+
+    const openTripsPool = useMemo(() => {
+        const byId = new Map<string, Trip>();
+        for (const t of trips) byId.set(t.id, t);
+        for (const t of myBids) byId.set(t.id, t);
+        return Array.from(byId.values());
+    }, [trips, myBids]);
+
+    function TripRouteTypeColumn({
+        isRound,
+    }: {
+        isRound: boolean;
+    }) {
+        return (
+            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                {isRound ? (
+                    <ArrowUpDown
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                ) : (
+                    <ArrowRight
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                )}
+                <span className="mt-1 text-xs font-semibold text-gray-800">
+                    {isRound ? '왕복' : '편도'}
+                </span>
+                <span className="mt-0.5 text-[11px] text-gray-400">—</span>
+            </div>
+        );
+    }
+
+    function handleBidButtonClick(trip: Trip) {
+        if (verification?.companyRegistrationStatus !== 'approved') {
+            setVerificationDialogOpen(true);
+            return;
+        }
+        setBidTripPartner(getRoundPartnerTrip(trip, openTripsPool));
+        setBidDialogTrip(trip);
+    }
+
+    async function fetchPlaceTopResult(query: string) {
+        if (!query.trim()) return null;
+        try {
+            const response = await fetch(
+                `/api/kakao/places?query=${encodeURIComponent(query)}`,
+            );
+            if (!response.ok) return null;
+            const data = await response.json();
+            const first = (data.places || [])[0] as
+                | { x?: string; y?: string }
+                | undefined;
+            if (!first?.x || !first?.y) return null;
+            return { x: Number(first.x), y: Number(first.y) };
+        } catch {
+            return null;
+        }
+    }
+
+    async function fetchDrivingDistanceKm(
+        origin: { x: number; y: number },
+        destination: { x: number; y: number },
+    ) {
+        try {
+            const params = new URLSearchParams({
+                originX: String(origin.x),
+                originY: String(origin.y),
+                destX: String(destination.x),
+                destY: String(destination.y),
+            });
+            const response = await fetch(`/api/kakao/directions?${params}`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            const km = Number(data?.distanceKm);
+            return Number.isFinite(km) ? km : null;
+        } catch {
+            return null;
+        }
+    }
+
+    const allKnownTrips = useMemo(() => {
+        const byId = new Map<string, Trip>();
+        for (const t of trips) byId.set(t.id, t);
+        for (const t of myBids) byId.set(t.id, t);
+        for (const t of awardedTrips) byId.set(t.id, t);
+        return Array.from(byId.values());
+    }, [trips, myBids, awardedTrips]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function calculateDistances() {
+            const results: Record<string, number | null> = {};
+            for (const trip of allKnownTrips) {
+                const originPoint =
+                    typeof trip.originX === 'number' &&
+                    typeof trip.originY === 'number'
+                        ? { x: trip.originX, y: trip.originY }
+                        : await fetchPlaceTopResult(trip.origin);
+                const destinationPoint =
+                    typeof trip.destinationX === 'number' &&
+                    typeof trip.destinationY === 'number'
+                        ? { x: trip.destinationX, y: trip.destinationY }
+                        : await fetchPlaceTopResult(trip.destination);
+
+                if (!originPoint || !destinationPoint) {
+                    results[trip.id] = null;
+                    continue;
+                }
+
+                results[trip.id] = await fetchDrivingDistanceKm(
+                    originPoint,
+                    destinationPoint,
+                );
+            }
+
+            if (!cancelled) {
+                setDistanceByTripId(results);
+            }
+        }
+
+        if (allKnownTrips.length > 0) {
+            calculateDistances();
+        } else {
+            setDistanceByTripId({});
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [allKnownTrips]);
+
     function formatTripDateLine(dateTime: string) {
         const date = new Date(dateTime);
         const md = date.toLocaleDateString('ko-KR', {
@@ -510,24 +689,19 @@ export default function CompanyDashboard() {
         window.location.href = '/login';
     }
 
-    async function createBid(tripId: string) {
-        if (bidData.price <= 0) {
-            alert('올바른 가격을 입력해주세요 (양수만 가능)');
+    async function submitBid(
+        tripId: string,
+        totalManwon: number,
+        note: string,
+    ) {
+        if (verification?.companyRegistrationStatus !== 'approved') {
+            setVerificationDialogOpen(true);
             return;
         }
-
-        try {
-            if (verification?.companyRegistrationStatus !== 'approved') {
-                setVerificationDialogOpen(true);
-                return;
-            }
-            await bidsAPI.create(tripId, bidData.price, bidData.note);
-            setBidData({ price: 0, note: '' });
-            await loadData();
-        } catch (error: any) {
-            await loadData();
-            alert(error?.message || '입찰 생성에 실패했습니다');
-        }
+        await bidsAPI.create(tripId, totalManwon, note);
+        setBidDialogTrip(null);
+        setBidTripPartner(undefined);
+        await loadData();
     }
 
     async function handleVerificationUpload() {
@@ -906,112 +1080,152 @@ export default function CompanyDashboard() {
                                 </Button>
                             </div>
                         </div>
-                        <div className="grid gap-4 w-full max-w-xl mx-auto">
-                            {filterTrips(trips).map((trip) => (
-                                <Card
-                                    key={trip.id}
-                                    className="w-full rounded-none border-gray-200 shadow-sm"
-                                >
-                                    <CardHeader>
-                                        <div className="flex justify-between">
-                                            <div>
-                                                <CardTitle>
-                                                    {trip.origin} →{' '}
-                                                    {trip.destination}
-                                                </CardTitle>
-                                                <p className="text-sm text-gray-600">
-                                                    {format(
-                                                        new Date(trip.dateTime),
-                                                        'PPP p'
+                        <div className="mx-auto w-full max-w-xl border border-gray-200 bg-white">
+                            {(() => {
+                                const filteredTrips = filterTrips(trips);
+                                const cardTrips = groupTripCardsForDisplay(
+                                    filteredTrips,
+                                    openTripsPool,
+                                );
+
+                                if (cardTrips.length === 0) {
+                                    return (
+                                        <p className="px-4 py-12 text-center text-sm text-gray-500">
+                                            {trips.length === 0
+                                                ? '입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다.'
+                                                : '조건에 맞는 여정이 없습니다. 필터를 바꿔 보세요.'}
+                                        </p>
+                                    );
+                                }
+
+                                return cardTrips.map((trip) => {
+                                    const partner = getRoundPartnerTrip(
+                                        trip,
+                                        openTripsPool,
+                                    );
+                                    const isRound = Boolean(partner);
+                                    const bidCount = isRound
+                                        ? (trip.bids?.filter(
+                                              (b: Bid) => b.status === 'open',
+                                          ).length || 0) +
+                                          (partner?.bids?.filter(
+                                              (b: Bid) => b.status === 'open',
+                                          ).length || 0)
+                                        : trip.bids?.filter(
+                                              (b: Bid) => b.status === 'open',
+                                          ).length || 0;
+                                    const servicePurpose =
+                                        getServicePurposeLabel(
+                                            trip.servicePurpose,
+                                        );
+
+                                    return (
+                                        <div
+                                            key={trip.id}
+                                            className="border-b border-gray-100 p-4 last:border-b-0"
+                                        >
+                                            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                                                <p className="text-sm font-semibold leading-snug text-gray-900">
+                                                    {formatTripDateLine(
+                                                        trip.dateTime,
                                                     )}
+                                                    {biddingCompanionSubtitle(
+                                                        trip,
+                                                    ) ? (
+                                                        <span className="font-normal text-gray-600">
+                                                            {' '}
+                                                            {biddingCompanionSubtitle(
+                                                                trip,
+                                                            )}
+                                                        </span>
+                                                    ) : null}
                                                 </p>
+                                                <span className="shrink-0 text-sm font-semibold text-gray-900">
+                                                    {trip.paxCount}명
+                                                </span>
                                             </div>
-                                            <Badge>{trip.status === 'open' ? '진행중' : trip.status === 'awarded' ? '낙찰됨' : '취소됨'}</Badge>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-2">
-                                        <p>승객 수: {trip.paxCount}</p>
-                                        <p>버스 크기: {trip.busSize === 'small' ? '소형' : trip.busSize === 'medium' ? '중형' : '대형'}</p>
-                                        <Dialog>
-                                            <DialogTrigger asChild>
-                                                <Button className="mt-2 w-full sm:w-auto">
+
+                                            <div className="flex gap-3 py-3">
+                                                <TripRouteTypeColumn
+                                                    isRound={isRound}
+                                                />
+                                                <div className="min-w-0 flex-1 space-y-2 text-sm">
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            출발지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
+                                                            {trip.origin}
+                                                        </span>
+                                                    </p>
+                                                    <p className="flex items-start gap-2 leading-snug text-gray-900">
+                                                        <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
+                                                            도착지
+                                                        </span>
+                                                        <span className="min-w-0 font-medium">
+                                                            {trip.destination}
+                                                        </span>
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {servicePurpose ? (
+                                                        <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
+                                                            {servicePurpose}
+                                                        </span>
+                                                    ) : null}
+                                                    <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
+                                                        {getBusLabel(
+                                                            trip.busSize,
+                                                        )}
+                                                    </span>
+                                                    <span className="rounded-full border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                                                        입찰 {bidCount}
+                                                    </span>
+                                                </div>
+
+                                                <Button
+                                                    type="button"
+                                                    className="h-9 rounded-md bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-black"
+                                                    onClick={() =>
+                                                        handleBidButtonClick(
+                                                            trip,
+                                                        )
+                                                    }
+                                                >
                                                     입찰하기
                                                 </Button>
-                                            </DialogTrigger>
-                                            <DialogContent>
-                                                <DialogHeader>
-                                                    <DialogTitle>
-                                                        입찰하기
-                                                    </DialogTitle>
-                                                    <DialogDescription>
-                                                        입찰 정보를 입력하세요
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                <div className="space-y-4 py-4">
-                                                    <div>
-                                                        <Label>가격 ($)</Label>
-                                                        <Input
-                                                            type="number"
-                                                            value={
-                                                                bidData.price ===
-                                                                    0 ||
-                                                                bidData.price
-                                                                    ? String(
-                                                                          bidData.price
-                                                                      )
-                                                                    : ''
-                                                            }
-                                                            onChange={(e) =>
-                                                                setBidData({
-                                                                    ...bidData,
-                                                                    price:
-                                                                        e.target
-                                                                            .value ===
-                                                                        ''
-                                                                            ? 0
-                                                                            : parseFloat(
-                                                                                  e
-                                                                                      .target
-                                                                                      .value
-                                                                              ) ||
-                                                                              0,
-                                                                })
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <Label>
-                                                            메모 (선택사항)
-                                                        </Label>
-                                                        <Textarea
-                                                            value={bidData.note}
-                                                            onChange={(e) =>
-                                                                setBidData({
-                                                                    ...bidData,
-                                                                    note: e
-                                                                        .target
-                                                                        .value,
-                                                                })
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <Button
-                                                        onClick={() =>
-                                                            createBid(trip.id)
-                                                        }
-                                                        disabled={
-                                                            bidData.price <= 0
-                                                        }
-                                                    >
-                                                        입찰 제출
-                                                    </Button>
-                                                </div>
-                                            </DialogContent>
-                                        </Dialog>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
+
+                        <OpenTripBidDialog
+                            open={Boolean(bidDialogTrip)}
+                            onOpenChange={(open) => {
+                                if (!open) {
+                                    setBidDialogTrip(null);
+                                    setBidTripPartner(undefined);
+                                }
+                            }}
+                            trip={bidDialogTrip}
+                            partner={bidTripPartner}
+                            distanceKm={
+                                bidDialogTrip
+                                    ? distanceByTripId[bidDialogTrip.id] ??
+                                      null
+                                    : null
+                            }
+                            membershipLabel={currentMembershipLabel}
+                            profileForm={profileForm}
+                            onSubmit={async ({ tripId, totalManwon, note }) => {
+                                await submitBid(tripId, totalManwon, note);
+                            }}
+                        />
                     </div>
                 )}
 
@@ -2029,52 +2243,29 @@ export default function CompanyDashboard() {
         {activeTab !== 'profile' &&
             activeTab !== 'profileEdit' &&
             activeTab !== 'paymentCards' && (
-            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('available')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'available'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        주문
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('contract')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'contract'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        계약
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('chat')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'chat'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        채팅
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('support')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'support'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        고객센터
-                    </Button>
+            <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur">
+                <div className="mx-auto grid w-full max-w-xl grid-cols-4">
+                    {(
+                        [
+                            { id: 'available' as const, label: '주문' },
+                            { id: 'contract' as const, label: '계약' },
+                            { id: 'chat' as const, label: '채팅' },
+                            { id: 'support' as const, label: '고객센터' },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`border-b-2 py-3 text-center text-xs transition-colors sm:text-sm ${
+                                activeTab === tab.id
+                                    ? 'border-gray-900 font-semibold text-gray-900'
+                                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
             </div>
         )}

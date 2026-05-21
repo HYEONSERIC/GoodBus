@@ -3668,52 +3668,29 @@ export default function DriverDashboard() {
         {activeTab !== 'profile' &&
             activeTab !== 'profileEdit' &&
             activeTab !== 'paymentCards' && (
-            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('available')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'available'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        주문
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('contract')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'contract'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        계약
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('chat')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'chat'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        채팅
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('support')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'support'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        문의
-                    </Button>
+            <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur">
+                <div className="mx-auto grid w-full max-w-xl grid-cols-4">
+                    {(
+                        [
+                            { id: 'available' as const, label: '주문' },
+                            { id: 'contract' as const, label: '계약' },
+                            { id: 'chat' as const, label: '채팅' },
+                            { id: 'support' as const, label: '문의' },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`border-b-2 py-3 text-center text-xs transition-colors sm:text-sm ${
+                                activeTab === tab.id
+                                    ? 'border-gray-900 font-semibold text-gray-900'
+                                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
             </div>
         )}

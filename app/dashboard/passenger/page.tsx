@@ -159,7 +159,7 @@ export default function PassengerDashboard() {
         servicePurpose: '',
         paymentMethod: 'cash' as 'cash' | 'card',
         additionalRequest: '',
-        paxCount: 1,
+        paxCount: '',
         busSize: 'small',
     });
     const [stopoverOpen, setStopoverOpen] = useState(false);
@@ -279,6 +279,15 @@ export default function PassengerDashboard() {
                 return;
             }
 
+            const paxCount = parseInt(
+                String(newTrip.paxCount).replace(/\D/g, ''),
+                10,
+            );
+            if (!Number.isFinite(paxCount) || paxCount < 1) {
+                alert('승객 수를 입력해주세요.');
+                return;
+            }
+
             const goingAt = new Date(newTrip.goingDateTime);
             if (Number.isNaN(goingAt.getTime())) {
                 alert('가는날 시간을 올바르게 입력해주세요.');
@@ -313,7 +322,7 @@ export default function PassengerDashboard() {
                 destinationX: newTrip.destinationX ?? undefined,
                 destinationY: newTrip.destinationY ?? undefined,
                 dateTime: new Date(newTrip.goingDateTime).toISOString(),
-                paxCount: newTrip.paxCount,
+                paxCount,
                 busSize: newTrip.busSize,
                 stopoverDetail: newTrip.stopoverDetail.trim() || undefined,
                 companionType: newTrip.companionType,
@@ -341,7 +350,7 @@ export default function PassengerDashboard() {
                     destinationX: newTrip.originX ?? undefined,
                     destinationY: newTrip.originY ?? undefined,
                     dateTime: new Date(newTrip.returnDateTime).toISOString(),
-                    paxCount: newTrip.paxCount,
+                    paxCount,
                     busSize: newTrip.busSize,
                     stopoverDetail: newTrip.stopoverDetail.trim() || undefined,
                     companionType: newTrip.companionType,
@@ -1721,21 +1730,17 @@ export default function PassengerDashboard() {
                                 <Label>승객 수</Label>
                                 <Input
                                     className="h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 shadow-none focus-visible:border-gray-500 focus-visible:ring-0"
-                                    type="number"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="승객수를 입력해주세요"
                                     value={newTrip.paxCount}
-                                    min={1}
                                     onChange={(e) =>
                                         setNewTrip({
                                             ...newTrip,
-                                            paxCount: (() => {
-                                                const raw = e.target.value;
-                                                const n = Number(raw);
-                                                if (!raw) return 1;
-                                                return Number.isFinite(n) &&
-                                                    n >= 1
-                                                    ? Math.floor(n)
-                                                    : 1;
-                                            })(),
+                                            paxCount: e.target.value.replace(
+                                                /\D/g,
+                                                '',
+                                            ),
                                         })
                                     }
                                 />
@@ -2640,52 +2645,29 @@ export default function PassengerDashboard() {
                 )}
             </div>
 
-            <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-                <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('quote')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'quote'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        견적
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('booking')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'booking'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        예약
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('chat')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'chat'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        채팅
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        onClick={() => setActiveTab('support')}
-                        className={`h-9 flex-1 rounded-none px-1 text-xs sm:text-sm hover:bg-gray-100 ${
-                            activeTab === 'support'
-                                ? 'bg-gray-100 text-gray-900'
-                                : 'text-gray-700'
-                        }`}
-                    >
-                        문의
-                    </Button>
+            <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] backdrop-blur">
+                <div className="mx-auto grid w-full max-w-xl grid-cols-4">
+                    {(
+                        [
+                            { id: 'quote' as const, label: '견적' },
+                            { id: 'booking' as const, label: '예약' },
+                            { id: 'chat' as const, label: '채팅' },
+                            { id: 'support' as const, label: '문의' },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`border-b-2 py-3 text-center text-xs transition-colors sm:text-sm ${
+                                activeTab === tab.id
+                                    ? 'border-gray-900 font-semibold text-gray-900'
+                                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 

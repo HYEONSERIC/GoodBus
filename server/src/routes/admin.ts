@@ -338,13 +338,53 @@ router.get(
     }
 );
 
+const verificationUserSelect = {
+    id: true,
+    email: true,
+    role: true,
+    driverLicenseUrl: true,
+    driverLicenseStatus: true,
+    driverLicenseNote: true,
+    companyRegistrationUrl: true,
+    companyRegistrationStatus: true,
+    companyRegistrationNote: true,
+    createdAt: true,
+} as const;
+
 router.get(
     '/verifications',
     requireAuth,
     requireRole(UserRole.Admin),
     async (req, res) => {
-        const type = String(req.query.type || 'driver');
+        const type = String(req.query.type || 'all');
         const status = String(req.query.status || 'pending');
+
+        if (type === 'all') {
+            const [drivers, companies] = await Promise.all([
+                prisma.user.findMany({
+                    where: {
+                        role: UserRole.Driver,
+                        driverLicenseStatus: status as any,
+                    },
+                    select: verificationUserSelect,
+                    orderBy: { createdAt: 'desc' },
+                }),
+                prisma.user.findMany({
+                    where: {
+                        role: UserRole.BusCompany,
+                        companyRegistrationStatus: status as any,
+                    },
+                    select: verificationUserSelect,
+                    orderBy: { createdAt: 'desc' },
+                }),
+            ]);
+            const users = [...drivers, ...companies].sort(
+                (a, b) =>
+                    new Date(b.createdAt).getTime() -
+                    new Date(a.createdAt).getTime(),
+            );
+            return res.json({ users });
+        }
 
         const isDriver = type === 'driver';
         const roleFilter = isDriver ? UserRole.Driver : UserRole.BusCompany;
@@ -356,18 +396,7 @@ router.get(
                     ? { driverLicenseStatus: status as any }
                     : { companyRegistrationStatus: status as any }),
             },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                driverLicenseUrl: true,
-                driverLicenseStatus: true,
-                driverLicenseNote: true,
-                companyRegistrationUrl: true,
-                companyRegistrationStatus: true,
-                companyRegistrationNote: true,
-                createdAt: true,
-            },
+            select: verificationUserSelect,
             orderBy: { createdAt: 'desc' },
         });
 
