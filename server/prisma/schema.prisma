@@ -55,6 +55,18 @@ enum BidStatus {
   lost
 }
 
+enum SupportPostKind {
+  notice
+  faq
+}
+
+enum SupportInquiryCategory {
+  quote_amount
+  reservation_progress
+  verification
+  other
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -88,6 +100,41 @@ model User {
   chatRoomsAsPassenger ChatRoom[] @relation("PassengerChatRooms")
   chatRoomsAsBidder    ChatRoom[] @relation("BidderChatRooms")
   chatMessages         ChatMessage[] @relation("ChatMessageSender")
+  supportPostsCreated  SupportPost[] @relation("SupportPostAuthor")
+  supportInquiries     SupportInquiry[]
+  reviewsWritten       TripReview[] @relation("PassengerReviews")
+  reviewsReceived      TripReview[] @relation("DriverReviews")
+}
+
+model SupportPost {
+  id          String           @id @default(cuid())
+  kind        SupportPostKind
+  title       String
+  body        String           @db.Text
+  pinned      Boolean          @default(false)
+  authorRole  AdminRole
+  createdById String?
+  createdBy   User?            @relation("SupportPostAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([kind, createdAt])
+  @@index([kind, pinned, createdAt])
+}
+
+model SupportInquiry {
+  id         String                  @id @default(cuid())
+  userId     String
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   SupportInquiryCategory
+  title      String
+  body       String                  @db.Text
+  adminReply String?                 @db.Text
+  repliedAt  DateTime?
+  createdAt  DateTime                @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model Trip {
@@ -114,6 +161,24 @@ model Trip {
   
   bids Bid[]
   chatRooms ChatRoom[]
+  review TripReview?
+}
+
+model TripReview {
+  id          String   @id @default(cuid())
+  tripId      String   @unique
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  passengerId String
+  passenger   User     @relation("PassengerReviews", fields: [passengerId], references: [id], onDelete: Cascade)
+  driverId    String
+  driver      User     @relation("DriverReviews", fields: [driverId], references: [id], onDelete: Cascade)
+  rating      Int
+  comment     String?  @db.Text
+  imageUrls   String[] @default([])
+  createdAt   DateTime @default(now())
+
+  @@index([driverId, createdAt])
+  @@index([passengerId])
 }
 
 model Bid {

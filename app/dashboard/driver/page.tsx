@@ -11,9 +11,18 @@ import {
     chatsAPI,
     verificationAPI,
     profileAPI,
+    supportAPI,
 } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
+import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
+import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
+import {
+    DriverReviewsList,
+    formatDriverRatingStars,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
+import { reviewsAPI } from '@/lib/api';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
@@ -26,12 +35,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
-import {
-    ArrowUpDown,
-    CalendarDays,
-    Flag,
-    Search,
-} from 'lucide-react';
+import { ArrowRight, ArrowUpDown, CalendarDays } from 'lucide-react';
 
 interface Trip {
     id: string;
@@ -76,71 +80,6 @@ interface KakaoPlace {
     x?: string;
     y?: string;
 }
-
-type DriverSupportBoardRow = {
-    id: string;
-    no: number | null;
-    title: string;
-    author: string;
-    date: string;
-    pinned?: boolean;
-};
-
-const DRIVER_SUPPORT_NOTICE_ROWS: DriverSupportBoardRow[] = [
-    {
-        id: 'dn1',
-        no: null,
-        title: 'GOODBUS 서비스 점검 안내 (5/18 새벽)',
-        author: '운영팀',
-        date: '2026-05-10',
-        pinned: true,
-    },
-    {
-        id: 'dn2',
-        no: 9,
-        title: '기사 자격증 심사 기준 안내',
-        author: '고객센터',
-        date: '2026-04-18',
-    },
-    {
-        id: 'dn3',
-        no: 8,
-        title: '입찰·낙찰 관련 운영 정책 안내',
-        author: '운영팀',
-        date: '2026-03-28',
-    },
-];
-
-const DRIVER_SUPPORT_FAQ_ROWS: DriverSupportBoardRow[] = [
-    {
-        id: 'df1',
-        no: 6,
-        title: '운전자격증 승인은 얼마나 걸리나요?',
-        author: 'FAQ',
-        date: '2026-02-12',
-    },
-    {
-        id: 'df2',
-        no: 5,
-        title: '입찰 후 승객과 대화는 어떻게 하나요?',
-        author: 'FAQ',
-        date: '2026-02-08',
-    },
-    {
-        id: 'df3',
-        no: 4,
-        title: '동시 입찰 가능 건수는 어디서 확인하나요?',
-        author: 'FAQ',
-        date: '2026-01-30',
-    },
-    {
-        id: 'df4',
-        no: 3,
-        title: '멤버십 혜택은 무엇인가요?',
-        author: 'FAQ',
-        date: '2026-01-22',
-    },
-];
 
 export default function DriverDashboard() {
     const [user, setUser] = useState<any>(null);
@@ -191,6 +130,7 @@ export default function DriverDashboard() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -205,17 +145,36 @@ export default function DriverDashboard() {
     const [chatFocusRoomId, setChatFocusRoomId] = useState<string | null>(
         null
     );
-    const [driverSupportBoardTab, setDriverSupportBoardTab] = useState<
-        'notice' | 'faq'
-    >('notice');
-    const [driverSupportBoardQuery, setDriverSupportBoardQuery] =
-        useState('');
     const [driverSupportOpen, setDriverSupportOpen] = useState(false);
     const [driverSupportStep, setDriverSupportStep] = useState<
         'menu' | 'form' | 'done'
     >('menu');
+    const [driverSupportCategory, setDriverSupportCategory] = useState<
+        'quote_amount' | 'verification' | 'other' | null
+    >(null);
+    const [driverInquiryTitle, setDriverInquiryTitle] = useState('');
+    const [driverInquiryBody, setDriverInquiryBody] = useState('');
+    const [driverInquirySubmitting, setDriverInquirySubmitting] =
+        useState(false);
+    const [driverInquiryFormError, setDriverInquiryFormError] = useState('');
+    const [driverInquiryListKey, setDriverInquiryListKey] = useState(0);
     const [membershipPrevTab, setMembershipPrevTab] = useState<
-        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'paymentCards'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentCardsPrevTab, setPaymentCardsPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'profile'
+        | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -317,6 +276,21 @@ export default function DriverDashboard() {
     const [profileSection, setProfileSection] = useState<'details' | 'review'>(
         'details'
     );
+    const [driverReviews, setDriverReviews] = useState<
+        Array<
+            TripReviewRecord & {
+                trip?: {
+                    origin: string;
+                    destination: string;
+                    dateTime: string;
+                };
+            }
+        >
+    >([]);
+    const [driverReviewStats, setDriverReviewStats] = useState<{
+        avgRating: number | null;
+        count: number;
+    }>({ avgRating: null, count: 0 });
     const [garageResults, setGarageResults] = useState<KakaoPlace[]>([]);
     const [garageStatusMessage, setGarageStatusMessage] = useState('');
     const displayName = profileForm.name || user?.email?.split('@')[0] || '버스 기사';
@@ -442,9 +416,45 @@ export default function DriverDashboard() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'contract') {
+        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
+        reviewsAPI
+            .getDriverMe()
+            .then((data) => {
+                setDriverReviews(data.reviews || []);
+                setDriverReviewStats({
+                    avgRating: data.avgRating ?? null,
+                    count: data.count ?? 0,
+                });
+            })
+            .catch(() => {
+                setDriverReviews([]);
+                setDriverReviewStats({ avgRating: null, count: 0 });
+            });
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'contract' || activeTab === 'available') {
             loadData();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        const refreshOnFocus = () => {
+            if (activeTab === 'available') {
+                loadData();
+            }
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshOnFocus();
+            }
+        };
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
     }, [activeTab]);
 
     async function loadData() {
@@ -566,25 +576,7 @@ export default function DriverDashboard() {
     }
 
     function getAvailableTripCards(): Trip[] {
-        const visibleTrips = filterTrips(trips);
-        const consumed = new Set<string>();
-        return visibleTrips.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, visibleTrips);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                const other = base.id === trip.id ? partner : trip;
-                consumed.add(base.id);
-                consumed.add(other.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
+        return groupTripCardsForDisplay(filterTrips(trips), openTripsPool);
     }
 
     function assembleBidNote(pricePerVehicle: number, vehicleCount: number) {
@@ -674,8 +666,7 @@ export default function DriverDashboard() {
             setVerificationDialogOpen(true);
             return;
         }
-        const visibleTrips = filterTrips(trips);
-        setBidTripPartner(getRoundPartnerTrip(trip, visibleTrips));
+        setBidTripPartner(getRoundPartnerTrip(trip, openTripsPool));
         setBidUiStep('fee');
         setExtendedBid(defaultExtendedBidForm());
         setBidPhotoFiles([]);
@@ -927,6 +918,7 @@ export default function DriverDashboard() {
         const reverseTrips = list.filter(
             (other) =>
                 other.id !== baseTrip.id &&
+                other.status === baseTrip.status &&
                 other.origin === baseTrip.destination &&
                 other.destination === baseTrip.origin
         );
@@ -937,6 +929,35 @@ export default function DriverDashboard() {
             const bDiff = Math.abs(new Date(b.dateTime).getTime() - baseTime);
             return aDiff - bDiff;
         })[0];
+    }
+
+    /** 왕복 여정 카드: 출발이 빠른 편을 대표로 (정렬 없이 묶으면 카드가 사라질 수 있음) */
+    function groupTripCardsForDisplay(
+        list: Trip[],
+        partnerPool?: Trip[],
+    ): Trip[] {
+        const pool = partnerPool ?? list;
+        const sorted = [...list].sort(
+            (a, b) =>
+                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime(),
+        );
+        const consumed = new Set<string>();
+        return sorted.filter((trip) => {
+            if (consumed.has(trip.id)) return false;
+            const partner = getRoundPartnerTrip(trip, pool);
+            if (partner) {
+                const base =
+                    new Date(trip.dateTime).getTime() <=
+                    new Date(partner.dateTime).getTime()
+                        ? trip
+                        : partner;
+                consumed.add(trip.id);
+                consumed.add(partner.id);
+                return trip.id === base.id;
+            }
+            consumed.add(trip.id);
+            return true;
+        });
     }
 
     function getBusLabel(busSize: string) {
@@ -963,10 +984,10 @@ export default function DriverDashboard() {
         return `${md} (${weekday})`;
     }
 
-    function biddingScheduleSubtitle(trip: Trip) {
-        if (trip.companionType === 'with_schedule') return '일정 포함';
-        if (trip.companionType === 'depart_return') return '당일 왕복';
-        return '당일 일정';
+    /** 기사 동행 방식(출발·귀환만 / 일정 동행). 편도·왕복 운행 구분과 무관 */
+    function biddingCompanionSubtitle(trip: Trip): string | null {
+        if (trip.companionType === 'with_schedule') return '일정 동행';
+        return null;
     }
 
     function parseBidNoteForDisplay(note?: string | null) {
@@ -1007,7 +1028,8 @@ export default function DriverDashboard() {
         return d1 != null ? Math.round(d1) : null;
     }
 
-    const tripsForDistance = useMemo(() => {
+    /** 거리 계산용 */
+    const allKnownTrips = useMemo(() => {
         const byId = new Map<string, Trip>();
         for (const t of trips) byId.set(t.id, t);
         for (const t of myBids) byId.set(t.id, t);
@@ -1015,12 +1037,20 @@ export default function DriverDashboard() {
         return Array.from(byId.values());
     }, [trips, myBids, awardedTrips]);
 
+    /** open 견적끼리만 왕복 짝 (낙찰된 반대편 여정과 섞이지 않도록) */
+    const openTripsPool = useMemo(() => {
+        const byId = new Map<string, Trip>();
+        for (const t of trips) byId.set(t.id, t);
+        for (const t of myBids) byId.set(t.id, t);
+        return Array.from(byId.values());
+    }, [trips, myBids]);
+
     useEffect(() => {
         let cancelled = false;
 
         async function calculateDistances() {
             const results: Record<string, number | null> = {};
-            for (const trip of tripsForDistance) {
+            for (const trip of allKnownTrips) {
                 const originPoint =
                     typeof trip.originX === 'number' &&
                     typeof trip.originY === 'number'
@@ -1048,7 +1078,7 @@ export default function DriverDashboard() {
             }
         }
 
-        if (tripsForDistance.length > 0) {
+        if (allKnownTrips.length > 0) {
             calculateDistances();
         } else {
             setDistanceByTripId({});
@@ -1057,7 +1087,7 @@ export default function DriverDashboard() {
         return () => {
             cancelled = true;
         };
-    }, [tripsForDistance]);
+    }, [allKnownTrips]);
 
     useEffect(() => {
         const urls = bidPhotoFiles.map((f) => URL.createObjectURL(f));
@@ -1074,30 +1104,14 @@ export default function DriverDashboard() {
     );
 
     /** 예약주문: 미래 낙찰만, 왕복은 출발이 빠른 편만 한 장으로 표시 */
-    const contractReservationCardTrips = useMemo(() => {
-        const sorted = [...contractReservationTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() -
-                new Date(b.dateTime).getTime()
-        );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [contractReservationTrips]);
+    const contractReservationCardTrips = useMemo(
+        () =>
+            groupTripCardsForDisplay(
+                contractReservationTrips,
+                contractReservationTrips,
+            ),
+        [contractReservationTrips]
+    );
     const contractCompletedTrips = useMemo(
         () =>
             awardedTrips.filter(
@@ -1105,46 +1119,54 @@ export default function DriverDashboard() {
             ),
         [awardedTrips]
     );
-    const contractCompletedCardTrips = useMemo(() => {
-        const sorted = [...contractCompletedTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
-        );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [contractCompletedTrips]);
+    const contractCompletedCardTrips = useMemo(
+        () =>
+            groupTripCardsForDisplay(
+                contractCompletedTrips,
+                contractCompletedTrips,
+            ),
+        [contractCompletedTrips]
+    );
+    const myBidCardTrips = useMemo(
+        () => groupTripCardsForDisplay(myBids, openTripsPool),
+        [myBids, openTripsPool]
+    );
 
-    const driverSupportBoardRows = useMemo(() => {
-        const base =
-            driverSupportBoardTab === 'notice'
-                ? [...DRIVER_SUPPORT_NOTICE_ROWS]
-                : [...DRIVER_SUPPORT_FAQ_ROWS];
-        base.sort((a, b) => {
-            if (a.pinned && !b.pinned) return -1;
-            if (!a.pinned && b.pinned) return 1;
-            const na = a.no ?? 0;
-            const nb = b.no ?? 0;
-            return nb - na;
-        });
-        const q = driverSupportBoardQuery.trim().toLowerCase();
-        if (!q) return base;
-        return base.filter((r) => r.title.toLowerCase().includes(q));
-    }, [driverSupportBoardTab, driverSupportBoardQuery]);
+    function TripRouteTypeColumn({
+        isRound,
+        km,
+    }: {
+        isRound: boolean;
+        km: number | null | undefined;
+    }) {
+        return (
+            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
+                {isRound ? (
+                    <ArrowUpDown
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                ) : (
+                    <ArrowRight
+                        className="h-5 w-5 text-gray-500"
+                        strokeWidth={1.75}
+                        aria-hidden
+                    />
+                )}
+                <span className="mt-1 text-xs font-semibold text-gray-800">
+                    {isRound ? '왕복' : '편도'}
+                </span>
+                {km != null ? (
+                    <span className="mt-0.5 text-[11px] text-gray-500">
+                        {km}km
+                    </span>
+                ) : (
+                    <span className="mt-0.5 text-[11px] text-gray-400">—</span>
+                )}
+            </div>
+        );
+    }
 
     const bidDialogTrip = selectedTrip;
     const bidPartner = bidTripPartner;
@@ -1171,6 +1193,32 @@ export default function DriverDashboard() {
                                     </button>
                                 </div>
                                 <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : activeTab === 'paymentCards' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() =>
+                                            setActiveTab(paymentCardsPrevTab)
+                                        }
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    결제카드
+                                </span>
                                 <div className="absolute right-3 sm:right-4">
                                     <button
                                         type="button"
@@ -1280,10 +1328,16 @@ export default function DriverDashboard() {
                     open={driverSupportOpen}
                     onOpenChange={(open) => {
                         setDriverSupportOpen(open);
-                        if (!open) setDriverSupportStep('menu');
+                        if (!open) {
+                            setDriverSupportStep('menu');
+                            setDriverSupportCategory(null);
+                            setDriverInquiryTitle('');
+                            setDriverInquiryBody('');
+                            setDriverInquiryFormError('');
+                        }
                     }}
                 >
-                    <DialogContent>
+                    <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>문의하기</DialogTitle>
                             <DialogDescription>
@@ -1295,21 +1349,37 @@ export default function DriverDashboard() {
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory(
+                                            'quote_amount',
+                                        );
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     입찰·견적 문의
                                 </Button>
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory(
+                                            'verification',
+                                        );
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     자격증·인증 문의
                                 </Button>
                                 <Button
                                     variant="outline"
                                     className="w-full"
-                                    onClick={() => setDriverSupportStep('form')}
+                                    type="button"
+                                    onClick={() => {
+                                        setDriverSupportCategory('other');
+                                        setDriverSupportStep('form');
+                                    }}
                                 >
                                     기타 문의
                                 </Button>
@@ -1317,13 +1387,112 @@ export default function DriverDashboard() {
                         )}
                         {driverSupportStep === 'form' && (
                             <div className="space-y-4">
+                                {driverInquiryFormError ? (
+                                    <p className="text-sm text-red-600">
+                                        {driverInquiryFormError}
+                                    </p>
+                                ) : null}
                                 <div>
-                                    <Label>문의 내용</Label>
-                                    <Textarea placeholder="문의 내용을 입력하세요" />
+                                    <Label htmlFor="driver-inquiry-title">
+                                        제목
+                                    </Label>
+                                    <Input
+                                        id="driver-inquiry-title"
+                                        className="mt-1"
+                                        value={driverInquiryTitle}
+                                        onChange={(e) =>
+                                            setDriverInquiryTitle(
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="문의 제목을 입력하세요"
+                                        maxLength={200}
+                                    />
                                 </div>
-                                <Button onClick={() => setDriverSupportStep('done')}>
-                                    문의하기
-                                </Button>
+                                <div>
+                                    <Label htmlFor="driver-inquiry-body">
+                                        문의 내용
+                                    </Label>
+                                    <Textarea
+                                        id="driver-inquiry-body"
+                                        className="mt-1 min-h-[140px]"
+                                        placeholder="문의 내용을 입력하세요"
+                                        value={driverInquiryBody}
+                                        onChange={(e) =>
+                                            setDriverInquiryBody(
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setDriverSupportStep('menu');
+                                            setDriverInquiryFormError('');
+                                        }}
+                                    >
+                                        이전
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        disabled={
+                                            driverInquirySubmitting ||
+                                            !driverSupportCategory
+                                        }
+                                        onClick={async () => {
+                                            const title =
+                                                driverInquiryTitle.trim();
+                                            const body =
+                                                driverInquiryBody.trim();
+                                            if (!title) {
+                                                setDriverInquiryFormError(
+                                                    '제목을 입력해주세요.',
+                                                );
+                                                return;
+                                            }
+                                            if (!body) {
+                                                setDriverInquiryFormError(
+                                                    '문의 내용을 입력해주세요.',
+                                                );
+                                                return;
+                                            }
+                                            setDriverInquirySubmitting(true);
+                                            setDriverInquiryFormError('');
+                                            try {
+                                                await supportAPI.createInquiry(
+                                                    {
+                                                        category:
+                                                            driverSupportCategory!,
+                                                        title,
+                                                        body,
+                                                    },
+                                                );
+                                                setDriverInquiryListKey(
+                                                    (k) => k + 1,
+                                                );
+                                                setDriverInquiryTitle('');
+                                                setDriverInquiryBody('');
+                                                setDriverSupportCategory(null);
+                                                setDriverSupportStep('done');
+                                            } catch (e) {
+                                                setDriverInquiryFormError(
+                                                    e instanceof Error
+                                                        ? e.message
+                                                        : '문의 접수에 실패했습니다.',
+                                                );
+                                            } finally {
+                                                setDriverInquirySubmitting(
+                                                    false,
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        문의하기
+                                    </Button>
+                                </div>
                             </div>
                         )}
                         {driverSupportStep === 'done' && (
@@ -1418,9 +1587,10 @@ export default function DriverDashboard() {
                                         setSelectedDate('');
                                         setMinPax('');
                                         setMaxPax('');
+                                        loadData();
                                     }}
-                                    title="필터 초기화"
-                                    aria-label="필터 초기화"
+                                    title="필터 초기화 및 목록 새로고침"
+                                    aria-label="필터 초기화 및 목록 새로고침"
                                     className="h-9 w-9 rounded-none px-0 text-gray-800 hover:bg-gray-100 active:bg-gray-100"
                                 >
                                     ↻
@@ -1429,34 +1599,26 @@ export default function DriverDashboard() {
                         </div>
                         <div className="w-full max-w-xl mx-auto border border-gray-200 bg-white">
                             {(() => {
-                                const visibleTrips = filterTrips(trips);
-                                const consumed = new Set<string>();
-                                const cards = visibleTrips.filter((trip) => {
-                                    if (consumed.has(trip.id)) return false;
-                                    const partner = getRoundPartnerTrip(
-                                        trip,
-                                        visibleTrips
-                                    );
-                                    if (partner) {
-                                        const base =
-                                            new Date(trip.dateTime).getTime() <=
-                                            new Date(partner.dateTime).getTime()
-                                                ? trip
-                                                : partner;
-                                        const other =
-                                            base.id === trip.id ? partner : trip;
-                                        consumed.add(base.id);
-                                        consumed.add(other.id);
-                                        return trip.id === base.id;
-                                    }
-                                    consumed.add(trip.id);
-                                    return true;
-                                });
+                                const filteredTrips = filterTrips(trips);
+                                const cardTrips = groupTripCardsForDisplay(
+                                    filteredTrips,
+                                    openTripsPool,
+                                );
 
-                                return cards.map((trip) => {
+                                if (cardTrips.length === 0) {
+                                    return (
+                                        <p className="px-4 py-12 text-center text-sm text-gray-500">
+                                            {trips.length === 0
+                                                ? '입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다. ↻ 버튼으로 새로고침할 수 있어요.'
+                                                : '조건에 맞는 여정이 없습니다. 필터를 바꾸거나 ↻로 새로고침해 보세요.'}
+                                        </p>
+                                    );
+                                }
+
+                                return cardTrips.map((trip) => {
                                     const partner = getRoundPartnerTrip(
                                         trip,
-                                        visibleTrips
+                                        openTripsPool,
                                     );
                                     const isRound = Boolean(partner);
                                     const km = biddingTripKm(
@@ -1486,12 +1648,17 @@ export default function DriverDashboard() {
                                                 <p className="text-sm font-semibold leading-snug text-gray-900">
                                                     {formatTripDateLine(
                                                         trip.dateTime
-                                                    )}{' '}
-                                                    <span className="font-normal text-gray-600">
-                                                        {biddingScheduleSubtitle(
-                                                            trip
-                                                        )}
-                                                    </span>
+                                                    )}
+                                                    {biddingCompanionSubtitle(
+                                                        trip
+                                                    ) ? (
+                                                        <span className="font-normal text-gray-600">
+                                                            {' '}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            )}
+                                                        </span>
+                                                    ) : null}
                                                 </p>
                                                 <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                     {trip.paxCount}명
@@ -1499,27 +1666,10 @@ export default function DriverDashboard() {
                                             </div>
 
                                             <div className="flex gap-3 py-3">
-                                                <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                    <ArrowUpDown
-                                                        className="h-5 w-5 text-gray-500"
-                                                        strokeWidth={1.75}
-                                                        aria-hidden
-                                                    />
-                                                    <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                        {isRound
-                                                            ? '왕복'
-                                                            : '편도'}
-                                                    </span>
-                                                    {km != null ? (
-                                                        <span className="mt-0.5 text-[11px] text-gray-500">
-                                                            {km}km
-                                                        </span>
-                                                    ) : (
-                                                        <span className="mt-0.5 text-[11px] text-gray-400">
-                                                            —
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <TripRouteTypeColumn
+                                                    isRound={isRound}
+                                                    km={km}
+                                                />
                                                 <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                     <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                         <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2350,7 +2500,7 @@ export default function DriverDashboard() {
                                                 const partner =
                                                     getRoundPartnerTrip(
                                                         trip,
-                                                        contractReservationTrips
+                                                        contractReservationTrips,
                                                     );
                                                 const isRound =
                                                     Boolean(partner);
@@ -2403,12 +2553,17 @@ export default function DriverDashboard() {
                                                             <p className="text-sm font-semibold leading-snug text-gray-900">
                                                                 {formatTripDateLine(
                                                                     trip.dateTime
-                                                                )}{' '}
-                                                                <span className="font-normal text-gray-600">
-                                                                    {biddingScheduleSubtitle(
-                                                                        trip
-                                                                    )}
-                                                                </span>
+                                                                )}
+                                                                {biddingCompanionSubtitle(
+                                                                    trip
+                                                                ) ? (
+                                                                    <span className="font-normal text-gray-600">
+                                                                        {' '}
+                                                                        {biddingCompanionSubtitle(
+                                                                            trip
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
                                                             </p>
                                                             <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                                 {trip.paxCount}
@@ -2416,29 +2571,10 @@ export default function DriverDashboard() {
                                                             </span>
                                                         </div>
                                                         <div className="flex gap-3 py-3">
-                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                                <ArrowUpDown
-                                                                    className="h-5 w-5 text-gray-500"
-                                                                    strokeWidth={
-                                                                        1.75
-                                                                    }
-                                                                    aria-hidden
-                                                                />
-                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {km != null ? (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                        {km}km
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                        —
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            <TripRouteTypeColumn
+                                                                isRound={isRound}
+                                                                km={km}
+                                                            />
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                                 <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                     <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2503,11 +2639,11 @@ export default function DriverDashboard() {
                         {contractSubTab === 'bidding' && (
                             <>
                                 <p className="mb-2 text-left text-xs font-medium text-gray-600">
-                                    입찰진행중 ({myBids.length})
+                                    입찰진행중 ({myBidCardTrips.length})
                                 </p>
-                                {myBids.length > 0 ? (
+                                {myBidCardTrips.length > 0 ? (
                                     <div className="space-y-3">
-                                        {myBids.map((trip) => {
+                                        {myBidCardTrips.map((trip) => {
                                             const myBid = trip.bids.find(
                                                 (bid: Bid) =>
                                                     bid.bidder.id === user?.id &&
@@ -2515,7 +2651,7 @@ export default function DriverDashboard() {
                                             );
                                             const partner = getRoundPartnerTrip(
                                                 trip,
-                                                myBids
+                                                openTripsPool,
                                             );
                                             const isRound = Boolean(partner);
                                             const km = biddingTripKm(
@@ -2566,41 +2702,27 @@ export default function DriverDashboard() {
                                                         <p className="text-sm font-semibold leading-snug text-gray-900">
                                                             {formatTripDateLine(
                                                                 trip.dateTime
-                                                            )}{' '}
-                                                            <span className="font-normal text-gray-600">
-                                                                {biddingScheduleSubtitle(
-                                                                    trip
-                                                                )}
-                                                            </span>
+                                                            )}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            ) ? (
+                                                                <span className="font-normal text-gray-600">
+                                                                    {' '}
+                                                                    {biddingCompanionSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            ) : null}
                                                         </p>
                                                         <span className="shrink-0 text-sm font-medium text-gray-900">
                                                             {trip.paxCount}명
                                                         </span>
                                                     </div>
                                                     <div className="flex gap-3 py-3">
-                                                        <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                            <ArrowUpDown
-                                                                className="h-5 w-5 text-gray-500"
-                                                                strokeWidth={
-                                                                    1.75
-                                                                }
-                                                                aria-hidden
-                                                            />
-                                                            <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                {isRound
-                                                                    ? '왕복'
-                                                                    : '편도'}
-                                                            </span>
-                                                            {km != null ? (
-                                                                <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                    {km}km
-                                                                </span>
-                                                            ) : (
-                                                                <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                    —
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                        <TripRouteTypeColumn
+                                                            isRound={isRound}
+                                                            km={km}
+                                                        />
                                                         <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                             <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                 <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2683,7 +2805,7 @@ export default function DriverDashboard() {
                                                 const partner =
                                                     getRoundPartnerTrip(
                                                         trip,
-                                                        contractCompletedTrips
+                                                        contractCompletedTrips,
                                                     );
                                                 const isRound =
                                                     Boolean(partner);
@@ -2708,12 +2830,17 @@ export default function DriverDashboard() {
                                                             <p className="text-sm font-semibold leading-snug text-gray-900">
                                                                 {formatTripDateLine(
                                                                     trip.dateTime
-                                                                )}{' '}
-                                                                <span className="font-normal text-gray-600">
-                                                                    {biddingScheduleSubtitle(
-                                                                        trip
-                                                                    )}
-                                                                </span>
+                                                                )}
+                                                                {biddingCompanionSubtitle(
+                                                                    trip
+                                                                ) ? (
+                                                                    <span className="font-normal text-gray-600">
+                                                                        {' '}
+                                                                        {biddingCompanionSubtitle(
+                                                                            trip
+                                                                        )}
+                                                                    </span>
+                                                                ) : null}
                                                             </p>
                                                             <span className="shrink-0 text-sm font-semibold text-gray-900">
                                                                 {trip.paxCount}
@@ -2721,29 +2848,10 @@ export default function DriverDashboard() {
                                                             </span>
                                                         </div>
                                                         <div className="flex gap-3 py-3">
-                                                            <div className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-gray-100 pr-3 text-center">
-                                                                <ArrowUpDown
-                                                                    className="h-5 w-5 text-gray-500"
-                                                                    strokeWidth={
-                                                                        1.75
-                                                                    }
-                                                                    aria-hidden
-                                                                />
-                                                                <span className="mt-1 text-xs font-semibold text-gray-800">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {km != null ? (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-500">
-                                                                        {km}km
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="mt-0.5 text-[11px] text-gray-400">
-                                                                        —
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            <TripRouteTypeColumn
+                                                                isRound={isRound}
+                                                                km={km}
+                                                            />
                                                             <div className="min-w-0 flex-1 space-y-2 text-sm">
                                                                 <p className="flex items-start gap-2 leading-snug text-gray-900">
                                                                     <span className="w-11 shrink-0 pt-0.5 text-[11px] font-semibold text-gray-500">
@@ -2813,117 +2921,15 @@ export default function DriverDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <div className="mx-auto w-full max-w-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-                        <h2 className="border-b border-gray-200 py-4 text-center text-lg font-bold tracking-tight text-gray-900">
-                            고객센터
-                        </h2>
-                        <div className="grid grid-cols-2 border-b border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => setDriverSupportBoardTab('notice')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    driverSupportBoardTab === 'notice'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                공지사항
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setDriverSupportBoardTab('faq')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    driverSupportBoardTab === 'faq'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                자주 하는 질문
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 border-b border-gray-200 px-2 py-2.5 text-[11px] font-medium text-gray-500 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs">
-                            <span className="text-center">No</span>
-                            <span>제목</span>
-                            <span className="text-right">글쓴이</span>
-                            <span className="text-right">작성일</span>
-                        </div>
-
-                        <ul className="divide-y divide-gray-100">
-                            {driverSupportBoardRows.length === 0 ? (
-                                <li className="px-3 py-8 text-center text-sm text-gray-500">
-                                    검색 결과가 없습니다.
-                                </li>
-                            ) : (
-                                driverSupportBoardRows.map((row) => (
-                                    <li
-                                        key={row.id}
-                                        className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 px-2 py-2.5 text-[11px] text-gray-800 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs"
-                                    >
-                                        <div className="flex justify-center">
-                                            {row.pinned ? (
-                                                <Flag
-                                                    className="h-3.5 w-3.5 text-amber-600"
-                                                    strokeWidth={2}
-                                                    aria-label="고정"
-                                                />
-                                            ) : (
-                                                <span className="tabular-nums text-gray-600">
-                                                    {row.no ?? '—'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="min-w-0 truncate font-medium text-gray-900">
-                                            {row.title}
-                                        </p>
-                                        <span className="truncate text-right text-gray-600">
-                                            {row.author}
-                                        </span>
-                                        <span className="truncate text-right text-gray-500">
-                                            {row.date}
-                                        </span>
-                                    </li>
-                                ))
-                            )}
-                        </ul>
-
-                        <div className="space-y-3 border-t border-gray-200 p-3">
-                            <div className="relative w-full">
-                                <Input
-                                    type="search"
-                                    value={driverSupportBoardQuery}
-                                    onChange={(e) =>
-                                        setDriverSupportBoardQuery(
-                                            e.target.value,
-                                        )
-                                    }
-                                    placeholder="제목 검색"
-                                    className="h-9 w-full pr-9 text-sm"
-                                    aria-label="게시글 검색"
-                                />
-                                <Search
-                                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                                    strokeWidth={2}
-                                    aria-hidden
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <p className="text-center text-sm text-gray-600">
-                                    추가로 궁금하신 점이 있으신가요?
-                                </p>
-                                <Button
-                                    type="button"
-                                    className="h-10 w-full rounded-md bg-gray-900 text-sm font-semibold text-white hover:bg-black"
-                                    onClick={() => {
-                                        setDriverSupportOpen(true);
-                                        setDriverSupportStep('menu');
-                                    }}
-                                >
-                                    문의하기
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
+                    <SupportCustomerCenter
+                        heading="고객센터"
+                        showInquiry
+                        refreshMyInquiriesKey={driverInquiryListKey}
+                        onInquiryClick={() => {
+                            setDriverSupportOpen(true);
+                            setDriverSupportStep('menu');
+                        }}
+                    />
                 )}
 
 
@@ -2981,7 +2987,14 @@ export default function DriverDashboard() {
                                             {displayName}
                                         </p>
                                         <p className="text-sm text-gray-500">
-                                            ★★★★☆ (4.9)
+                                            {(() => {
+                                                const { stars, label } =
+                                                    formatDriverRatingStars(
+                                                        driverReviewStats.avgRating,
+                                                        driverReviewStats.count,
+                                                    );
+                                                return `${stars} ${label}`;
+                                            })()}
                                         </p>
                                         <div className="mt-4 grid grid-cols-3 gap-4 text-xs text-gray-600">
                                             <div>
@@ -3103,9 +3116,13 @@ export default function DriverDashboard() {
                                             </div>
                                         ) : (
                                             <div className="py-4">
-                                                <div className="rounded-lg border p-4 text-sm text-gray-600">
-                                                    아직 등록된 리뷰가 없습니다.
-                                                </div>
+                                                <DriverReviewsList
+                                                    reviews={driverReviews}
+                                                    resolveImageUrl={(url) =>
+                                                        resolveMediaUrl(url) ??
+                                                        url
+                                                    }
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -3502,6 +3519,10 @@ export default function DriverDashboard() {
                     </>
                 )}
 
+                {activeTab === 'paymentCards' && (
+                    <PaymentCardsPanel userId={user?.id} />
+                )}
+
                 {activeTab === 'membership' && (
                     <div className="space-y-4">
                         <div>
@@ -3614,6 +3635,21 @@ export default function DriverDashboard() {
                         <button
                             type="button"
                             className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                            onClick={() => {
+                                setPaymentCardsPrevTab(
+                                    activeTab === 'paymentCards'
+                                        ? 'available'
+                                        : activeTab,
+                                );
+                                setActiveTab('paymentCards');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            결제카드
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={handleLogout}
                         >
                             로그아웃
@@ -3629,7 +3665,9 @@ export default function DriverDashboard() {
                 </div>
             </div>
         )}
-        {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+        {activeTab !== 'profile' &&
+            activeTab !== 'profileEdit' &&
+            activeTab !== 'paymentCards' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
                 <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
@@ -3674,7 +3712,7 @@ export default function DriverDashboard() {
                                 : 'text-gray-700'
                         }`}
                     >
-                        고객센터
+                        문의
                     </Button>
                 </div>
             </div>

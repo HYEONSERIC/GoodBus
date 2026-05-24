@@ -2,6 +2,7 @@ import express from 'express';
 import { UserRole } from '@prisma/client';
 import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
+import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
 
 const router = express.Router();
 
@@ -245,6 +246,10 @@ router.post('/rooms/for-quote', requireAuth, async (req, res) => {
 
 router.get('/rooms', requireAuth, async (req, res) => {
     try {
+        if (req.user!.role === UserRole.Passenger) {
+            await expireExpiredOpenTripsForPassenger(req.user!.userId);
+        }
+
         await ensureAwardedRooms(req.user!.userId, req.user!.role);
 
         const rooms = await prisma.chatRoom.findMany({

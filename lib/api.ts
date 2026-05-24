@@ -249,6 +249,65 @@ export const adminAPI = {
             method: 'PATCH',
             body: JSON.stringify({ status, reason }),
         }),
+    getSupportPosts: async (params?: { kind?: string }) =>
+        fetchAPI(`/admin/support-posts${toQuery(params)}`),
+    createSupportPost: async (body: {
+        kind: 'notice' | 'faq';
+        title: string;
+        body: string;
+        pinned: boolean;
+    }) =>
+        fetchAPI('/admin/support-posts', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    updateSupportPost: async (
+        id: string,
+        body: Partial<{
+            kind: 'notice' | 'faq';
+            title: string;
+            body: string;
+            pinned: boolean;
+        }>
+    ) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+    deleteSupportPost: async (id: string) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'DELETE',
+        }),
+    getSupportInquiries: async () => fetchAPI('/admin/support-inquiries'),
+    getSupportInquiry: async (id: string) =>
+        fetchAPI(`/admin/support-inquiries/${id}`),
+    replySupportInquiry: async (id: string, body: { adminReply: string }) =>
+        fetchAPI(`/admin/support-inquiries/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+};
+
+export const supportAPI = {
+    listPosts: async (params: { kind: 'notice' | 'faq'; q?: string }) =>
+        fetchAPI(`/support/posts${toQuery(params)}`),
+    getPost: async (id: string) => fetchAPI(`/support/posts/${id}`),
+    createInquiry: async (body: {
+        category:
+            | 'quote_amount'
+            | 'reservation_progress'
+            | 'verification'
+            | 'other';
+        title: string;
+        body: string;
+    }) =>
+        fetchAPI('/support/inquiries', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    listMyInquiries: async () => fetchAPI('/support/my-inquiries'),
+    getMyInquiry: async (id: string) =>
+        fetchAPI(`/support/my-inquiries/${id}`),
 };
 
 export const verificationAPI = {
@@ -262,6 +321,20 @@ export const verificationAPI = {
             headers: {},
         });
     },
+};
+
+export const reviewsAPI = {
+    listForTrips: async (tripIds: string[]) => {
+        if (tripIds.length === 0) return { reviews: [] };
+        return fetchAPI(`/reviews?tripIds=${tripIds.join(',')}`);
+    },
+    create: async (formData: FormData) =>
+        fetchAPI('/reviews', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        }),
+    getDriverMe: async () => fetchAPI('/reviews/driver/me'),
 };
 
 export const profileAPI = {

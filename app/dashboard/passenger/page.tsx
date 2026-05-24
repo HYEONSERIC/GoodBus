@@ -10,7 +10,11 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { authAPI, chatsAPI, tripsAPI } from '@/lib/api';
+import { authAPI, chatsAPI, tripsAPI, supportAPI, reviewsAPI } from '@/lib/api';
+import {
+    TripReviewSection,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
 import {
@@ -31,72 +35,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { format } from 'date-fns';
-import { Flag, Search } from 'lucide-react';
-
-type SupportBoardRow = {
-    id: string;
-    no: number | null;
-    title: string;
-    author: string;
-    date: string;
-    pinned?: boolean;
-};
-
-const SUPPORT_NOTICE_ROWS: SupportBoardRow[] = [
-    {
-        id: 'n1',
-        no: null,
-        title: 'GOODBUS 서비스 점검 안내 (5/18 새벽)',
-        author: '운영팀',
-        date: '2026-05-10',
-        pinned: true,
-    },
-    {
-        id: 'n2',
-        no: 12,
-        title: '결제 및 환불 정책 안내',
-        author: '고객센터',
-        date: '2026-04-22',
-    },
-    {
-        id: 'n3',
-        no: 11,
-        title: '개인정보 처리방침 개정 안내',
-        author: '운영팀',
-        date: '2026-03-05',
-    },
-];
-
-const SUPPORT_FAQ_ROWS: SupportBoardRow[] = [
-    {
-        id: 'f1',
-        no: 8,
-        title: '견적 요청 후 입찰이 얼마나 걸리나요?',
-        author: 'FAQ',
-        date: '2026-02-14',
-    },
-    {
-        id: 'f2',
-        no: 7,
-        title: '낙찰 후 일정·경로 변경은 어떻게 하나요?',
-        author: 'FAQ',
-        date: '2026-02-10',
-    },
-    {
-        id: 'f3',
-        no: 6,
-        title: '현금 결제는 언제 이루어지나요?',
-        author: 'FAQ',
-        date: '2026-01-28',
-    },
-    {
-        id: 'f4',
-        no: 5,
-        title: '취소 시 위약금이 있나요?',
-        author: 'FAQ',
-        date: '2026-01-20',
-    },
-];
+import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 
 interface Trip {
     id: string;
@@ -161,6 +100,15 @@ interface KakaoPlace {
     y?: string;
 }
 
+function toDatetimeLocalInputValue(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${d}T${h}:${min}`;
+}
+
 export default function PassengerDashboard() {
     const [user, setUser] = useState<any>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
@@ -170,7 +118,7 @@ export default function PassengerDashboard() {
         'quote' | 'booking' | 'chat' | 'support'
     >('quote');
     const [bookingSubTab, setBookingSubTab] = useState<
-        'reservation' | 'bidding' | 'completed'
+        'reservation' | 'completed'
     >('reservation');
     const [chatOpen, setChatOpen] = useState(false);
     /** 견적 상세에서 채팅하기로 들어왔을 때 자동 선택할 방 */
@@ -181,10 +129,18 @@ export default function PassengerDashboard() {
     const [supportStep, setSupportStep] = useState<'menu' | 'form' | 'done'>(
         'menu',
     );
-    const [supportBoardTab, setSupportBoardTab] = useState<'notice' | 'faq'>(
-        'notice',
-    );
-    const [supportBoardQuery, setSupportBoardQuery] = useState('');
+    const [supportCategory, setSupportCategory] = useState<
+        'quote_amount' | 'reservation_progress' | 'other' | null
+    >(null);
+    const [supportInquiryTitle, setSupportInquiryTitle] = useState('');
+    const [supportInquiryBody, setSupportInquiryBody] = useState('');
+    const [supportInquirySubmitting, setSupportInquirySubmitting] =
+        useState(false);
+    const [supportInquiryFormError, setSupportInquiryFormError] = useState('');
+    const [supportInquiryListKey, setSupportInquiryListKey] = useState(0);
+    const [tripReviewsByTripId, setTripReviewsByTripId] = useState<
+        Record<string, TripReviewRecord>
+    >({});
     const [newTrip, setNewTrip] = useState({
         origin: '',
         originX: null as number | null,
@@ -248,25 +204,6 @@ export default function PassengerDashboard() {
         if (bidDetail) setBidGalleryIndex(0);
     }, [bidDetail?.bid?.id]);
 
-    const supportBoardRows = useMemo(() => {
-        const base =
-            supportBoardTab === 'notice'
-                ? [...SUPPORT_NOTICE_ROWS]
-                : [...SUPPORT_FAQ_ROWS];
-        base.sort((a, b) => {
-            if (a.pinned && !b.pinned) return -1;
-            if (!a.pinned && b.pinned) return 1;
-            const na = a.no ?? 0;
-            const nb = b.no ?? 0;
-            return nb - na;
-        });
-        const q = supportBoardQuery.trim().toLowerCase();
-        if (!q) return base;
-        return base.filter((r) => r.title.toLowerCase().includes(q));
-    }, [supportBoardTab, supportBoardQuery]);
-
-
-
     async function loadData() {
         try {
             const userData = await authAPI.getMe();
@@ -281,9 +218,34 @@ export default function PassengerDashboard() {
                 );
             });
             setTrips(myTrips);
+            await loadTripReviews(myTrips);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';
+        }
+    }
+
+    async function loadTripReviews(tripList: Trip[]) {
+        const completedIds = tripList
+            .filter(
+                (t) =>
+                    t.status === 'awarded' &&
+                    new Date(t.dateTime).getTime() < Date.now(),
+            )
+            .map((t) => t.id);
+        if (completedIds.length === 0) {
+            setTripReviewsByTripId({});
+            return;
+        }
+        try {
+            const data = await reviewsAPI.listForTrips(completedIds);
+            const map: Record<string, TripReviewRecord> = {};
+            for (const r of data.reviews || []) {
+                map[r.tripId] = r;
+            }
+            setTripReviewsByTripId(map);
+        } catch {
+            /* ignore */
         }
     }
 
@@ -317,6 +279,31 @@ export default function PassengerDashboard() {
                 return;
             }
 
+            const goingAt = new Date(newTrip.goingDateTime);
+            if (Number.isNaN(goingAt.getTime())) {
+                alert('가는날 시간을 올바르게 입력해주세요.');
+                return;
+            }
+            if (goingAt.getTime() < Date.now()) {
+                alert(
+                    '가는날 시간은 현재 시각 이후여야 합니다.\n다른 날짜·시간을 입력해 주세요.',
+                );
+                return;
+            }
+            if (newTrip.tripType === 'round') {
+                const returnAt = new Date(newTrip.returnDateTime);
+                if (Number.isNaN(returnAt.getTime())) {
+                    alert('오는날 시간을 올바르게 입력해주세요.');
+                    return;
+                }
+                if (returnAt.getTime() < goingAt.getTime()) {
+                    alert(
+                        '오는날 시간은 가는날 시간 이후여야 합니다.\n다른 날짜·시간을 입력해 주세요.',
+                    );
+                    return;
+                }
+            }
+
             // 왕복은 기존 DB 구조상 "편도 2개(방향 반대)"로 생성합니다.
             const goingTripPayload = {
                 origin: newTrip.origin,
@@ -343,13 +330,6 @@ export default function PassengerDashboard() {
             if (newTrip.tripType === 'oneway') {
                 await tripsAPI.create(goingTripPayload);
             } else {
-                const goingAt = new Date(newTrip.goingDateTime);
-                const returnAt = new Date(newTrip.returnDateTime);
-                if (returnAt.getTime() < goingAt.getTime()) {
-                    alert('오는날 시간이 가는날보다 빠를 수 없습니다.');
-                    return;
-                }
-
                 // 1) 가는 방향
                 await tripsAPI.create(goingTripPayload);
                 // 2) 오는 방향(원점/목적지 반전)
@@ -523,6 +503,7 @@ export default function PassengerDashboard() {
         const reverseTrips = sourceTrips.filter(
             (other) =>
                 other.id !== trip.id &&
+                other.status === trip.status &&
                 other.origin === trip.destination &&
                 other.destination === trip.origin,
         );
@@ -818,31 +799,6 @@ export default function PassengerDashboard() {
         });
     }, [passengerAwardedCompletedTrips]);
 
-    const passengerOpenCardTrips = useMemo(() => {
-        const sorted = [...passengerOpenTrips].sort(
-            (a, b) =>
-                new Date(a.dateTime).getTime() -
-                new Date(b.dateTime).getTime(),
-        );
-        const consumed = new Set<string>();
-        return sorted.filter((trip) => {
-            if (consumed.has(trip.id)) return false;
-            const partner = getRoundPartnerTrip(trip, sorted);
-            if (partner) {
-                const base =
-                    new Date(trip.dateTime).getTime() <=
-                    new Date(partner.dateTime).getTime()
-                        ? trip
-                        : partner;
-                consumed.add(trip.id);
-                consumed.add(partner.id);
-                return trip.id === base.id;
-            }
-            consumed.add(trip.id);
-            return true;
-        });
-    }, [passengerOpenTrips]);
-
     function renderPassengerAwardedBookingCard(
         trip: Trip,
         variant: 'upcoming' | 'completed',
@@ -963,26 +919,39 @@ export default function PassengerDashboard() {
                     </div>
 
                     {awardedBid ? (
-                        <div className="flex gap-2">
-                            <Button
-                                className="h-10 flex-1 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-black/90"
-                                onClick={() =>
-                                    openQuoteChat(trip, awardedBid)
-                                }
-                            >
-                                기사와 채팅하기
-                            </Button>
-                            {showCancel ? (
+                        <div className="space-y-3">
+                            <div className="flex gap-2">
                                 <Button
-                                    type="button"
-                                    className="h-10 flex-1 rounded-lg border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
-                                    onClick={() => {
-                                        setCancelDialogTrip(trip);
-                                        setCancelReason('');
-                                    }}
+                                    className="h-10 flex-1 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-black/90"
+                                    onClick={() =>
+                                        openQuoteChat(trip, awardedBid)
+                                    }
                                 >
-                                    낙찰 취소
+                                    기사와 채팅하기
                                 </Button>
+                                {showCancel ? (
+                                    <Button
+                                        type="button"
+                                        className="h-10 flex-1 rounded-lg border border-red-300 bg-white px-4 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                        onClick={() => {
+                                            setCancelDialogTrip(trip);
+                                            setCancelReason('');
+                                        }}
+                                    >
+                                        낙찰 취소
+                                    </Button>
+                                ) : null}
+                            </div>
+                            {variant === 'completed' ? (
+                                <TripReviewSection
+                                    tripId={trip.id}
+                                    existing={tripReviewsByTripId[trip.id]}
+                                    servicePurpose={trip.servicePurpose}
+                                    onSubmitted={() => loadTripReviews(trips)}
+                                    resolveImageUrl={(url) =>
+                                        resolveMediaUrl(url) ?? url
+                                    }
+                                />
                             ) : null}
                         </div>
                     ) : (
@@ -1003,6 +972,12 @@ export default function PassengerDashboard() {
             </Card>
         );
     }
+
+    const goingScheduleMin = toDatetimeLocalInputValue(new Date());
+    const returnScheduleMin =
+        newTrip.goingDateTime && newTrip.goingDateTime >= goingScheduleMin
+            ? newTrip.goingDateTime
+            : goingScheduleMin;
 
     return (
         <div className="min-h-screen bg-[#f3f3f5]">
@@ -1311,6 +1286,7 @@ export default function PassengerDashboard() {
                                                 <Input
                                                     ref={goingDateTimeRef}
                                                     type="datetime-local"
+                                                    min={goingScheduleMin}
                                                     value={newTrip.goingDateTime}
                                                     className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                         !newTrip.goingDateTime
@@ -1383,6 +1359,7 @@ export default function PassengerDashboard() {
                                                     <Input
                                                         ref={goingDateTimeRef}
                                                         type="datetime-local"
+                                                        min={goingScheduleMin}
                                                         value={newTrip.goingDateTime}
                                                         className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.goingDateTime
@@ -1421,6 +1398,7 @@ export default function PassengerDashboard() {
                                                     <Input
                                                         ref={returnDateTimeRef}
                                                         type="datetime-local"
+                                                        min={returnScheduleMin}
                                                         value={newTrip.returnDateTime}
                                                         className={`peer h-11 rounded-none border-x-0 border-t-0 border-b border-gray-300 px-0 pr-10 text-sm shadow-none focus-visible:border-gray-500 focus-visible:ring-0 ${
                                                             !newTrip.returnDateTime
@@ -2111,7 +2089,19 @@ export default function PassengerDashboard() {
                     <div className="grid gap-4 w-full max-w-xl mx-auto">
                         {(() => {
                             const consumed = new Set<string>();
-                            const quoteTrips = trips.filter((t) => t.status === 'open');
+                            const nowMs = Date.now();
+                            const quoteTrips = trips
+                                .filter(
+                                    (t) =>
+                                        t.status === 'open' &&
+                                        new Date(t.dateTime).getTime() >=
+                                            nowMs,
+                                )
+                                .sort(
+                                    (a, b) =>
+                                        new Date(a.dateTime).getTime() -
+                                        new Date(b.dateTime).getTime(),
+                                );
                             if (quoteTrips.length === 0) {
                                 return (
                                     <Card className="rounded-none">
@@ -2539,7 +2529,7 @@ export default function PassengerDashboard() {
 
                 {activeTab === 'booking' && (
                     <div className="mx-auto w-full max-w-xl">
-                        <div className="mb-4 grid grid-cols-3 border-b border-gray-200 bg-white shadow-sm">
+                        <div className="mb-4 grid grid-cols-2 border-b border-gray-200 bg-white shadow-sm">
                             <button
                                 type="button"
                                 onClick={() => setBookingSubTab('reservation')}
@@ -2550,17 +2540,6 @@ export default function PassengerDashboard() {
                                 }`}
                             >
                                 예약주문
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setBookingSubTab('bidding')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    bookingSubTab === 'bidding'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                입찰
                             </button>
                             <button
                                 type="button"
@@ -2600,134 +2579,6 @@ export default function PassengerDashboard() {
                                                     'upcoming',
                                                 ),
                                         )
-                                    )}
-                                </div>
-                            </>
-                        )}
-
-                        {bookingSubTab === 'bidding' && (
-                            <>
-                                <p className="mb-2 text-left text-sm text-gray-500">
-                                    견적·입찰 (
-                                    {passengerOpenCardTrips.length})
-                                </p>
-                                <div className="grid gap-4">
-                                    {passengerOpenCardTrips.length === 0 ? (
-                                        <Card className="rounded-none">
-                                            <CardContent className="p-6 text-sm text-gray-600">
-                                                견적·입찰 중인 여정이 없습니다.
-                                                상단의 &apos;견적 신청&apos;으로
-                                                새 여정을 등록해 보세요.
-                                            </CardContent>
-                                        </Card>
-                                    ) : (
-                                        passengerOpenCardTrips.map((trip) => {
-                                            const partner =
-                                                getRoundPartnerTrip(
-                                                    trip,
-                                                    passengerOpenTrips,
-                                                );
-                                            const isRound = Boolean(partner);
-                                            const openBidRows =
-                                                collectOpenBidsForCard(
-                                                    trip,
-                                                    partner,
-                                                );
-                                            const openBidCount =
-                                                openBidRows.length;
-                                            const distance =
-                                                distanceByTripId[trip.id] ??
-                                                null;
-                                            return (
-                                                <Card
-                                                    key={trip.id}
-                                                    className="rounded-none border-gray-200 shadow-sm"
-                                                >
-                                                    <CardHeader className="pb-2">
-                                                        <div className="space-y-1">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[11px] font-semibold text-white">
-                                                                    {isRound
-                                                                        ? '왕복'
-                                                                        : '편도'}
-                                                                </span>
-                                                                {typeof distance ===
-                                                                    'number' && (
-                                                                    <span className="rounded-full border border-sky-300 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
-                                                                        {distance}
-                                                                        km
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <CardTitle className="text-[16px] font-semibold leading-snug">
-                                                                {trip.origin}
-                                                            </CardTitle>
-                                                            <CardTitle className="text-[16px] font-semibold leading-snug">
-                                                                {
-                                                                    trip.destination
-                                                                }
-                                                            </CardTitle>
-                                                        </div>
-                                                    </CardHeader>
-                                                    <CardContent className="space-y-3 text-sm text-gray-700">
-                                                        <div className="space-y-1">
-                                                            <div className="flex flex-wrap items-center gap-2">
-                                                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                                                                    출발
-                                                                </span>
-                                                                <span>
-                                                                    {formatTripDateLine(
-                                                                        trip.dateTime,
-                                                                    )}{' '}
-                                                                    {formatTripTime(
-                                                                        trip.dateTime,
-                                                                    )}{' '}
-                                                                    탑승
-                                                                </span>
-                                                            </div>
-                                                            {isRound &&
-                                                                partner && (
-                                                                    <div className="flex flex-wrap items-center gap-2">
-                                                                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                                                                            귀환
-                                                                        </span>
-                                                                        <span>
-                                                                            {formatTripDateLine(
-                                                                                partner.dateTime,
-                                                                            )}{' '}
-                                                                            {formatTripTime(
-                                                                                partner.dateTime,
-                                                                            )}{' '}
-                                                                            탑승
-                                                                        </span>
-                                                                    </div>
-                                                                )}
-                                                        </div>
-                                                        <p className="text-sm text-gray-600">
-                                                            받은 입찰{' '}
-                                                            <span className="font-semibold text-gray-900">
-                                                                {openBidCount}
-                                                            </span>
-                                                            건 · 입찰 비교·선택은
-                                                            견적 탭에서 할 수
-                                                            있어요.
-                                                        </p>
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            className="w-full rounded-lg border-gray-900 font-semibold text-gray-900"
-                                                            onClick={() =>
-                                                                setActiveTab(
-                                                                    'quote',
-                                                                )
-                                                            }
-                                                        >
-                                                            견적 탭으로 이동
-                                                        </Button>
-                                                    </CardContent>
-                                                </Card>
-                                            );
-                                        })
                                     )}
                                 </div>
                             </>
@@ -2777,115 +2628,15 @@ export default function PassengerDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <div className="mx-auto w-full max-w-xl overflow-hidden border border-gray-200 bg-white shadow-sm">
-                        <h2 className="border-b border-gray-200 py-4 text-center text-lg font-bold tracking-tight text-gray-900">
-                            문의
-                        </h2>
-                        <div className="grid grid-cols-2 border-b border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => setSupportBoardTab('notice')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    supportBoardTab === 'notice'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                공지사항
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setSupportBoardTab('faq')}
-                                className={`border-b-2 py-3 text-center text-sm transition-colors ${
-                                    supportBoardTab === 'faq'
-                                        ? 'border-gray-900 font-semibold text-gray-900'
-                                        : 'border-transparent text-gray-500 hover:text-gray-800'
-                                }`}
-                            >
-                                자주 하는 질문
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 border-b border-gray-200 px-2 py-2.5 text-[11px] font-medium text-gray-500 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs">
-                            <span className="text-center">No</span>
-                            <span>제목</span>
-                            <span className="text-right">글쓴이</span>
-                            <span className="text-right">작성일</span>
-                        </div>
-
-                        <ul className="divide-y divide-gray-100">
-                            {supportBoardRows.length === 0 ? (
-                                <li className="px-3 py-8 text-center text-sm text-gray-500">
-                                    검색 결과가 없습니다.
-                                </li>
-                            ) : (
-                                supportBoardRows.map((row) => (
-                                    <li
-                                        key={row.id}
-                                        className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem_4.75rem] gap-x-1 px-2 py-2.5 text-[11px] text-gray-800 sm:grid-cols-[2.25rem_minmax(0,1fr)_5rem_5.25rem] sm:text-xs"
-                                    >
-                                        <div className="flex justify-center">
-                                            {row.pinned ? (
-                                                <Flag
-                                                    className="h-3.5 w-3.5 text-amber-600"
-                                                    strokeWidth={2}
-                                                    aria-label="고정"
-                                                />
-                                            ) : (
-                                                <span className="tabular-nums text-gray-600">
-                                                    {row.no ?? '—'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="min-w-0 truncate font-medium text-gray-900">
-                                            {row.title}
-                                        </p>
-                                        <span className="truncate text-right text-gray-600">
-                                            {row.author}
-                                        </span>
-                                        <span className="truncate text-right text-gray-500">
-                                            {row.date}
-                                        </span>
-                                    </li>
-                                ))
-                            )}
-                        </ul>
-
-                        <div className="space-y-3 border-t border-gray-200 p-3">
-                            <div className="relative w-full">
-                                <Input
-                                    type="search"
-                                    value={supportBoardQuery}
-                                    onChange={(e) =>
-                                        setSupportBoardQuery(e.target.value)
-                                    }
-                                    placeholder="제목 검색"
-                                    className="h-9 w-full pr-9 text-sm"
-                                    aria-label="게시글 검색"
-                                />
-                                <Search
-                                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                                    strokeWidth={2}
-                                    aria-hidden
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <p className="text-center text-sm text-gray-600">
-                                    추가로 궁금하신 점이 있으신가요?
-                                </p>
-                                <Button
-                                    type="button"
-                                    className="h-10 w-full rounded-md bg-gray-900 text-sm font-semibold text-white hover:bg-black"
-                                    onClick={() => {
-                                        setSupportOpen(true);
-                                        setSupportStep('menu');
-                                    }}
-                                >
-                                    문의하기
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
+                    <SupportCustomerCenter
+                        heading="고객센터"
+                        showInquiry
+                        refreshMyInquiriesKey={supportInquiryListKey}
+                        onInquiryClick={() => {
+                            setSupportOpen(true);
+                            setSupportStep('menu');
+                        }}
+                    />
                 )}
             </div>
 
@@ -2962,8 +2713,20 @@ export default function PassengerDashboard() {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={supportOpen} onOpenChange={setSupportOpen}>
-                <DialogContent>
+            <Dialog
+                open={supportOpen}
+                onOpenChange={(open) => {
+                    setSupportOpen(open);
+                    if (!open) {
+                        setSupportStep('menu');
+                        setSupportCategory(null);
+                        setSupportInquiryTitle('');
+                        setSupportInquiryBody('');
+                        setSupportInquiryFormError('');
+                    }
+                }}
+            >
+                <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>문의하기</DialogTitle>
                         <DialogDescription>
@@ -2975,21 +2738,33 @@ export default function PassengerDashboard() {
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('quote_amount');
+                                    setSupportStep('form');
+                                }}
                             >
                                 견적 금액 문의
                             </Button>
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('reservation_progress');
+                                    setSupportStep('form');
+                                }}
                             >
                                 예약 진행 문의
                             </Button>
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => setSupportStep('form')}
+                                type="button"
+                                onClick={() => {
+                                    setSupportCategory('other');
+                                    setSupportStep('form');
+                                }}
                             >
                                 기타 문의
                             </Button>
@@ -2997,13 +2772,99 @@ export default function PassengerDashboard() {
                     )}
                     {supportStep === 'form' && (
                         <div className="space-y-4">
+                            {supportInquiryFormError ? (
+                                <p className="text-sm text-red-600">
+                                    {supportInquiryFormError}
+                                </p>
+                            ) : null}
                             <div>
-                                <Label>문의 내용</Label>
-                                <Textarea placeholder="문의 내용을 입력하세요" />
+                                <Label htmlFor="passenger-inquiry-title">
+                                    제목
+                                </Label>
+                                <Input
+                                    id="passenger-inquiry-title"
+                                    className="mt-1"
+                                    value={supportInquiryTitle}
+                                    onChange={(e) =>
+                                        setSupportInquiryTitle(e.target.value)
+                                    }
+                                    placeholder="문의 제목을 입력하세요"
+                                    maxLength={200}
+                                />
                             </div>
-                            <Button onClick={() => setSupportStep('done')}>
-                                문의하기
-                            </Button>
+                            <div>
+                                <Label htmlFor="passenger-inquiry-body">
+                                    문의 내용
+                                </Label>
+                                <Textarea
+                                    id="passenger-inquiry-body"
+                                    className="mt-1 min-h-[140px]"
+                                    placeholder="문의 내용을 입력하세요"
+                                    value={supportInquiryBody}
+                                    onChange={(e) =>
+                                        setSupportInquiryBody(e.target.value)
+                                    }
+                                />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSupportStep('menu');
+                                        setSupportInquiryFormError('');
+                                    }}
+                                >
+                                    이전
+                                </Button>
+                                <Button
+                                    type="button"
+                                    disabled={
+                                        supportInquirySubmitting ||
+                                        !supportCategory
+                                    }
+                                    onClick={async () => {
+                                        const title = supportInquiryTitle.trim();
+                                        const body = supportInquiryBody.trim();
+                                        if (!title) {
+                                            setSupportInquiryFormError(
+                                                '제목을 입력해주세요.',
+                                            );
+                                            return;
+                                        }
+                                        if (!body) {
+                                            setSupportInquiryFormError(
+                                                '문의 내용을 입력해주세요.',
+                                            );
+                                            return;
+                                        }
+                                        setSupportInquirySubmitting(true);
+                                        setSupportInquiryFormError('');
+                                        try {
+                                            await supportAPI.createInquiry({
+                                                category: supportCategory!,
+                                                title,
+                                                body,
+                                            });
+                                            setSupportInquiryListKey((k) => k + 1);
+                                            setSupportInquiryTitle('');
+                                            setSupportInquiryBody('');
+                                            setSupportCategory(null);
+                                            setSupportStep('done');
+                                        } catch (e) {
+                                            setSupportInquiryFormError(
+                                                e instanceof Error
+                                                    ? e.message
+                                                    : '문의 접수에 실패했습니다.',
+                                            );
+                                        } finally {
+                                            setSupportInquirySubmitting(false);
+                                        }
+                                    }}
+                                >
+                                    문의하기
+                                </Button>
+                            </div>
                         </div>
                     )}
                     {supportStep === 'done' && (

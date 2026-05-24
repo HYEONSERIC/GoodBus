@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Flag } from 'lucide-react';
 import { adminAPI, authAPI } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
     Dialog,
     DialogContent,
@@ -13,6 +15,48 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+
+interface SupportAdminPostRow {
+    id: string;
+    kind: string;
+    title: string;
+    body: string;
+    pinned: boolean;
+    authorLabel: string;
+    authorRole: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+interface SupportInquiryAdminRow {
+    id: string;
+    title: string;
+    category: string;
+    categoryLabel: string;
+    createdAt: string;
+    authorEmail: string;
+    authorRole: string;
+    authorDisplay: string;
+    repliedAt: string | null;
+}
+
+interface SupportInquiryDetail {
+    id: string;
+    title: string;
+    body: string;
+    category: string;
+    categoryLabel: string;
+    createdAt: string;
+    adminReply: string | null;
+    repliedAt: string | null;
+    user: {
+        email: string;
+        role: string;
+        displayName: string | null;
+        companyName: string | null;
+        phoneNumber: string | null;
+    };
+}
 
 interface OverviewResponse {
     counts: {
@@ -42,6 +86,15 @@ interface AdminUser {
     role: string;
     status: 'Active' | 'Blocked';
     createdAt: string;
+}
+
+interface PassengerTripSummary {
+    quoteOpen: number;
+    quoteExpired?: number;
+    reservationUpcoming: number;
+    completed: number;
+    totalGrouped: number;
+    totalRaw: number;
 }
 
 interface AdminUserDetail extends AdminUser {
@@ -165,6 +218,8 @@ export default function AdminPage() {
     const [error, setError] = useState('');
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+    const [passengerTripSummary, setPassengerTripSummary] =
+        useState<PassengerTripSummary | null>(null);
     const [selectedUserActivity, setSelectedUserActivity] =
         useState<AdminUserActivity | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -222,6 +277,42 @@ export default function AdminPage() {
         [key: string]: string;
     }>({});
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [supportPosts, setSupportPosts] = useState<SupportAdminPostRow[]>(
+        [],
+    );
+    const [supportPostsLoading, setSupportPostsLoading] = useState(false);
+    const [newPostKind, setNewPostKind] = useState<'notice' | 'faq'>('notice');
+    const [newPostTitle, setNewPostTitle] = useState('');
+    const [newPostBody, setNewPostBody] = useState('');
+    const [newPostPinned, setNewPostPinned] = useState(false);
+    const [creatingPost, setCreatingPost] = useState(false);
+    const [editPost, setEditPost] = useState<SupportAdminPostRow | null>(null);
+    const [editKind, setEditKind] = useState<'notice' | 'faq'>('notice');
+    const [editTitle, setEditTitle] = useState('');
+    const [editBody, setEditBody] = useState('');
+    const [editPinned, setEditPinned] = useState(false);
+    const [savingEdit, setSavingEdit] = useState(false);
+    const [faqSectionTab, setFaqSectionTab] = useState<'posts' | 'inquiries'>(
+        'posts',
+    );
+    const [newPostDialogOpen, setNewPostDialogOpen] = useState(false);
+    const [supportInquiries, setSupportInquiries] = useState<
+        SupportInquiryAdminRow[]
+    >([]);
+    const [supportInquiriesLoading, setSupportInquiriesLoading] =
+        useState(false);
+    const [supportInquiryDetailOpen, setSupportInquiryDetailOpen] =
+        useState(false);
+    const [supportInquiryDetail, setSupportInquiryDetail] =
+        useState<SupportInquiryDetail | null>(null);
+    const [supportInquiryDetailLoading, setSupportInquiryDetailLoading] =
+        useState(false);
+    const [supportInquiryReplyDraft, setSupportInquiryReplyDraft] =
+        useState('');
+    const [supportInquiryReplySaving, setSupportInquiryReplySaving] =
+        useState(false);
+    const [supportInquiryReplyError, setSupportInquiryReplyError] =
+        useState('');
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -272,6 +363,80 @@ export default function AdminPage() {
         }
     }, [verificationType, verificationStatus]);
 
+    useEffect(() => {
+        if (activeTab !== 'faq') return;
+        let cancelled = false;
+        (async () => {
+            setSupportPostsLoading(true);
+            try {
+                const data = await adminAPI.getSupportPosts();
+                if (!cancelled) setSupportPosts(data.posts || []);
+            } catch (err: unknown) {
+                if (!cancelled) {
+                    setError(
+                        getErrorMessage(
+                            err,
+                            '고객센터 글 목록을 불러오지 못했습니다.',
+                        ),
+                    );
+                }
+            } finally {
+                if (!cancelled) setSupportPostsLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (faqSectionTab !== 'posts') setNewPostDialogOpen(false);
+    }, [faqSectionTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'faq' || faqSectionTab !== 'inquiries') return;
+        let cancelled = false;
+        (async () => {
+            setSupportInquiriesLoading(true);
+            try {
+                const data = await adminAPI.getSupportInquiries();
+                if (!cancelled) setSupportInquiries(data.inquiries || []);
+            } catch (err: unknown) {
+                if (!cancelled) {
+                    setError(
+                        getErrorMessage(
+                            err,
+                            '문의 목록을 불러오지 못했습니다.',
+                        ),
+                    );
+                }
+            } finally {
+                if (!cancelled) setSupportInquiriesLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, faqSectionTab]);
+
+    useEffect(() => {
+        if (!editPost) return;
+        setEditKind(editPost.kind === 'faq' ? 'faq' : 'notice');
+        setEditTitle(editPost.title);
+        setEditBody(editPost.body);
+        setEditPinned(editPost.pinned);
+    }, [editPost]);
+
+    useEffect(() => {
+        if (!supportInquiryDetail) {
+            setSupportInquiryReplyDraft('');
+            setSupportInquiryReplyError('');
+            return;
+        }
+        setSupportInquiryReplyDraft(supportInquiryDetail.adminReply ?? '');
+        setSupportInquiryReplyError('');
+    }, [supportInquiryDetail]);
+
     const handleLogout = async () => {
         await authAPI.logout();
         router.push('/login');
@@ -301,6 +466,7 @@ export default function AdminPage() {
                 adminAPI.getUserActivity(userId, take),
             ]);
             setSelectedUser(detailData.user);
+            setPassengerTripSummary(detailData.tripSummary ?? null);
             setSelectedUserActivity(activityData);
         } catch (err: unknown) {
             setError(getErrorMessage(err, 'Failed to load user details'));
@@ -425,69 +591,123 @@ export default function AdminPage() {
 
     if (!overview) return null;
 
-    return (
-        <div className="p-8 space-y-8">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold">관리자 대시보드</h1>
-                <Button variant="outline" onClick={handleLogout}>
-                    로그아웃
-                </Button>
-            </div>
+    const sectionTitles: Record<typeof activeTab, string> = {
+        overview: '요약',
+        users: '사용자',
+        bids: '입찰/낙찰 관리',
+        notifications: '알림 히스토리',
+        verification: '기사 승인',
+        revenue: '매출 (예정)',
+        faq: 'FAQ/문의',
+        adminCreate: '관리자 계정 생성',
+    };
 
-            <div className="flex flex-wrap gap-2">
-                <Button
-                    variant={activeTab === 'overview' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('overview')}
-                >
-                    요약
-                </Button>
-                <Button
-                    variant={activeTab === 'users' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('users')}
-                >
-                    사용자
-                </Button>
-                <Button
-                    variant={activeTab === 'bids' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('bids')}
-                >
-                    입찰/낙찰 관리
-                </Button>
-                <Button
-                    variant={activeTab === 'notifications' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('notifications')}
-                >
-                    알림 히스토리
-                </Button>
-                <Button
-                    variant={activeTab === 'verification' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('verification')}
-                >
-                    기사 승인
-                </Button>
-                {adminRole !== 'CustomerSupport' && (
-                    <Button
-                        variant={activeTab === 'revenue' ? 'default' : 'outline'}
-                        onClick={() => setActiveTab('revenue')}
+    function navItemClass(tab: typeof activeTab) {
+        return `w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+            activeTab === tab
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'text-slate-700 hover:bg-slate-100'
+        }`;
+    }
+
+    return (
+        <div className="flex min-h-screen bg-slate-50">
+            <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
+                <div className="border-b border-slate-100 px-4 py-5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        GoodBus
+                    </p>
+                    <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+                        관리자
+                    </h1>
+                    {adminRole ? (
+                        <p
+                            className="mt-1 truncate text-xs text-slate-500"
+                            title={adminRole}
+                        >
+                            {adminRole}
+                        </p>
+                    ) : null}
+                </div>
+                <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
+                    <button
+                        type="button"
+                        className={navItemClass('overview')}
+                        onClick={() => setActiveTab('overview')}
                     >
-                        매출 (예정)
-                    </Button>
-                )}
-                <Button
-                    variant={activeTab === 'faq' ? 'default' : 'outline'}
-                    onClick={() => setActiveTab('faq')}
-                >
-                    FAQ/문의
-                </Button>
-                {adminRole === 'Super' && (
-                    <Button
-                        variant={activeTab === 'adminCreate' ? 'default' : 'outline'}
-                        onClick={() => setActiveTab('adminCreate')}
+                        요약
+                    </button>
+                    <button
+                        type="button"
+                        className={navItemClass('users')}
+                        onClick={() => setActiveTab('users')}
                     >
-                        관리자 계정 생성
+                        사용자
+                    </button>
+                    <button
+                        type="button"
+                        className={navItemClass('bids')}
+                        onClick={() => setActiveTab('bids')}
+                    >
+                        입찰/낙찰 관리
+                    </button>
+                    <button
+                        type="button"
+                        className={navItemClass('notifications')}
+                        onClick={() => setActiveTab('notifications')}
+                    >
+                        알림 히스토리
+                    </button>
+                    <button
+                        type="button"
+                        className={navItemClass('verification')}
+                        onClick={() => setActiveTab('verification')}
+                    >
+                        기사 승인
+                    </button>
+                    {adminRole !== 'CustomerSupport' ? (
+                        <button
+                            type="button"
+                            className={navItemClass('revenue')}
+                            onClick={() => setActiveTab('revenue')}
+                        >
+                            매출 (예정)
+                        </button>
+                    ) : null}
+                    <button
+                        type="button"
+                        className={navItemClass('faq')}
+                        onClick={() => setActiveTab('faq')}
+                    >
+                        FAQ/문의
+                    </button>
+                    {adminRole === 'Super' ? (
+                        <button
+                            type="button"
+                            className={navItemClass('adminCreate')}
+                            onClick={() => setActiveTab('adminCreate')}
+                        >
+                            관리자 계정 생성
+                        </button>
+                    ) : null}
+                </nav>
+                <div className="border-t border-slate-100 p-3">
+                    <Button
+                        variant="outline"
+                        className="w-full border-slate-200 text-slate-800 hover:bg-slate-50"
+                        onClick={handleLogout}
+                    >
+                        로그아웃
                     </Button>
-                )}
-            </div>
+                </div>
+            </aside>
+
+            <main className="min-h-screen min-w-0 flex-1 space-y-8 overflow-y-auto p-6 md:p-8">
+                <header className="border-b border-slate-200/80 pb-4">
+                    <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                        {sectionTitles[activeTab]}
+                    </h2>
+                </header>
 
             {activeTab === 'overview' && (
                 <>
@@ -802,9 +1022,32 @@ export default function AdminPage() {
                                 </div>
                                 <div>
                                     <span className="font-medium">
-                                        생성한 여정:
+                                        등록·진행 여정:
                                     </span>{' '}
-                                    {selectedUser._count.tripsAsPassenger}
+                                    {selectedUser.role === 'Passenger' &&
+                                    passengerTripSummary
+                                        ? passengerTripSummary.totalGrouped
+                                        : selectedUser._count.tripsAsPassenger}
+                                    건
+                                    {selectedUser.role === 'Passenger' &&
+                                    passengerTripSummary ? (
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            견적 {passengerTripSummary.quoteOpen} ·
+                                            예약{' '}
+                                            {
+                                                passengerTripSummary.reservationUpcoming
+                                            }{' '}
+                                            · 완료 {passengerTripSummary.completed}
+                                            {passengerTripSummary.quoteExpired
+                                                ? ` · 만료 견적 ${passengerTripSummary.quoteExpired}`
+                                                : ''}{' '}
+                                            (승객 앱 기준, 왕복 1건·출발 전만)
+                                        </p>
+                                    ) : (
+                                        <span className="ml-1 text-xs text-gray-500">
+                                            (취소·삭제 제외)
+                                        </span>
+                                    )}
                                 </div>
                                 <div>
                                     <span className="font-medium">입찰 수:</span>{' '}
@@ -1514,23 +1757,780 @@ export default function AdminPage() {
             )}
 
             {activeTab === 'faq' && (
-                <div className="rounded-lg border p-6 space-y-4">
-                    <h2 className="text-lg font-semibold">FAQ / 1:1 문의 (예정)</h2>
-                    <p className="text-sm text-gray-600">
-                        FAQ 업데이트와 1:1 문의 응대를 위한 탭입니다. 문의 유형별
-                        분류, 상태 추적, 답변 히스토리를 관리할 수 있습니다.
-                    </p>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="rounded-lg border p-4 text-sm text-gray-600">
-                            FAQ 관리 (작성/수정/노출 순서)
-                        </div>
-                        <div className="rounded-lg border p-4 text-sm text-gray-600">
-                            1:1 문의 처리 (대기/처리중/완료)
+                <div className="mx-auto w-full max-w-3xl space-y-6">
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                        <div
+                            className="grid grid-cols-2 border-b border-slate-200"
+                            role="tablist"
+                            aria-label="FAQ·문의 하위 메뉴"
+                        >
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={faqSectionTab === 'posts'}
+                                onClick={() => setFaqSectionTab('posts')}
+                                className={`border-b-[3px] py-3.5 text-center text-sm transition-colors ${
+                                    faqSectionTab === 'posts'
+                                        ? 'border-slate-900 font-semibold text-slate-900'
+                                        : 'border-transparent font-medium text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                게시글 관리
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={faqSectionTab === 'inquiries'}
+                                onClick={() => setFaqSectionTab('inquiries')}
+                                className={`border-b-[3px] py-3.5 text-center text-sm transition-colors ${
+                                    faqSectionTab === 'inquiries'
+                                        ? 'border-slate-900 font-semibold text-slate-900'
+                                        : 'border-transparent font-medium text-slate-500 hover:text-slate-800'
+                                }`}
+                            >
+                                문의사항
+                            </button>
                         </div>
                     </div>
-                    <div className="rounded-lg border border-dashed p-6 text-sm text-gray-500">
-                        문의 리스트/상세/답변 UI가 들어올 자리입니다.
-                    </div>
+
+                    {faqSectionTab === 'inquiries' ? (
+                        <>
+                            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-slate-900">
+                                        1:1 문의
+                                    </h2>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        사용자가 문의하기로 접수한 내용입니다.
+                                        제목을 누르면 전체 내용을 볼 수 있습니다.
+                                    </p>
+                                </div>
+                                {supportInquiriesLoading ? (
+                                    <p className="text-sm text-slate-500">
+                                        불러오는 중…
+                                    </p>
+                                ) : supportInquiries.length === 0 ? (
+                                    <p className="text-sm text-slate-500">
+                                        접수된 문의가 없습니다.
+                                    </p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full min-w-[640px] text-left text-sm">
+                                            <thead>
+                                                <tr className="border-b text-xs text-slate-500">
+                                                    <th className="pb-2 pr-2">
+                                                        제목
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        유형
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        작성자
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        상태
+                                                    </th>
+                                                    <th className="pb-2">
+                                                        접수일
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {supportInquiries.map((row) => (
+                                                    <tr
+                                                        key={row.id}
+                                                        className="border-b border-slate-100"
+                                                    >
+                                                        <td className="max-w-[200px] py-2 pr-2">
+                                                            <button
+                                                                type="button"
+                                                                className="w-full truncate text-left font-medium text-slate-900 underline-offset-2 hover:underline"
+                                                                onClick={async () => {
+                                                                    setSupportInquiryDetailOpen(
+                                                                        true,
+                                                                    );
+                                                                    setSupportInquiryDetail(
+                                                                        null,
+                                                                    );
+                                                                    setSupportInquiryDetailLoading(
+                                                                        true,
+                                                                    );
+                                                                    try {
+                                                                        const data =
+                                                                            await adminAPI.getSupportInquiry(
+                                                                                row.id,
+                                                                            );
+                                                                        setSupportInquiryDetail(
+                                                                            data.inquiry,
+                                                                        );
+                                                                    } catch (err: unknown) {
+                                                                        setError(
+                                                                            getErrorMessage(
+                                                                                err,
+                                                                                '문의를 불러오지 못했습니다.',
+                                                                            ),
+                                                                        );
+                                                                        setSupportInquiryDetailOpen(
+                                                                            false,
+                                                                        );
+                                                                    } finally {
+                                                                        setSupportInquiryDetailLoading(
+                                                                            false,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {row.title}
+                                                            </button>
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-600">
+                                                            {row.categoryLabel}
+                                                        </td>
+                                                        <td className="max-w-[160px] truncate py-2 pr-2 text-slate-600">
+                                                            {row.authorDisplay}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2">
+                                                            <span
+                                                                className={
+                                                                    row.repliedAt
+                                                                        ? 'rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800'
+                                                                        : 'rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800'
+                                                                }
+                                                            >
+                                                                {row.repliedAt
+                                                                    ? '답변 완료'
+                                                                    : '답변 대기'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 text-slate-500">
+                                                            {row.createdAt.slice(
+                                                                0,
+                                                                10,
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            <Dialog
+                                open={supportInquiryDetailOpen}
+                                onOpenChange={(open) => {
+                                    setSupportInquiryDetailOpen(open);
+                                    if (!open) {
+                                        setSupportInquiryDetail(null);
+                                        setSupportInquiryReplyDraft('');
+                                        setSupportInquiryReplyError('');
+                                    }
+                                }}
+                            >
+                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                                    {supportInquiryDetailLoading &&
+                                    !supportInquiryDetail ? (
+                                        <>
+                                            <DialogHeader>
+                                                <DialogTitle className="sr-only">
+                                                    문의 상세
+                                                </DialogTitle>
+                                            </DialogHeader>
+                                            <p className="py-6 text-center text-sm text-slate-500">
+                                                불러오는 중…
+                                            </p>
+                                        </>
+                                    ) : supportInquiryDetail ? (
+                                        <>
+                                            <DialogHeader>
+                                                <DialogTitle className="text-left leading-snug">
+                                                    {supportInquiryDetail.title}
+                                                </DialogTitle>
+                                                <DialogDescription className="text-left text-slate-600">
+                                                    {supportInquiryDetail.categoryLabel}{' '}
+                                                    ·{' '}
+                                                    {supportInquiryDetail.createdAt.slice(
+                                                        0,
+                                                        10,
+                                                    )}
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-3 text-sm">
+                                                <div className="rounded-md border border-slate-100 bg-slate-50/80 p-3 text-slate-700">
+                                                    <p className="text-xs font-medium text-slate-500">
+                                                        작성자
+                                                    </p>
+                                                    <p className="mt-0.5 break-all">
+                                                        {
+                                                            supportInquiryDetail
+                                                                .user.email
+                                                        }
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-slate-500">
+                                                        역할:{' '}
+                                                        {
+                                                            supportInquiryDetail
+                                                                .user.role
+                                                        }
+                                                        {supportInquiryDetail
+                                                            .user.phoneNumber
+                                                            ? ` · ${supportInquiryDetail.user.phoneNumber}`
+                                                            : ''}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-medium text-slate-500">
+                                                        문의 내용
+                                                    </p>
+                                                    <div className="mt-1 whitespace-pre-wrap break-words rounded-md border border-slate-100 bg-white p-3 text-slate-800">
+                                                        {supportInquiryDetail.body}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2 border-t border-slate-100 pt-3">
+                                                    <Label
+                                                        htmlFor="support-inquiry-reply"
+                                                        className="text-xs font-medium text-slate-500"
+                                                    >
+                                                        관리자 답변
+                                                        {supportInquiryDetail.repliedAt
+                                                            ? ` (등록: ${supportInquiryDetail.repliedAt.slice(0, 10)})`
+                                                            : ''}
+                                                    </Label>
+                                                    <Textarea
+                                                        id="support-inquiry-reply"
+                                                        className="min-h-[140px] resize-y text-sm"
+                                                        placeholder="사용자에게 전달할 답변을 입력하세요."
+                                                        value={
+                                                            supportInquiryReplyDraft
+                                                        }
+                                                        onChange={(e) => {
+                                                            setSupportInquiryReplyDraft(
+                                                                e.target.value,
+                                                            );
+                                                            if (
+                                                                supportInquiryReplyError
+                                                            ) {
+                                                                setSupportInquiryReplyError(
+                                                                    '',
+                                                                );
+                                                            }
+                                                        }}
+                                                        disabled={
+                                                            supportInquiryReplySaving
+                                                        }
+                                                    />
+                                                    {supportInquiryReplyError ? (
+                                                        <p className="text-xs text-red-600">
+                                                            {
+                                                                supportInquiryReplyError
+                                                            }
+                                                        </p>
+                                                    ) : null}
+                                                    <Button
+                                                        type="button"
+                                                        className="w-full sm:w-auto"
+                                                        disabled={
+                                                            supportInquiryReplySaving
+                                                        }
+                                                        onClick={async () => {
+                                                            if (
+                                                                !supportInquiryDetail
+                                                            )
+                                                                return;
+                                                            const text =
+                                                                supportInquiryReplyDraft.trim();
+                                                            if (!text) {
+                                                                setSupportInquiryReplyError(
+                                                                    '답변 내용을 입력해주세요.',
+                                                                );
+                                                                return;
+                                                            }
+                                                            setSupportInquiryReplySaving(
+                                                                true,
+                                                            );
+                                                            setSupportInquiryReplyError(
+                                                                '',
+                                                            );
+                                                            try {
+                                                                const data =
+                                                                    await adminAPI.replySupportInquiry(
+                                                                        supportInquiryDetail.id,
+                                                                        {
+                                                                            adminReply:
+                                                                                text,
+                                                                        },
+                                                                    );
+                                                                setSupportInquiryDetail(
+                                                                    data.inquiry,
+                                                                );
+                                                                setSupportInquiries(
+                                                                    (prev) =>
+                                                                        prev.map(
+                                                                            (
+                                                                                r,
+                                                                            ) =>
+                                                                                r.id ===
+                                                                                data
+                                                                                    .inquiry
+                                                                                    .id
+                                                                                    ? {
+                                                                                          ...r,
+                                                                                          repliedAt:
+                                                                                              data
+                                                                                                  .inquiry
+                                                                                                  .repliedAt,
+                                                                                      }
+                                                                                    : r,
+                                                                        ),
+                                                                );
+                                                            } catch (err: unknown) {
+                                                                setSupportInquiryReplyError(
+                                                                    getErrorMessage(
+                                                                        err,
+                                                                        '답변 저장에 실패했습니다.',
+                                                                    ),
+                                                                );
+                                                            } finally {
+                                                                setSupportInquiryReplySaving(
+                                                                    false,
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        {supportInquiryReplySaving
+                                                            ? '저장 중…'
+                                                            : supportInquiryDetail.repliedAt
+                                                              ? '답변 수정'
+                                                              : '답변 등록'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : null}
+                                </DialogContent>
+                            </Dialog>
+                        </>
+                    ) : null}
+
+                    {faqSectionTab === 'posts' ? (
+                        <>
+                            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                                <h2 className="text-lg font-semibold text-slate-900">
+                                    게시글 목록
+                                </h2>
+                                {supportPostsLoading ? (
+                                    <p className="mt-4 text-sm text-slate-500">
+                                        불러오는 중…
+                                    </p>
+                                ) : supportPosts.length === 0 ? (
+                                    <p className="mt-4 text-sm text-slate-500">
+                                        등록된 글이 없습니다.
+                                    </p>
+                                ) : (
+                                    <div className="mt-4 overflow-x-auto">
+                                        <table className="w-full min-w-[600px] text-left text-sm">
+                                            <thead>
+                                                <tr className="border-b text-xs text-slate-500">
+                                                    <th className="pb-2 pr-2">
+                                                        유형
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        중요
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        제목
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        글쓴이
+                                                    </th>
+                                                    <th className="pb-2 pr-2">
+                                                        작성일
+                                                    </th>
+                                                    <th className="pb-2">관리</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {supportPosts.map((p) => (
+                                                    <tr
+                                                        key={p.id}
+                                                        className="border-b border-slate-100"
+                                                    >
+                                                        <td className="whitespace-nowrap py-2 pr-2">
+                                                            {p.kind === 'faq'
+                                                                ? 'FAQ'
+                                                                : '공지'}
+                                                        </td>
+                                                        <td className="py-2 pr-2">
+                                                            {p.pinned ? (
+                                                                <Flag
+                                                                    className="h-3.5 w-3.5 text-amber-600"
+                                                                    strokeWidth={2}
+                                                                    aria-label="중요"
+                                                                />
+                                                            ) : (
+                                                                <span className="text-slate-400">
+                                                                    —
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="max-w-[220px] truncate py-2 pr-2">
+                                                            {p.title}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-600">
+                                                            {p.authorLabel}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2 pr-2 text-slate-500">
+                                                            {p.createdAt.slice(
+                                                                0,
+                                                                10,
+                                                            )}
+                                                        </td>
+                                                        <td className="whitespace-nowrap py-2">
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                className="h-9 border-slate-300 bg-white px-3 font-medium text-slate-800 hover:bg-slate-50"
+                                                                onClick={() =>
+                                                                    setEditPost(
+                                                                        p,
+                                                                    )
+                                                                }
+                                                            >
+                                                                수정
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                className="h-9 border-red-200 bg-white px-3 font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                                onClick={async () => {
+                                                                    if (
+                                                                        !confirm(
+                                                                            '이 글을 삭제할까요?',
+                                                                        )
+                                                                    )
+                                                                        return;
+                                                                    setError('');
+                                                                    try {
+                                                                        await adminAPI.deleteSupportPost(
+                                                                            p.id,
+                                                                        );
+                                                                        const data =
+                                                                            await adminAPI.getSupportPosts();
+                                                                        setSupportPosts(
+                                                                            data.posts ||
+                                                                                [],
+                                                                        );
+                                                                    } catch (err: unknown) {
+                                                                        setError(
+                                                                            getErrorMessage(
+                                                                                err,
+                                                                                '삭제에 실패했습니다.',
+                                                                            ),
+                                                                        );
+                                                                    }
+                                                                }}
+                                                            >
+                                                                삭제
+                                                            </Button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
+                                    <Button
+                                        type="button"
+                                        className="h-9 min-w-[5.5rem] bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-black"
+                                        onClick={() => {
+                                            setError('');
+                                            setNewPostKind('notice');
+                                            setNewPostTitle('');
+                                            setNewPostBody('');
+                                            setNewPostPinned(false);
+                                            setNewPostDialogOpen(true);
+                                        }}
+                                    >
+                                        글쓰기
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <Dialog
+                                open={newPostDialogOpen}
+                                onOpenChange={(open) => {
+                                    setNewPostDialogOpen(open);
+                                }}
+                            >
+                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                                    <DialogHeader>
+                                        <DialogTitle>
+                                            공지 / FAQ 등록
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                            승객·기사·업체 고객센터에 노출됩니다.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-4 py-2">
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <div>
+                                                <Label>게시 유형</Label>
+                                                <select
+                                                    className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                                    value={newPostKind}
+                                                    onChange={(e) =>
+                                                        setNewPostKind(
+                                                            e.target
+                                                                .value as
+                                                                | 'notice'
+                                                                | 'faq',
+                                                        )
+                                                    }
+                                                >
+                                                    <option value="notice">
+                                                        공지사항
+                                                    </option>
+                                                    <option value="faq">
+                                                        자주 하는 질문
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div className="flex items-end pb-1">
+                                                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-800">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-slate-300"
+                                                        checked={newPostPinned}
+                                                        onChange={(e) =>
+                                                            setNewPostPinned(
+                                                                e.target
+                                                                    .checked,
+                                                            )
+                                                        }
+                                                    />
+                                                    중요 표시 (목록에 깃발)
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="support-new-title">
+                                                제목
+                                            </Label>
+                                            <Input
+                                                id="support-new-title"
+                                                className="mt-1"
+                                                value={newPostTitle}
+                                                onChange={(e) =>
+                                                    setNewPostTitle(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                maxLength={200}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="support-new-body">
+                                                본문
+                                            </Label>
+                                            <Textarea
+                                                id="support-new-body"
+                                                className="mt-1 min-h-[160px]"
+                                                value={newPostBody}
+                                                onChange={(e) =>
+                                                    setNewPostBody(
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-500">
+                                            글쓴이는 현재 로그인한 관리자 계정의
+                                            역할로 자동 저장됩니다.
+                                        </p>
+                                        <div className="flex justify-end gap-2 pt-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="h-9 border-slate-300"
+                                                onClick={() =>
+                                                    setNewPostDialogOpen(false)
+                                                }
+                                            >
+                                                취소
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                disabled={creatingPost}
+                                                className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
+                                                onClick={async () => {
+                                                    setCreatingPost(true);
+                                                    setError('');
+                                                    try {
+                                                        await adminAPI.createSupportPost(
+                                                            {
+                                                                kind: newPostKind,
+                                                                title: newPostTitle.trim(),
+                                                                body: newPostBody.trim(),
+                                                                pinned: newPostPinned,
+                                                            },
+                                                        );
+                                                        setNewPostTitle('');
+                                                        setNewPostBody('');
+                                                        setNewPostPinned(
+                                                            false,
+                                                        );
+                                                        setNewPostDialogOpen(
+                                                            false,
+                                                        );
+                                                        const data =
+                                                            await adminAPI.getSupportPosts();
+                                                        setSupportPosts(
+                                                            data.posts || [],
+                                                        );
+                                                    } catch (err: unknown) {
+                                                        setError(
+                                                            getErrorMessage(
+                                                                err,
+                                                                '등록에 실패했습니다.',
+                                                            ),
+                                                        );
+                                                    } finally {
+                                                        setCreatingPost(false);
+                                                    }
+                                                }}
+                                            >
+                                                등록하기
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        </>
+                    ) : null}
+
+                    <Dialog
+                        open={Boolean(editPost)}
+                        onOpenChange={(open) => {
+                            if (!open) setEditPost(null);
+                        }}
+                    >
+                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                            <DialogHeader>
+                                <DialogTitle>게시글 수정</DialogTitle>
+                                <DialogDescription>
+                                    저장 시 앱 고객센터에 반영됩니다.
+                                </DialogDescription>
+                            </DialogHeader>
+                            {editPost ? (
+                                <div className="space-y-4 py-2">
+                                    <div>
+                                        <Label>게시 유형</Label>
+                                        <select
+                                            className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                                            value={editKind}
+                                            onChange={(e) =>
+                                                setEditKind(
+                                                    e.target.value as
+                                                        | 'notice'
+                                                        | 'faq',
+                                                )
+                                            }
+                                        >
+                                            <option value="notice">
+                                                공지사항
+                                            </option>
+                                            <option value="faq">
+                                                자주 하는 질문
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded"
+                                            checked={editPinned}
+                                            onChange={(e) =>
+                                                setEditPinned(e.target.checked)
+                                            }
+                                        />
+                                        중요 표시
+                                    </label>
+                                    <div>
+                                        <Label>제목</Label>
+                                        <Input
+                                            className="mt-1"
+                                            value={editTitle}
+                                            onChange={(e) =>
+                                                setEditTitle(e.target.value)
+                                            }
+                                            maxLength={200}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>본문</Label>
+                                        <Textarea
+                                            className="mt-1 min-h-[180px]"
+                                            value={editBody}
+                                            onChange={(e) =>
+                                                setEditBody(e.target.value)
+                                            }
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-2 pt-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="h-9 border-slate-300"
+                                            onClick={() => setEditPost(null)}
+                                        >
+                                            취소
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            disabled={savingEdit}
+                                            className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
+                                            onClick={async () => {
+                                                if (!editPost) return;
+                                                setSavingEdit(true);
+                                                setError('');
+                                                try {
+                                                    await adminAPI.updateSupportPost(
+                                                        editPost.id,
+                                                        {
+                                                            kind: editKind,
+                                                            title: editTitle.trim(),
+                                                            body: editBody.trim(),
+                                                            pinned: editPinned,
+                                                        },
+                                                    );
+                                                    setEditPost(null);
+                                                    const data =
+                                                        await adminAPI.getSupportPosts();
+                                                    setSupportPosts(
+                                                        data.posts || [],
+                                                    );
+                                                } catch (err: unknown) {
+                                                    setError(
+                                                        getErrorMessage(
+                                                            err,
+                                                            '저장에 실패했습니다.',
+                                                        ),
+                                                    );
+                                                } finally {
+                                                    setSavingEdit(false);
+                                                }
+                                            }}
+                                        >
+                                            저장
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </DialogContent>
+                    </Dialog>
                 </div>
             )}
 
@@ -1589,6 +2589,7 @@ export default function AdminPage() {
                     </div>
                 </div>
             )}
+            </main>
         </div>
     );
 }

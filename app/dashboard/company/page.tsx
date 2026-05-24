@@ -14,6 +14,8 @@ import {
 } from '@/lib/api';
 import { Notifications } from '@/components/Notifications';
 import { ChatPanel } from '@/components/ChatPanel';
+import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
+import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
 import { MyBidQuoteDetailDialog } from '@/components/MyBidQuoteDetailDialog';
 import {
     Dialog,
@@ -85,6 +87,7 @@ export default function CompanyDashboard() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -99,7 +102,22 @@ export default function CompanyDashboard() {
         null
     );
     const [membershipPrevTab, setMembershipPrevTab] = useState<
-        'available' | 'contract' | 'chat' | 'support' | 'profile' | 'profileEdit'
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'paymentCards'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentCardsPrevTab, setPaymentCardsPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'profile'
+        | 'profileEdit'
     >('available');
     const [regionFilterOpen, setRegionFilterOpen] = useState(false);
     const [dateFilterOpen, setDateFilterOpen] = useState(false);
@@ -370,10 +388,9 @@ export default function CompanyDashboard() {
         return `${md} (${weekday})`;
     }
 
-    function biddingScheduleSubtitle(trip: Trip) {
-        if (trip.companionType === 'with_schedule') return '일정 포함';
-        if (trip.companionType === 'depart_return') return '당일 왕복';
-        return '당일 일정';
+    function biddingCompanionSubtitle(trip: Trip): string | null {
+        if (trip.companionType === 'with_schedule') return '일정 동행';
+        return null;
     }
 
     function parseBidNoteForDisplay(note?: string | null) {
@@ -691,6 +708,32 @@ export default function CompanyDashboard() {
                                     </button>
                                 </div>
                                 <span className="text-lg font-semibold">멤버십</span>
+                                <div className="absolute right-3 sm:right-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() => setActiveTab('available')}
+                                    >
+                                        ⌂
+                                    </button>
+                                </div>
+                            </>
+                        ) : activeTab === 'paymentCards' ? (
+                            <>
+                                <div className="absolute left-3 sm:left-4">
+                                    <button
+                                        type="button"
+                                        className="text-gray-600"
+                                        onClick={() =>
+                                            setActiveTab(paymentCardsPrevTab)
+                                        }
+                                    >
+                                        ←
+                                    </button>
+                                </div>
+                                <span className="text-lg font-semibold">
+                                    결제카드
+                                </span>
                                 <div className="absolute right-3 sm:right-4">
                                     <button
                                         type="button"
@@ -1157,12 +1200,17 @@ export default function CompanyDashboard() {
                                                         <p className="text-sm font-semibold leading-snug text-gray-900">
                                                             {formatTripDateLine(
                                                                 trip.dateTime
-                                                            )}{' '}
-                                                            <span className="font-normal text-gray-600">
-                                                                {biddingScheduleSubtitle(
-                                                                    trip
-                                                                )}
-                                                            </span>
+                                                            )}
+                                                            {biddingCompanionSubtitle(
+                                                                trip
+                                                            ) ? (
+                                                                <span className="font-normal text-gray-600">
+                                                                    {' '}
+                                                                    {biddingCompanionSubtitle(
+                                                                        trip
+                                                                    )}
+                                                                </span>
+                                                            ) : null}
                                                         </p>
                                                         <span className="shrink-0 text-sm font-medium text-gray-900">
                                                             {trip.paxCount}명
@@ -1346,15 +1394,12 @@ export default function CompanyDashboard() {
                 )}
 
                 {activeTab === 'support' && (
-                    <Card className="border-gray-200 shadow-sm">
-                        <CardContent className="p-6 space-y-3 text-sm text-gray-600">
-                            고객센터 문의 영역입니다. 문의 유형별로 분류하고
-                            처리 상태를 추적하도록 확장할 수 있습니다.
-                            <Button className="mt-2 w-full sm:w-auto">
-                                문의하기
-                            </Button>
-                        </CardContent>
-                    </Card>
+                    <div className="mx-auto w-full max-w-xl">
+                        <SupportCustomerCenter
+                            heading="고객센터"
+                            showInquiry={false}
+                        />
+                    </div>
                 )}
 
 
@@ -1835,6 +1880,10 @@ export default function CompanyDashboard() {
                     </>
                 )}
 
+                {activeTab === 'paymentCards' && (
+                    <PaymentCardsPanel userId={user?.id} />
+                )}
+
                 {activeTab === 'membership' && (
                     <div className="space-y-4">
                         <div>
@@ -1947,6 +1996,21 @@ export default function CompanyDashboard() {
                         <button
                             type="button"
                             className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                            onClick={() => {
+                                setPaymentCardsPrevTab(
+                                    activeTab === 'paymentCards'
+                                        ? 'available'
+                                        : activeTab,
+                                );
+                                setActiveTab('paymentCards');
+                                setMenuOpen(false);
+                            }}
+                        >
+                            결제카드
+                        </button>
+                        <button
+                            type="button"
+                            className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
                             onClick={handleLogout}
                         >
                             로그아웃
@@ -1962,7 +2026,9 @@ export default function CompanyDashboard() {
                 </div>
             </div>
         )}
-        {activeTab !== 'profile' && activeTab !== 'profileEdit' && (
+        {activeTab !== 'profile' &&
+            activeTab !== 'profileEdit' &&
+            activeTab !== 'paymentCards' && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
                 <div className="mx-auto flex w-full max-w-xl items-center gap-2 px-4 py-2.5 sm:px-5">
                     <Button
