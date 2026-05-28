@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { ArrowLeft, MoreVertical } from 'lucide-react';
+import { ArrowLeft, MoreVertical, ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -50,6 +50,31 @@ interface ChatMessage {
     readAt?: string | null;
     isMine?: boolean;
     sender: ChatUser;
+}
+
+const CHAT_IMAGE_TOKEN = '__CHAT_IMAGE__:';
+
+function parseChatMessageContent(raw: string) {
+    const trimmed = (raw || '').trim();
+    if (!trimmed.startsWith(CHAT_IMAGE_TOKEN)) {
+        return { text: raw, imageUrl: null as string | null };
+    }
+    const imageUrl = trimmed.slice(CHAT_IMAGE_TOKEN.length).trim();
+    return { text: '', imageUrl: imageUrl || null };
+}
+
+function resolveChatImageUrl(raw?: string | null): string | null {
+    const u = raw?.trim();
+    if (!u) return null;
+    if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('data:')) {
+        return u;
+    }
+    const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(
+        /\/$/,
+        ''
+    );
+    if (u.startsWith('/uploads')) return `${base}${u}`;
+    return u;
 }
 
 function formatMessageTime(value: string) {
@@ -178,8 +203,16 @@ export function ChatPanel({
     const [draft, setDraft] = useState('');
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
     const [error, setError] = useState('');
+    const [pendingImagePreview, setPendingImagePreview] = useState<string | null>(
+        null
+    );
+    const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const imageInputRef = useRef<HTMLInputElement | null>(null);
+    /** 한글 IME 조합 중 Enter가 전송되지 않도록 (안녕하세요 + 요 중복 전송 방지) */
+    const isComposingRef = useRef(false);
     const [roomListMenuId, setRoomListMenuId] = useState<string | null>(null);
     const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
     const [renameRoom, setRenameRoom] = useState<ChatRoom | null>(null);
@@ -236,6 +269,14 @@ export function ChatPanel({
         return () => document.removeEventListener('mousedown', close);
     }, [roomListMenuId, headerMenuOpen]);
 
+    useEffect(() => {
+        return () => {
+            if (pendingImagePreview) {
+                URL.revokeObjectURL(pendingImagePreview);
+            }
+        };
+    }, [pendingImagePreview]);
+
     async function loadInitialData() {
         setLoading(true);
         setError('');
@@ -279,7 +320,13 @@ export function ChatPanel({
 
     async function sendMessage() {
         const message = draft.trim();
-        if (!selectedRoomId || !message) return;
+        if (!selectedRoomId) return;
+        if (!message) {
+            if (pendingImageFile) {
+                await sendImageMessage();
+            }
+            return;
+        }
 
         setSending(true);
         try {
@@ -297,6 +344,34 @@ export function ChatPanel({
         }
     }
 
+    async function sendImageMessage() {
+        if (!selectedRoomId || !pendingImageFile) return;
+
+        setUploadingImage(true);
+        setError('');
+        try {
+            const { imageUrl } = await chatsAPI.uploadImage(
+                selectedRoomId,
+                pendingImageFile
+            );
+            const payload = `${CHAT_IMAGE_TOKEN}${imageUrl}`;
+            const data = await chatsAPI.sendMessage(selectedRoomId, payload);
+            setMessages((prev) => [...prev, data.message]);
+            await loadRooms();
+            setPendingImageFile(null);
+            if (pendingImagePreview) {
+                URL.revokeObjectURL(pendingImagePreview);
+            }
+            setPendingImagePreview(null);
+        } catch (err) {
+            setError(
+                err instanceof Error ? err.message : '이미지 전송에 실패했습니다.'
+            );
+        } finally {
+            setUploadingImage(false);
+        }
+    }
+
     function getOtherUser(room: ChatRoom) {
         if (!user) return room.bidder;
         return room.passenger.id === user.id ? room.bidder : room.passenger;
@@ -307,6 +382,11 @@ export function ChatPanel({
         setMessages([]);
         setError('');
         setDraft('');
+        if (pendingImagePreview) {
+            URL.revokeObjectURL(pendingImagePreview);
+        }
+        setPendingImageFile(null);
+        setPendingImagePreview(null);
         setRoomListMenuId(null);
         setHeaderMenuOpen(false);
     }
@@ -443,6 +523,9 @@ export function ChatPanel({
                         {rooms.map((room) => {
                             const otherUser = getOtherUser(room);
                             const previewTime = room.lastMessage?.createdAt;
+                            const lastParsed = parseChatMessageContent(
+                                room.lastMessage?.message ?? ''
+                            );
                             return (
                                 <li
                                     key={room.id}
@@ -474,9 +557,12 @@ export function ChatPanel({
                                                     {(
                                                         room.lastMessage
                                                             ?.message ?? ''
-                                                    ).trim()
+                                                    ).trim() &&
+                                                    !lastParsed.imageUrl
                                                         ? room.lastMessage!
                                                               .message
+                                                        : lastParsed.imageUrl
+                                                        ? '사진'
                                                         : formatChatPeerLabel(
                                                               otherUser,
                                                           )}
@@ -666,6 +752,10 @@ export function ChatPanel({
                     </p>
                 ) : (
                     messages.map((message) => {
+                        const { text, imageUrl: rawImageUrl } = parseChatMessageContent(
+                            message.message
+                        );
+                        const imageUrl = resolveChatImageUrl(rawImageUrl);
                         const isMine =
                             message.isMine ??
                             (message.senderId === user?.id ||
@@ -691,17 +781,32 @@ export function ChatPanel({
                                             )}
                                         </span>
                                     )}
-                                    <div
-                                        className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
-                                            isMine
-                                                ? 'ml-auto rounded-br-md bg-orange-500 text-white'
-                                                : 'mr-auto rounded-bl-md border border-gray-200 bg-white text-slate-950'
-                                        }`}
-                                    >
-                                        <p className="whitespace-pre-wrap break-words">
-                                            {message.message}
-                                        </p>
-                                    </div>
+                                    {imageUrl ? (
+                                        <a
+                                            href={imageUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className={isMine ? 'ml-auto' : 'mr-auto'}
+                                        >
+                                            <img
+                                                src={imageUrl}
+                                                alt="보낸 이미지"
+                                                className="max-h-56 max-w-full rounded-xl object-contain"
+                                            />
+                                        </a>
+                                    ) : (
+                                        <div
+                                            className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                                                isMine
+                                                    ? 'ml-auto rounded-br-md bg-orange-500 text-white'
+                                                    : 'mr-auto rounded-bl-md border border-gray-200 bg-white text-slate-950'
+                                            }`}
+                                        >
+                                            <p className="whitespace-pre-wrap break-words">
+                                                {text}
+                                            </p>
+                                        </div>
+                                    )}
                                     <div
                                         className={`mt-1 text-[11px] ${
                                             isMine
@@ -729,22 +834,99 @@ export function ChatPanel({
                 )}
                 <div ref={bottomRef} />
             </div>
+            {pendingImagePreview ? (
+                <div className="mx-3 mb-2 mt-2 flex items-start justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                    <img
+                        src={pendingImagePreview}
+                        alt="전송 예정 이미지"
+                        className="max-h-28 rounded-md object-contain"
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => {
+                            setPendingImageFile(null);
+                            if (pendingImagePreview) {
+                                URL.revokeObjectURL(pendingImagePreview);
+                            }
+                            setPendingImagePreview(null);
+                            if (imageInputRef.current) {
+                                imageInputRef.current.value = '';
+                            }
+                        }}
+                        aria-label="선택한 이미지 제거"
+                    >
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
+            ) : null}
             <div className="flex shrink-0 gap-2 border-t border-gray-200 bg-white p-3">
+                <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) {
+                            setError('이미지 파일만 전송할 수 있습니다.');
+                            return;
+                        }
+                        setPendingImageFile(file);
+                        if (pendingImagePreview) {
+                            URL.revokeObjectURL(pendingImagePreview);
+                        }
+                        setPendingImagePreview(URL.createObjectURL(file));
+                    }}
+                />
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={sending || uploadingImage}
+                    aria-label="이미지 선택"
+                >
+                    <ImagePlus className="h-4 w-4" />
+                </Button>
                 <Input
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
+                    onCompositionStart={() => {
+                        isComposingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                        // 조합 확정 직후 Enter keydown이 한 번 더 오는 브라우저 대응
+                        isComposingRef.current = true;
+                        window.setTimeout(() => {
+                            isComposingRef.current = false;
+                        }, 0);
+                    }}
                     onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
-                            event.preventDefault();
-                            sendMessage();
+                        if (event.key !== 'Enter' || event.shiftKey) return;
+                        if (
+                            event.nativeEvent.isComposing ||
+                            isComposingRef.current
+                        ) {
+                            return;
                         }
+                        event.preventDefault();
+                        void sendMessage();
                     }}
                     placeholder="메시지를 입력하세요"
                     className="rounded-lg bg-gray-50"
                 />
                 <Button
                     onClick={sendMessage}
-                    disabled={sending || !draft.trim()}
+                    disabled={
+                        sending ||
+                        uploadingImage ||
+                        (!draft.trim() && !pendingImageFile)
+                    }
                     className="shrink-0"
                 >
                     전송

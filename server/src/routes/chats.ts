@@ -1,10 +1,17 @@
 import express from 'express';
+import multer from 'multer';
 import { UserRole } from '@prisma/client';
 import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
+import { getStorageService } from '../services/storage';
 
 const router = express.Router();
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+});
+const storage = getStorageService();
 
 function roomInclude(userId: string) {
     return {
@@ -405,6 +412,46 @@ router.post('/rooms/:roomId/messages', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+router.post(
+    '/rooms/:roomId/image',
+    requireAuth,
+    upload.single('image'),
+    async (req, res) => {
+        try {
+            const room = await findParticipantRoom(
+                req.params.roomId,
+                req.user!.userId
+            );
+
+            if (!room) {
+                return res.status(404).json({ error: 'Chat room not found' });
+            }
+
+            const file = req.file;
+            if (!file) {
+                return res.status(400).json({ error: 'Image file is required' });
+            }
+            if (!file.mimetype.startsWith('image/')) {
+                return res
+                    .status(400)
+                    .json({ error: 'Only image files are allowed' });
+            }
+
+            const imageUrl = await storage.saveFile({
+                buffer: file.buffer,
+                originalName: file.originalname,
+                folder: 'chat-images',
+                filePrefix: `${room.id}-${req.user!.userId}`,
+            });
+
+            res.status(201).json({ imageUrl });
+        } catch (error) {
+            console.error('Upload chat image error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+);
 
 router.patch('/rooms/:roomId', requireAuth, async (req, res) => {
     try {

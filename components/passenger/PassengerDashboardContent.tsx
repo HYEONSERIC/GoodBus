@@ -37,6 +37,7 @@ export function PassengerDashboardContent() {
                     ] as const,
                     activeTab: p.activeTab,
                     onChange: p.setActiveTab,
+                    hidden: p.menuOpen,
                 }}
             >
                 {p.menuOpen && (

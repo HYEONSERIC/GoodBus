@@ -134,6 +134,15 @@ export const chatsAPI = {
             method: 'POST',
             body: JSON.stringify({ message }),
         }),
+    uploadImage: async (roomId: string, file: File) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        return fetchAPI(`/chats/rooms/${roomId}/image`, {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        });
+    },
     markRead: async (roomId: string) =>
         fetchAPI(`/chats/rooms/${roomId}/read`, {
             method: 'PATCH',

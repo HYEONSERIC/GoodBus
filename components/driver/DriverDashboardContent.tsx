@@ -66,6 +66,7 @@ export function DriverDashboardContent() {
                               ] as const,
                               activeTab: d.activeTab,
                               onChange: d.setActiveTab,
+                              hidden: d.menuOpen,
                           }
                         : undefined
                 }

@@ -52,6 +52,7 @@ export function CompanyDashboardContent() {
                               ] as const,
                               activeTab: c.activeTab,
                               onChange: c.setActiveTab,
+                              hidden: c.menuOpen,
                           }
                         : undefined
                 }
