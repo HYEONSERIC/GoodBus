@@ -8,8 +8,17 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { authAPI, chatsAPI, tripsAPI, reviewsAPI } from '@/lib/api';
-import { type TripReviewRecord } from '@/components/TripReviewSection';
+import {
+    authAPI,
+    chatsAPI,
+    tripsAPI,
+    reviewsAPI,
+    type DriverReviewStats,
+} from '@/lib/api';
+import {
+    formatPassengerBidderRating,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
 import { usePassengerTripForm } from '@/hooks/usePassengerTripForm';
 import { useTripDistances } from '@/hooks/useTripDistances';
 import {
@@ -66,6 +75,16 @@ function usePassengerDashboardState() {
         bidTrip: Trip;
     } | null>(null);
     const [bidGalleryIndex, setBidGalleryIndex] = useState(0);
+    const [driverStatsById, setDriverStatsById] = useState<
+        Record<string, DriverReviewStats>
+    >({});
+    const [bidDetailReviews, setBidDetailReviews] = useState<TripReviewRecord[]>(
+        [],
+    );
+    const [bidDetailReviewStats, setBidDetailReviewStats] =
+        useState<DriverReviewStats>({ avgRating: null, count: 0 });
+    const [bidDetailReviewsLoading, setBidDetailReviewsLoading] =
+        useState(false);
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -95,11 +114,67 @@ function usePassengerDashboardState() {
                 );
             });
             setTrips(myTrips);
-            await loadTripReviews(myTrips);
+            await Promise.all([
+                loadTripReviews(myTrips),
+                loadDriverReviewSummaries(myTrips),
+            ]);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';
         }
+    }
+
+    async function loadDriverReviewSummaries(tripList: Trip[]) {
+        const ids = new Set<string>();
+        for (const trip of tripList) {
+            for (const bid of trip.bids || []) {
+                if (bid.bidder?.id) {
+                    ids.add(bid.bidder.id);
+                }
+            }
+        }
+        if (ids.size === 0) {
+            setDriverStatsById({});
+            return;
+        }
+        try {
+            const data = await reviewsAPI.getDriversSummary([...ids]);
+            setDriverStatsById(data.byDriverId || {});
+        } catch {
+            setDriverStatsById({});
+        }
+    }
+
+    async function openBidDetail(bid: Bid, bidTrip: Trip) {
+        setBidDetail({ bid, bidTrip });
+        setBidDetailReviewsLoading(true);
+        try {
+            const data = await reviewsAPI.getDriverById(bid.bidder.id);
+            const reviews = (data.reviews || []) as TripReviewRecord[];
+            const stats: DriverReviewStats = {
+                avgRating: data.avgRating ?? null,
+                count: data.count ?? 0,
+            };
+            setBidDetailReviews(reviews);
+            setBidDetailReviewStats(stats);
+            setDriverStatsById((prev) => ({
+                ...prev,
+                [bid.bidder.id]: stats,
+            }));
+        } catch {
+            setBidDetailReviews([]);
+            setBidDetailReviewStats({ avgRating: null, count: 0 });
+        } finally {
+            setBidDetailReviewsLoading(false);
+        }
+    }
+
+    function formatDriverRatingForList(driverId: string) {
+        const stats = driverStatsById[driverId];
+        if (!stats) {
+            return '—';
+        }
+        return formatPassengerBidderRating(stats.avgRating, stats.count);
     }
 
     async function loadTripReviews(tripList: Trip[]) {
@@ -212,6 +287,7 @@ function usePassengerDashboardState() {
         try {
             await tripsAPI.award(bidTripId, bidId);
             setBidDetail(null);
+            setBidDetailReviews([]);
             setQuotesExpandedTripIds([]);
             await loadData();
         } catch (error: unknown) {
@@ -236,6 +312,7 @@ function usePassengerDashboardState() {
             }
             setChatFocusRoomId(roomId);
             setBidDetail(null);
+            setBidDetailReviews([]);
             setActiveTab('chat');
         } catch (error: unknown) {
             alert(
@@ -305,6 +382,12 @@ function usePassengerDashboardState() {
         setCancelReason('');
     }
 
+    function closeBidDetail() {
+        setBidDetail(null);
+        setBidDetailReviews([]);
+        setBidDetailReviewStats({ avgRating: null, count: 0 });
+    }
+
     function confirmCancelTrip() {
         if (!cancelDialogTrip) return;
         cancelTripWithReason(
@@ -340,6 +423,12 @@ function usePassengerDashboardState() {
         quotesExpandedTripIds,
         bidDetail,
         setBidDetail,
+        closeBidDetail,
+        openBidDetail,
+        bidDetailReviews,
+        bidDetailReviewStats,
+        bidDetailReviewsLoading,
+        formatDriverRatingForList,
         bidGalleryIndex,
         setBidGalleryIndex,
         resolveMediaUrl,

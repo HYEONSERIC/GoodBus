@@ -49,6 +49,24 @@ function reviewSelect() {
     } as const;
 }
 
+function computeDriverReviewStats(reviews: { rating: number }[]) {
+    const count = reviews.length;
+    const avgRating =
+        count > 0
+            ? reviews.reduce((s, r) => s + r.rating, 0) / count
+            : null;
+    return { avgRating, count };
+}
+
+const BIDDER_ROLES = [UserRole.Driver, UserRole.BusCompany] as const;
+
+async function findBidderUser(driverId: string) {
+    return prisma.user.findFirst({
+        where: { id: driverId, role: { in: [...BIDDER_ROLES] } },
+        select: { id: true },
+    });
+}
+
 /** 승객: 내 완료 여정 리뷰 목록 (tripId 목록으로 조회) */
 router.get('/', requireAuth, async (req, res) => {
     const tripIdsRaw = req.query.tripIds;
@@ -88,12 +106,76 @@ router.get('/driver/me', requireAuth, requireRole(UserRole.Driver, UserRole.BusC
         },
     });
 
-    const avgRating =
-        reviews.length > 0
-            ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length
-            : null;
+    const { avgRating, count } = computeDriverReviewStats(reviews);
+    res.json({ reviews, avgRating, count });
+});
 
-    res.json({ reviews, avgRating, count: reviews.length });
+/** 승객 등: 입찰자(기사·회사)별 평균 별점 요약 (목록용) */
+router.get('/drivers/summary', requireAuth, async (req, res) => {
+    const raw = req.query.driverIds;
+    const driverIds =
+        typeof raw === 'string'
+            ? [...new Set(raw.split(',').filter(Boolean))]
+            : [];
+
+    if (driverIds.length === 0) {
+        return res.json({ byDriverId: {} });
+    }
+
+    const bidders = await prisma.user.findMany({
+        where: { id: { in: driverIds }, role: { in: [...BIDDER_ROLES] } },
+        select: { id: true },
+    });
+    const validIds = bidders.map((u) => u.id);
+
+    const byDriverId: Record<
+        string,
+        { avgRating: number | null; count: number }
+    > = {};
+    for (const id of validIds) {
+        byDriverId[id] = { avgRating: null, count: 0 };
+    }
+
+    if (validIds.length === 0) {
+        return res.json({ byDriverId });
+    }
+
+    const grouped = await prisma.tripReview.groupBy({
+        by: ['driverId'],
+        where: { driverId: { in: validIds } },
+        _avg: { rating: true },
+        _count: { _all: true },
+    });
+
+    for (const row of grouped) {
+        byDriverId[row.driverId] = {
+            avgRating: row._avg.rating,
+            count: row._count._all,
+        };
+    }
+
+    res.json({ byDriverId });
+});
+
+/** 승객 등: 입찰자 프로필용 후기 목록 + 평균 별점 */
+router.get('/drivers/:driverId', requireAuth, async (req, res) => {
+    const driverId = req.params.driverId;
+    const bidder = await findBidderUser(driverId);
+    if (!bidder) {
+        return res.status(404).json({ error: '입찰자를 찾을 수 없습니다.' });
+    }
+
+    const reviews = await prisma.tripReview.findMany({
+        where: { driverId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+            ...reviewSelect(),
+            trip: { select: tripSelectForReview() },
+        },
+    });
+
+    const { avgRating, count } = computeDriverReviewStats(reviews);
+    res.json({ reviews, avgRating, count });
 });
 
 /** 승객: 운행 완료 여정에 리뷰 등록 */

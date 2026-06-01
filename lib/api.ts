@@ -332,6 +332,11 @@ export const verificationAPI = {
     },
 };
 
+export type DriverReviewStats = {
+    avgRating: number | null;
+    count: number;
+};
+
 export const reviewsAPI = {
     listForTrips: async (tripIds: string[]) => {
         if (tripIds.length === 0) return { reviews: [] };
@@ -344,6 +349,20 @@ export const reviewsAPI = {
             headers: {},
         }),
     getDriverMe: async () => fetchAPI('/reviews/driver/me'),
+    getDriversSummary: async (driverIds: string[]) => {
+        if (driverIds.length === 0) {
+            return { byDriverId: {} as Record<string, DriverReviewStats> };
+        }
+        return fetchAPI(
+            `/reviews/drivers/summary?driverIds=${driverIds.join(',')}`,
+        ) as Promise<{ byDriverId: Record<string, DriverReviewStats> }>;
+    },
+    getDriverById: async (driverId: string) =>
+        fetchAPI(`/reviews/drivers/${driverId}`) as Promise<{
+            reviews: unknown[];
+            avgRating: number | null;
+            count: number;
+        }>,
 };
 
 export const profileAPI = {

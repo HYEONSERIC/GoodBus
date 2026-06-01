@@ -92,10 +92,13 @@ export function PassengerDashboardContent() {
                 <PassengerBidDetailDialog
                     open={Boolean(p.bidDetail)}
                     bidDetail={p.bidDetail}
-                    onClose={() => p.setBidDetail(null)}
+                    onClose={p.closeBidDetail}
                     bidGalleryIndex={p.bidGalleryIndex}
                     setBidGalleryIndex={p.setBidGalleryIndex}
                     resolveMediaUrl={p.resolveMediaUrl}
+                    driverReviews={p.bidDetailReviews}
+                    driverReviewStats={p.bidDetailReviewStats}
+                    reviewsLoading={p.bidDetailReviewsLoading}
                     verificationLabel={p.verificationLabel}
                     onOpenChat={() => {
                         if (!p.bidDetail) return;
@@ -140,11 +143,9 @@ export function PassengerDashboardContent() {
                                 p.setCancelMenuTripId(null);
                             }}
                             onSelectBid={(bid, bidTrip) =>
-                                p.setBidDetail({
-                                    bid: bid as Bid,
-                                    bidTrip: bidTrip as Trip,
-                                })
+                                p.openBidDetail(bid as Bid, bidTrip as Trip)
                             }
+                            formatDriverRating={p.formatDriverRatingForList}
                             resolveMediaUrl={p.resolveMediaUrl}
                         />
                     </div>

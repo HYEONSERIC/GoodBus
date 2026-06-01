@@ -10,9 +10,6 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { notificationsAPI } from '@/lib/api';
-import { getErrorMessage } from '@/lib/errors';
 
 const QUOTE_ALERT_CONSENT_KEY = 'goodbus_alert_consent_quote';
 const MARKETING_ALERT_CONSENT_KEY = 'goodbus_alert_consent_marketing';
@@ -51,7 +48,6 @@ function ConsentRow({
 
 export function Notifications() {
     const [open, setOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
     const [quoteAlertConsent, setQuoteAlertConsent] = useState(false);
     const [marketingAlertConsent, setMarketingAlertConsent] = useState(false);
 
@@ -67,27 +63,7 @@ export function Notifications() {
             setQuoteAlertConsent(false);
             setMarketingAlertConsent(false);
         }
-        void loadUnreadCount();
-
-        const interval = setInterval(() => {
-            void loadUnreadCount();
-        }, 30000);
-
-        return () => clearInterval(interval);
     }, []);
-
-    async function loadUnreadCount() {
-        try {
-            const data = await notificationsAPI.getUnreadCount();
-            setUnreadCount(data.count || 0);
-        } catch (error: unknown) {
-            console.error(
-                'Error loading unread count:',
-                getErrorMessage(error, 'Unknown error')
-            );
-            setUnreadCount(0);
-        }
-    }
 
     function toggleQuoteAlertConsent() {
         const next = !quoteAlertConsent;
@@ -114,18 +90,10 @@ export function Notifications() {
             <DialogTrigger asChild>
                 <Button
                     variant="ghost"
-                    className="relative h-7 w-7 p-0 text-gray-700 hover:bg-transparent hover:text-black"
+                    className="h-7 w-7 p-0 text-gray-700 hover:bg-transparent hover:text-black"
                     aria-label="알림 설정"
                 >
                     <Bell className="h-5 w-5" />
-                    {unreadCount > 0 && (
-                        <Badge
-                            className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center p-0 text-xs"
-                            variant="destructive"
-                        >
-                            {unreadCount > 9 ? '9+' : unreadCount}
-                        </Badge>
-                    )}
                 </Button>
             </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-md">

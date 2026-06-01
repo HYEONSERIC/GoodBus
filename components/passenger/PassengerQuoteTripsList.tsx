@@ -22,6 +22,7 @@ export function PassengerQuoteTripsList({
     onToggleCancelMenu,
     onOpenCancelDialog,
     onSelectBid,
+    formatDriverRating,
     resolveMediaUrl,
 }: {
     trips: PassengerTrip[];
@@ -35,6 +36,7 @@ export function PassengerQuoteTripsList({
     onToggleCancelMenu: (tripId: string) => void;
     onOpenCancelDialog: (trip: PassengerTrip) => void;
     onSelectBid: (bid: PassengerBid, bidTrip: PassengerTrip) => void;
+    formatDriverRating: (driverId: string) => string;
     resolveMediaUrl: (url?: string | null) => string | null;
 }) {
     const nowMs = Date.now();
@@ -100,6 +102,7 @@ export function PassengerQuoteTripsList({
                         }}
                         onToggleQuotes={() => onToggleQuotesTrip(trip.id)}
                         onSelectBid={onSelectBid}
+                        formatDriverRating={formatDriverRating}
                         resolveMediaUrl={resolveMediaUrl}
                     />
                 );

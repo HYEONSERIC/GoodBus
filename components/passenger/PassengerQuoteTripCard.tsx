@@ -33,6 +33,7 @@ export function PassengerQuoteTripCard({
     onOpenCancelDialog,
     onToggleQuotes,
     onSelectBid,
+    formatDriverRating,
     resolveMediaUrl,
 }: {
     trip: PassengerTrip;
@@ -50,6 +51,7 @@ export function PassengerQuoteTripCard({
     onOpenCancelDialog: () => void;
     onToggleQuotes: () => void;
     onSelectBid: (bid: PassengerBid, bidTrip: PassengerTrip) => void;
+    formatDriverRating: (driverId: string) => string;
     resolveMediaUrl: (url?: string | null) => string | null;
 }) {
     return (
@@ -353,11 +355,10 @@ export function PassengerQuoteTripCard({
                                                             )}
                                                         </p>
                                                         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                                                            <span className="text-[11px] text-gray-400">
-                                                                ⭐
-                                                                준비중
-                                                                · 후기
-                                                                준비중
+                                                            <span className="text-[11px] text-gray-500">
+                                                                {formatDriverRating(
+                                                                    bidder.id,
+                                                                )}
                                                             </span>
                                                             {segment && (
                                                                 <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-800">

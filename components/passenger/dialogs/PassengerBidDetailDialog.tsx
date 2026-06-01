@@ -10,6 +10,12 @@ import {
 } from '@/components/ui/dialog';
 import { bidderDisplayName, parseVehicleCountFromNote } from '@/lib/passengerQuoteBids';
 import type { PassengerBidDetailState, BidderProfile } from '@/components/passenger/passengerDashboardTypes';
+import type { DriverReviewStats } from '@/lib/api';
+import {
+    DriverReviewsList,
+    formatPassengerBidderRating,
+    type TripReviewRecord,
+} from '@/components/TripReviewSection';
 
 export function PassengerBidDetailDialog({
     open,
@@ -18,6 +24,9 @@ export function PassengerBidDetailDialog({
     bidGalleryIndex,
     setBidGalleryIndex,
     resolveMediaUrl,
+    driverReviews,
+    driverReviewStats,
+    reviewsLoading,
     verificationLabel,
     onOpenChat,
     onAward,
@@ -28,6 +37,9 @@ export function PassengerBidDetailDialog({
     bidGalleryIndex: number;
     setBidGalleryIndex: React.Dispatch<React.SetStateAction<number>>;
     resolveMediaUrl: (url?: string | null) => string | null;
+    driverReviews: TripReviewRecord[];
+    driverReviewStats: DriverReviewStats;
+    reviewsLoading: boolean;
     verificationLabel: (bidder: BidderProfile) => string;
     onOpenChat: () => void;
     onAward: () => void;
@@ -144,7 +156,12 @@ export function PassengerBidDetailDialog({
                                                     {bidderDisplayName(bidder)}
                                                 </p>
                                                 <p className="mt-1 text-sm text-amber-600">
-                                                    ⭐ 준비중 (0.0)
+                                                    {reviewsLoading
+                                                        ? '평점 불러오는 중…'
+                                                        : formatPassengerBidderRating(
+                                                              driverReviewStats.avgRating,
+                                                              driverReviewStats.count,
+                                                          )}
                                                 </p>
                                             </div>
                                         </div>
@@ -210,6 +227,30 @@ export function PassengerBidDetailDialog({
                                                     </p>
                                                 </div>
                                             )}
+                                            <div>
+                                                <p className="text-xs font-semibold text-gray-700">
+                                                    승객 후기
+                                                </p>
+                                                {reviewsLoading ? (
+                                                    <p className="mt-2 text-sm text-gray-500">
+                                                        후기를 불러오는 중…
+                                                    </p>
+                                                ) : (
+                                                    <div className="mt-2">
+                                                        <DriverReviewsList
+                                                            reviews={driverReviews}
+                                                            resolveImageUrl={(
+                                                                url,
+                                                            ) =>
+                                                                resolveMediaUrl(
+                                                                    url,
+                                                                ) ?? url
+                                                            }
+                                                            showRating
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         {((bidTrip.status === 'open' &&
                                             bid.status === 'open') ||

@@ -385,9 +385,11 @@ export function TripReviewSection({
 export function DriverReviewsList({
     reviews,
     resolveImageUrl,
+    showRating,
 }: {
     reviews: TripReviewRecord[];
     resolveImageUrl?: (url: string) => string;
+    showRating?: boolean;
 }) {
     if (reviews.length === 0) {
         return (
@@ -406,12 +408,22 @@ export function DriverReviewsList({
                 >
                     <div className="p-4">
                         <div className="flex items-start justify-between gap-3">
-                            <h3 className="text-base font-bold leading-snug text-gray-900">
-                                {formatReviewHeadline(
-                                    r.passenger,
-                                    r.trip?.servicePurpose,
-                                )}
-                            </h3>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base font-bold leading-snug text-gray-900">
+                                    {formatReviewHeadline(
+                                        r.passenger,
+                                        r.trip?.servicePurpose,
+                                    )}
+                                </h3>
+                                {showRating ? (
+                                    <div className="mt-1 flex items-center gap-1">
+                                        <StarDisplay rating={r.rating} />
+                                        <span className="text-xs text-gray-500">
+                                            {r.rating}.0
+                                        </span>
+                                    </div>
+                                ) : null}
+                            </div>
                             <span className="shrink-0 text-xs text-gray-500">
                                 {new Date(r.createdAt).toLocaleDateString(
                                     'ko-KR',
@@ -435,6 +447,18 @@ export function DriverReviewsList({
             ))}
         </div>
     );
+}
+
+/** 승객 입찰 목록·견적 상세용 (평균 점수 + 후기 건수) */
+export function formatPassengerBidderRating(
+    avgRating: number | null,
+    count: number,
+) {
+    if (count === 0) {
+        return '후기 없음';
+    }
+    const { stars, label } = formatDriverRatingStars(avgRating, count);
+    return `${stars} ${label} · 후기 ${count}건`;
 }
 
 export function formatDriverRatingStars(avg: number | null, count: number) {
