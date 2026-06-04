@@ -32,6 +32,22 @@ export interface SupportInquiryAdminRow {
     repliedAt: string | null;
 }
 
+export type SupportInquiryListStatus = 'all' | 'pending' | 'replied';
+export type SupportInquiryListSort =
+    | 'unanswered_first'
+    | 'newest'
+    | 'oldest';
+
+export interface SupportInquiryListMeta {
+    /** 전체 미답변(사이드 배지와 동일 기준) */
+    unansweredTotal: number;
+    /** 현재 필터·검색에 맞는 전체 건수 */
+    totalMatching: number;
+    /** 현재 필터·검색 중 답변 대기 건수 */
+    pendingInFilter: number;
+    returned: number;
+}
+
 export interface SupportInquiryDetail {
     id: string;
     title: string;
@@ -50,12 +66,64 @@ export interface SupportInquiryDetail {
     };
 }
 
+export interface AdminRevenueMonthRow {
+    year: number;
+    month: number;
+    label: string;
+    awardCount: number;
+    gmvManWon: number;
+    estimatedRevenueManWon: number;
+}
+
+export interface AdminRevenueAwardRow {
+    bidId: string;
+    tripId: string;
+    origin: string;
+    destination: string;
+    route: string;
+    priceManWon: number;
+    awardedAt: string | null;
+    countedAt: string;
+    usedCreatedAtFallback: boolean;
+    bidderEmail: string;
+    bidderDisplayName: string;
+    bidderRole: string;
+}
+
+export interface AdminRevenueStatsResponse {
+    fromYear: number;
+    fromMonth: number;
+    toYear: number;
+    toMonth: number;
+    commissionRate: number;
+    commissionRatePercent: number;
+    awardCount: number;
+    gmvManWon: number;
+    estimatedRevenueManWon: number;
+    awardedAtMissingCount: number;
+    monthly: AdminRevenueMonthRow[];
+}
+
+export type AdminAwardPeriodSummary = {
+    awardCount: number;
+    gmvManWon: number;
+};
+
+export type AdminNavBadges = Partial<
+    Record<'faq' | 'verification', number>
+>;
+
 export interface OverviewResponse {
     counts: {
         users: number;
         trips: number;
         bids: number;
     };
+    awardsToday: AdminAwardPeriodSummary;
+    awardsThisWeek: AdminAwardPeriodSummary;
+    pendingInquiries: number;
+    pendingVerifications: number;
+    navBadges: AdminNavBadges;
     recentTrips: Array<{
         id: string;
         origin: string;
@@ -87,6 +155,17 @@ export interface PassengerTripSummary {
     completed: number;
     totalGrouped: number;
     totalRaw: number;
+}
+
+export interface AdminBidderStats {
+    awardedCount: number;
+    gmvManWon: number;
+}
+
+export interface AdminReviewSummary {
+    count: number;
+    avgRating: number | null;
+    as: 'received' | 'written';
 }
 
 export interface AdminUserDetail extends AdminUser {
@@ -129,7 +208,20 @@ export interface AdminUserActivity {
             id: string;
             origin: string;
             destination: string;
+            status: string;
         };
+    }>;
+    reviews: Array<{
+        id: string;
+        rating: number;
+        comment: string | null;
+        createdAt: string;
+        trip: {
+            id: string;
+            origin: string;
+            destination: string;
+        };
+        counterpartyEmail: string;
     }>;
 }
 

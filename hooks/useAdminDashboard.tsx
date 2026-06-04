@@ -4,6 +4,7 @@ import {
     createContext,
     useContext,
     useEffect,
+    useRef,
     useState,
     type ReactNode,
 } from 'react';
@@ -11,9 +12,12 @@ import { useRouter } from 'next/navigation';
 import { adminAPI, authAPI } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
 import { verificationKindForUser } from '@/lib/adminVerification';
+import { buildAdminHref, parseAdminNavQuery } from '@/lib/adminNav';
 import type {
     AdminBidRow,
+    AdminBidderStats,
     AdminNotificationHistoryRow,
+    AdminReviewSummary,
     AdminTabId,
     AdminUser,
     AdminUserActivity,
@@ -23,8 +27,18 @@ import type {
     SupportAdminPostRow,
     SupportInquiryAdminRow,
     SupportInquiryDetail,
+    SupportInquiryListMeta,
+    SupportInquiryListSort,
+    SupportInquiryListStatus,
     VerificationRow,
+    AdminRevenueStatsResponse,
 } from '@/types/admin';
+import {
+    buildMonthOptions,
+    buildYearOptions,
+    currentYearMonth,
+    yearMonthValue,
+} from '@/lib/adminRevenueDisplay';
 
 type AdminDashboardContextValue = ReturnType<typeof useAdminDashboardState>;
 
@@ -43,7 +57,14 @@ function useAdminDashboardState() {
         useState<PassengerTripSummary | null>(null);
     const [selectedUserActivity, setSelectedUserActivity] =
         useState<AdminUserActivity | null>(null);
+    const [bidderStats, setBidderStats] = useState<AdminBidderStats | null>(
+        null,
+    );
+    const [reviewSummary, setReviewSummary] =
+        useState<AdminReviewSummary | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+    const [highlightBidId, setHighlightBidId] = useState<string | null>(null);
+    const initialNavApplied = useRef(false);
     const [detailLoading, setDetailLoading] = useState(false);
     const [adminForm, setAdminForm] = useState({
         email: '',
@@ -120,6 +141,13 @@ function useAdminDashboardState() {
     const [supportInquiries, setSupportInquiries] = useState<
         SupportInquiryAdminRow[]
     >([]);
+    const [supportInquiryMeta, setSupportInquiryMeta] =
+        useState<SupportInquiryListMeta | null>(null);
+    const [inquirySearch, setInquirySearch] = useState('');
+    const [inquiryStatusFilter, setInquiryStatusFilter] =
+        useState<SupportInquiryListStatus>('all');
+    const [inquirySort, setInquirySort] =
+        useState<SupportInquiryListSort>('unanswered_first');
     const [supportInquiriesLoading, setSupportInquiriesLoading] =
         useState(false);
     const [supportInquiryDetailOpen, setSupportInquiryDetailOpen] =
@@ -136,6 +164,25 @@ function useAdminDashboardState() {
         useState('');
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+    const { year: currentYear, month: currentMonth } = currentYearMonth();
+    const [revenueFromYear, setRevenueFromYear] = useState(currentYear);
+    const [revenueFromMonth, setRevenueFromMonth] = useState(1);
+    const [revenueToYear, setRevenueToYear] = useState(currentYear);
+    const [revenueToMonth, setRevenueToMonth] = useState(currentMonth);
+    const [revenueStats, setRevenueStats] =
+        useState<AdminRevenueStatsResponse | null>(null);
+    const [revenueLoading, setRevenueLoading] = useState(false);
+    const [revenueError, setRevenueError] = useState('');
+
+    async function refreshOverview() {
+        try {
+            const overviewData = await adminAPI.getOverview();
+            setOverview(overviewData);
+        } catch (err: unknown) {
+            setError(getErrorMessage(err, '요약 정보를 불러오지 못했습니다.'));
+        }
+    }
 
     useEffect(() => {
         async function loadData() {
@@ -163,6 +210,44 @@ function useAdminDashboardState() {
     }, [router]);
 
     useEffect(() => {
+        if (loading || initialNavApplied.current) return;
+        if (typeof window === 'undefined') return;
+        initialNavApplied.current = true;
+        const nav = parseAdminNavQuery(
+            new URLSearchParams(window.location.search),
+        );
+        if (nav.tab) setActiveTab(nav.tab);
+        if (nav.tab === 'users' && nav.userId) {
+            void loadUserDetails(nav.userId, 10);
+        }
+        if (nav.tab === 'bids') {
+            if (nav.bidSearch) setBidSearch(nav.bidSearch);
+            if (nav.bidStatus) setBidStatusFilter(nav.bidStatus);
+            void runBidSearch({
+                search: nav.bidSearch,
+                bidStatus: nav.bidStatus,
+                bidderId: nav.bidderId,
+                passengerId: nav.passengerId,
+                tripId: nav.tripId,
+            });
+        }
+    }, [loading]);
+
+    const overviewRefreshSkipRef = useRef(true);
+    useEffect(() => {
+        if (loading) return;
+        if (overviewRefreshSkipRef.current) {
+            overviewRefreshSkipRef.current = false;
+            return;
+        }
+        void refreshOverview();
+    }, [activeTab]);
+
+    useEffect(() => {
+        setError('');
+    }, [activeTab]);
+
+    useEffect(() => {
         if (activeTab === 'bids' && bidResults.length === 0 && !bidLoading) {
             handleBidSearch();
         }
@@ -175,6 +260,9 @@ function useAdminDashboardState() {
         }
         if (activeTab === 'verification' && !verificationLoading) {
             loadVerifications();
+        }
+        if (activeTab === 'revenue' && !revenueStats && !revenueLoading) {
+            void loadRevenueStats();
         }
     }, [activeTab]);
 
@@ -214,31 +302,33 @@ function useAdminDashboardState() {
         if (faqSectionTab !== 'posts') setNewPostDialogOpen(false);
     }, [faqSectionTab]);
 
+    const loadSupportInquiries = async (overrides?: {
+        search?: string;
+        status?: SupportInquiryListStatus;
+        sort?: SupportInquiryListSort;
+    }) => {
+        setSupportInquiriesLoading(true);
+        try {
+            const data = await adminAPI.getSupportInquiries({
+                search: (overrides?.search ?? inquirySearch).trim() || undefined,
+                status: overrides?.status ?? inquiryStatusFilter,
+                sort: overrides?.sort ?? inquirySort,
+            });
+            setSupportInquiries(data.inquiries || []);
+            setSupportInquiryMeta(data.meta ?? null);
+        } catch (err: unknown) {
+            setError(
+                getErrorMessage(err, '문의 목록을 불러오지 못했습니다.'),
+            );
+        } finally {
+            setSupportInquiriesLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab !== 'faq' || faqSectionTab !== 'inquiries') return;
-        let cancelled = false;
-        (async () => {
-            setSupportInquiriesLoading(true);
-            try {
-                const data = await adminAPI.getSupportInquiries();
-                if (!cancelled) setSupportInquiries(data.inquiries || []);
-            } catch (err: unknown) {
-                if (!cancelled) {
-                    setError(
-                        getErrorMessage(
-                            err,
-                            '문의 목록을 불러오지 못했습니다.',
-                        ),
-                    );
-                }
-            } finally {
-                if (!cancelled) setSupportInquiriesLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [activeTab, faqSectionTab]);
+        void loadSupportInquiries();
+    }, [activeTab, faqSectionTab, inquiryStatusFilter, inquirySort]);
 
     useEffect(() => {
         if (!editPost) return;
@@ -278,6 +368,10 @@ function useAdminDashboardState() {
         await handleFilter();
     };
 
+    const syncAdminUrl = (query: Parameters<typeof buildAdminHref>[0]) => {
+        router.replace(buildAdminHref(query), { scroll: false });
+    };
+
     const loadUserDetails = async (userId: string, take = activityTake) => {
         setDetailLoading(true);
         setSelectedUserId(userId);
@@ -288,12 +382,113 @@ function useAdminDashboardState() {
             ]);
             setSelectedUser(detailData.user);
             setPassengerTripSummary(detailData.tripSummary ?? null);
-            setSelectedUserActivity(activityData);
+            setBidderStats(detailData.bidderStats ?? null);
+            setReviewSummary(detailData.reviewSummary ?? null);
+            setSelectedUserActivity({
+                trips: activityData.trips ?? [],
+                bids: activityData.bids ?? [],
+                reviews: activityData.reviews ?? [],
+            });
+            syncAdminUrl({ tab: 'users', userId });
         } catch (err: unknown) {
             setError(getErrorMessage(err, 'Failed to load user details'));
         } finally {
             setDetailLoading(false);
         }
+    };
+
+    const openUserProfile = async (userId: string) => {
+        setActiveTab('users');
+        setActivityTake(10);
+        await loadUserDetails(userId, 10);
+    };
+
+    const runBidSearch = async (overrides?: {
+        search?: string;
+        bidStatus?: string;
+        tripStatus?: string;
+        startDate?: string;
+        endDate?: string;
+        bidderId?: string;
+        passengerId?: string;
+        tripId?: string;
+        highlightBidId?: string | null;
+    }) => {
+        setBidLoading(true);
+        setBidError('');
+        if (overrides?.highlightBidId !== undefined) {
+            setHighlightBidId(overrides.highlightBidId);
+        }
+        try {
+            const data = await adminAPI.getBids({
+                search: (overrides?.search ?? bidSearch).trim() || undefined,
+                bidStatus:
+                    (overrides?.bidStatus ?? bidStatusFilter) || undefined,
+                tripStatus:
+                    (overrides?.tripStatus ?? tripStatusFilter) || undefined,
+                startDate: (overrides?.startDate ?? bidStartDate) || undefined,
+                endDate: (overrides?.endDate ?? bidEndDate) || undefined,
+                bidderId: overrides?.bidderId,
+                passengerId: overrides?.passengerId,
+                tripId: overrides?.tripId,
+            });
+            setBidResults(data.bids || []);
+            syncAdminUrl({
+                tab: 'bids',
+                bidSearch: (overrides?.search ?? bidSearch).trim() || undefined,
+                bidStatus:
+                    (overrides?.bidStatus ?? bidStatusFilter) || undefined,
+                bidderId: overrides?.bidderId,
+                passengerId: overrides?.passengerId,
+                tripId: overrides?.tripId,
+            });
+        } catch (err: unknown) {
+            setBidError(getErrorMessage(err, '입찰 검색에 실패했습니다.'));
+        } finally {
+            setBidLoading(false);
+        }
+    };
+
+    const openBidsForBidder = async (opts: {
+        bidderId: string;
+        email: string;
+        bidStatus?: string;
+        highlightBidId?: string;
+    }) => {
+        setActiveTab('bids');
+        setBidSearch(opts.email);
+        if (opts.bidStatus !== undefined) {
+            setBidStatusFilter(opts.bidStatus);
+        }
+        await runBidSearch({
+            search: opts.email,
+            bidderId: opts.bidderId,
+            bidStatus: opts.bidStatus,
+            highlightBidId: opts.highlightBidId ?? null,
+        });
+    };
+
+    const openBidsForPassenger = async (opts: {
+        passengerId: string;
+        email: string;
+    }) => {
+        setActiveTab('bids');
+        setBidSearch(opts.email);
+        await runBidSearch({
+            search: opts.email,
+            passengerId: opts.passengerId,
+            highlightBidId: null,
+        });
+    };
+
+    const openBidsForTrip = async (tripId: string) => {
+        setActiveTab('bids');
+        setBidSearch('');
+        await runBidSearch({
+            tripId,
+            search: '',
+            highlightBidId: null,
+        });
     };
 
     const handleCreateAdmin = async () => {
@@ -318,23 +513,27 @@ function useAdminDashboardState() {
         }
     };
 
-    const handleBidSearch = async () => {
-        setBidLoading(true);
-        setBidError('');
+    const loadRevenueStats = async () => {
+        setRevenueLoading(true);
+        setRevenueError('');
         try {
-            const data = await adminAPI.getBids({
-                search: bidSearch.trim(),
-                bidStatus: bidStatusFilter || undefined,
-                tripStatus: tripStatusFilter || undefined,
-                startDate: bidStartDate || undefined,
-                endDate: bidEndDate || undefined,
+            const data = await adminAPI.getRevenueStats({
+                from: yearMonthValue(revenueFromYear, revenueFromMonth),
+                to: yearMonthValue(revenueToYear, revenueToMonth),
             });
-            setBidResults(data.bids || []);
+            setRevenueStats(data as AdminRevenueStatsResponse);
         } catch (err: unknown) {
-            setBidError(getErrorMessage(err, '입찰 검색에 실패했습니다.'));
+            setRevenueError(
+                getErrorMessage(err, '거래 통계를 불러오지 못했습니다.'),
+            );
+            setRevenueStats(null);
         } finally {
-            setBidLoading(false);
+            setRevenueLoading(false);
         }
+    };
+
+    const handleBidSearch = async () => {
+        await runBidSearch({ highlightBidId: null });
     };
 
     const handleNotificationHistorySearch = async (page = notificationPage) => {
@@ -395,6 +594,7 @@ function useAdminDashboardState() {
         );
         setVerificationReason((prev) => ({ ...prev, [user.id]: '' }));
         await loadVerifications();
+        await refreshOverview();
     };
 
     return {
@@ -413,8 +613,11 @@ function useAdminDashboardState() {
         setPassengerTripSummary,
         selectedUserActivity,
         setSelectedUserActivity,
+        bidderStats,
+        reviewSummary,
         selectedUserId,
         setSelectedUserId,
+        highlightBidId,
         detailLoading,
         setDetailLoading,
         adminForm,
@@ -513,6 +716,14 @@ function useAdminDashboardState() {
         setNewPostDialogOpen,
         supportInquiries,
         setSupportInquiries,
+        supportInquiryMeta,
+        inquirySearch,
+        setInquirySearch,
+        inquiryStatusFilter,
+        setInquiryStatusFilter,
+        inquirySort,
+        setInquirySort,
+        loadSupportInquiries,
         supportInquiriesLoading,
         setSupportInquiriesLoading,
         supportInquiryDetailOpen,
@@ -531,13 +742,34 @@ function useAdminDashboardState() {
         handleFilter,
         toggleUserStatus,
         loadUserDetails,
+        openUserProfile,
+        openBidsForBidder,
+        openBidsForPassenger,
+        openBidsForTrip,
         handleCreateAdmin,
         handleBidSearch,
+        runBidSearch,
         handleNotificationHistorySearch,
         handleActivityMore,
         loadVerifications,
         updateVerificationStatus,
+        refreshOverview,
         uploadBaseUrl,
+        revenueFromYear,
+        setRevenueFromYear,
+        revenueFromMonth,
+        setRevenueFromMonth,
+        revenueToYear,
+        setRevenueToYear,
+        revenueToMonth,
+        setRevenueToMonth,
+        revenueStats,
+        revenueLoading,
+        revenueError,
+        setRevenueError,
+        loadRevenueStats,
+        revenueYearOptions: buildYearOptions(),
+        revenueMonthOptions: buildMonthOptions(),
     };
 
 }

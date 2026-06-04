@@ -94,22 +94,32 @@ async function main() {
         });
     }
 
-    // Create a sample trip
-    const trip = await prisma.trip.create({
-        data: {
-            passengerId: passenger.id,
-            origin: 'New York',
-            destination: 'Boston',
-            dateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-            paxCount: 20,
-            busSize: 'medium',
-            status: 'open',
-        },
-    });
+    // 샘플 여정: 시드마다 추가하지 않음 (동일 출발·도착 1건만 유지)
+    const sampleTripWhere = {
+        passengerId: passenger.id,
+        origin: 'New York',
+        destination: 'Boston',
+    } as const;
+    let trip = await prisma.trip.findFirst({ where: sampleTripWhere });
+    if (!trip) {
+        trip = await prisma.trip.create({
+            data: {
+                ...sampleTripWhere,
+                dateTime: new Date(
+                    Date.now() + 7 * 24 * 60 * 60 * 1000,
+                ),
+                paxCount: 20,
+                busSize: 'medium',
+                status: 'open',
+            },
+        });
+        console.log('Created sample trip:', trip.id);
+    } else {
+        console.log('Sample trip already exists, skipped:', trip.id);
+    }
 
     console.log('Seed completed!');
-    console.log('Created users:', { passenger, driver, company, admin });
-    console.log('Created trip:', trip);
+    console.log('Users:', { passenger, driver, company, admin });
 }
 
 main()

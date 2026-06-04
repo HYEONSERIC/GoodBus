@@ -157,11 +157,14 @@ model Trip {
   paymentMethod String?
   additionalRequest String?
   status      TripStatus @default(open)
+  awardedAt   DateTime?
   createdAt   DateTime   @default(now())
   
   bids Bid[]
   chatRooms ChatRoom[]
   review TripReview?
+
+  @@index([awardedAt])
 }
 
 model TripReview {

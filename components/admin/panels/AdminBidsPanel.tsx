@@ -15,6 +15,18 @@ import {
 } from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
+import {
+    BID_STATUS_FILTER_OPTIONS,
+    TRIP_STATUS_FILTER_OPTIONS,
+    formatBidStatusLabel,
+    formatTripStatusLabel,
+} from '@/lib/adminStatusLabels';
+import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
+import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
+import {
+    ADMIN_AMOUNT_HEADERS,
+    formatManWon,
+} from '@/lib/adminRevenueDisplay';
 
 export function AdminBidsPanel() {
   const {
@@ -31,7 +43,13 @@ export function AdminBidsPanel() {
     bidResults,
     bidLoading,
     bidError,
+    setBidError,
+    highlightBidId,
     handleBidSearch,
+    openUserProfile,
+    openBidsForBidder,
+    openBidsForPassenger,
+    openBidsForTrip,
 } = useAdminDashboard();
   return (
 <AdminPanelCard>
@@ -51,11 +69,11 @@ export function AdminBidsPanel() {
                                     setBidStatusFilter(e.target.value)
                                 }
                             >
-                                <option value="">전체</option>
-                                <option value="open">open</option>
-                                <option value="withdrawn">withdrawn</option>
-                                <option value="awarded">awarded</option>
-                                <option value="lost">lost</option>
+                                {BID_STATUS_FILTER_OPTIONS.map((opt) => (
+                                    <option key={opt.value || 'all'} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
                             </select>
                         </AdminFilterField>
                         <AdminFilterField label="여정 상태">
@@ -66,10 +84,11 @@ export function AdminBidsPanel() {
                                     setTripStatusFilter(e.target.value)
                                 }
                             >
-                                <option value="">전체</option>
-                                <option value="open">open</option>
-                                <option value="awarded">awarded</option>
-                                <option value="cancelled">cancelled</option>
+                                {TRIP_STATUS_FILTER_OPTIONS.map((opt) => (
+                                    <option key={opt.value || 'all'} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
                             </select>
                         </AdminFilterField>
                         <AdminFilterField label="시작일">
@@ -91,10 +110,18 @@ export function AdminBidsPanel() {
                         </Button>
                     </AdminFilterBar>
 
-                    {bidError && (
-                        <p className="text-sm text-red-500">{bidError}</p>
-                    )}
-
+                    <AdminAsyncContent
+                        loading={bidLoading}
+                        error={bidError}
+                        onRetry={() => void handleBidSearch()}
+                        onDismissError={() => setBidError('')}
+                        skeletonVariant="table"
+                        skeletonRows={6}
+                        skeletonColumns={8}
+                        hasData={bidResults.length > 0}
+                        empty={!bidLoading && bidResults.length === 0}
+                        emptyMessage="검색 결과가 없습니다."
+                    >
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
@@ -106,62 +133,105 @@ export function AdminBidsPanel() {
                                     <th className="py-2 pr-4">역할</th>
                                     <th className="py-2 pr-4">입찰 상태</th>
                                     <th className="py-2 pr-4">여정 상태</th>
-                                    <th className="py-2 pr-4">금액</th>
+                                    <th className="py-2 pr-4">
+                                        {ADMIN_AMOUNT_HEADERS.amount}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {bidLoading && (
-                                    <tr>
-                                        <td
-                                            className="py-4 text-sm text-gray-500"
-                                            colSpan={8}
-                                        >
-                                            조회 중...
-                                        </td>
-                                    </tr>
-                                )}
-                                {!bidLoading && bidResults.length === 0 && (
-                                    <tr>
-                                        <td
-                                            className="py-4 text-sm text-gray-500"
-                                            colSpan={8}
-                                        >
-                                            검색 결과가 없습니다.
-                                        </td>
-                                    </tr>
-                                )}
                                 {bidResults.map((bid) => (
-                                    <tr key={bid.id} className="border-b">
+                                    <tr
+                                        key={bid.id}
+                                        className={`border-b ${
+                                            highlightBidId === bid.id
+                                                ? 'bg-amber-50'
+                                                : ''
+                                        }`}
+                                    >
                                         <td className="py-2 pr-4">
                                             {new Date(
                                                 bid.createdAt
                                             ).toLocaleString()}
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {bid.trip.origin} →{' '}
-                                            {bid.trip.destination}
+                                            <AdminDeepLink
+                                                onNavigate={() =>
+                                                    openBidsForTrip(bid.trip.id)
+                                                }
+                                            >
+                                                {bid.trip.origin} →{' '}
+                                                {bid.trip.destination}
+                                            </AdminDeepLink>
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {bid.trip.passenger.email}
+                                            <AdminDeepLink
+                                                onNavigate={() =>
+                                                    openBidsForPassenger({
+                                                        passengerId:
+                                                            bid.trip.passenger.id,
+                                                        email: bid.trip.passenger
+                                                            .email,
+                                                    })
+                                                }
+                                            >
+                                                {bid.trip.passenger.email}
+                                            </AdminDeepLink>
+                                            <span className="mx-1 text-gray-300">
+                                                ·
+                                            </span>
+                                            <AdminDeepLink
+                                                className="text-xs text-gray-600"
+                                                onNavigate={() =>
+                                                    openUserProfile(
+                                                        bid.trip.passenger.id,
+                                                    )
+                                                }
+                                            >
+                                                프로필
+                                            </AdminDeepLink>
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {bid.bidder.email}
+                                            <AdminDeepLink
+                                                onNavigate={() =>
+                                                    openBidsForBidder({
+                                                        bidderId: bid.bidder.id,
+                                                        email: bid.bidder.email,
+                                                        highlightBidId: bid.id,
+                                                    })
+                                                }
+                                            >
+                                                {bid.bidder.email}
+                                            </AdminDeepLink>
+                                            <span className="mx-1 text-gray-300">
+                                                ·
+                                            </span>
+                                            <AdminDeepLink
+                                                className="text-xs text-gray-600"
+                                                onNavigate={() =>
+                                                    openUserProfile(bid.bidder.id)
+                                                }
+                                            >
+                                                프로필
+                                            </AdminDeepLink>
                                         </td>
                                         <td className="py-2 pr-4">
                                             {bid.bidder.role}
                                         </td>
-                                        <td className="py-2 pr-4">{bid.status}</td>
                                         <td className="py-2 pr-4">
-                                            {bid.trip.status}
+                                            {formatBidStatusLabel(bid.status)}
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {Number(bid.price).toLocaleString()}
+                                            {formatTripStatusLabel(bid.trip.status)}
+                                        </td>
+                                        <td className="py-2 pr-4 tabular-nums">
+                                            {formatManWon(Number(bid.price))}
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+                    </AdminAsyncContent>
 </AdminPanelCard>
   );
 }

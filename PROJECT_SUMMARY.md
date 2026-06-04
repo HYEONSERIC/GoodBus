@@ -2,130 +2,105 @@
 
 ## ✅ What Was Built
 
-A full-stack charter bus bidding platform with role-based access control and admin tooling.
+A full-stack charter bus bidding platform with role-based access control, passenger reviews, Kakao maps integration, and an operations-focused **admin console**.
 
 ### Backend (Express + TypeScript)
 
 -   **Location**: `/server`
 -   **Database**: PostgreSQL with Prisma ORM
 -   **Authentication**: JWT tokens in HttpOnly cookies, bcrypt password hashing
--   **API Routes**:
+-   **API Routes** (high level):
     -   `/auth` - signup, login, logout, get current user
-    -   `/trips` - create, list, get by ID, award trips
+    -   `/trips` - create, list, get by ID, award trips (`awardedAt` on award)
     -   `/bids` - create bids, withdraw bids
--   `/profile` - my profile read/update (multipart uploads)
--   `/verification` - document upload and status read
--   `/admin` - overview stats, user list, block/unblock, user activity, bid search, admin creation, verification moderation
--   `/kakao` - places search proxy for autocomplete
+    -   `/profile` - my profile read/update (multipart uploads)
+    -   `/verification` - document upload and status read
+    -   `/reviews` - create/list reviews; driver summary for bid UI
+    -   `/notifications` - in-app notifications
+    -   `/support` - passenger FAQ, notices, inquiries
+    -   `/admin` - overview, users, activity, bids, verifications, support posts/inquiries, **revenue-stats**, notification history, admin creation
+    -   `/kakao` - places search + directions proxy
+-   **Admin utilities**: `adminRevenue.ts`, `adminOverview.ts`, `adminUserStats.ts`, `adminSupportInquiryList.ts`
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
 
-### Frontend (Next.js 16 + TypeScript)
+### Frontend (Next.js + TypeScript)
 
 -   **Location**: Root directory
--   **UI**: Tailwind CSS + shadcn/ui components
+-   **UI**: Tailwind CSS + shadcn/ui; `DashboardMobileShell` for role dashboards
 -   **Pages**:
-    -   Home (`/`) - Landing page
-    -   Login (`/login`) - User authentication
-    -   Signup (`/signup`) - User registration with role selection
-    -   Dashboard (`/dashboard`) - Role-based redirect
-    -   Passenger Dashboard (`/dashboard/passenger`) - Create trips, view bids, award trips + Kakao autocomplete
-    -   Driver Dashboard (`/dashboard/driver`) - Browse trips, place bids
-    -   Company Dashboard (`/dashboard/company`) - Browse trips, place bids
--   Admin Console (`/admin`) - Overview, users, activity, bid search, admin creation
--   **API Client**: Centralized API wrapper in `lib/api.ts`
+    -   Home (`/`), Login, Signup
+    -   Dashboard router + Passenger / Driver / Company dashboards (trips, bids, profile, support, reviews)
+    -   **Admin Console** (`/admin`) — tabbed shell with panels: overview, users, bids, notifications, verification, **revenue**, FAQ/inquiries, admin create
+-   **State**: `hooks/useAdminDashboard.tsx` centralizes admin data, filters, deep links
+-   **API Client**: `lib/api.ts` (+ optional `lib/adminApi.ts`)
 
 ### Features Implemented
 
-✅ User authentication with role selection (Passenger/Driver/Bus Company)  
-✅ Trip creation (Passenger only)  
-✅ Browse open trips (Driver/Company)  
-✅ Place bids on trips with price and notes (Driver/Company)  
-✅ View bids for your trips (Passenger)  
-✅ Award trip to a selected bid (Passenger only)  
-✅ Bid withdrawal (bid owner only)  
-✅ User status (Active/Blocked) with admin controls  
-✅ Admin dashboard + user activity views  
-✅ Bid search dashboard (status/date/user filters)  
-✅ Driver/Company profile edit with photo uploads and persistence  
-✅ Vehicle photo multi-upload (up to 4) with keep/append flow  
-✅ Verification upload + pending/approved/rejected UX flow  
-✅ Garage address autocomplete via Kakao Places (Passenger + Driver/Company)  
-✅ Admin user detail expanded with garage/vehicle/profile/contact data  
-✅ JWT-based authentication with secure cookies  
-✅ Role-based authorization on all protected routes  
-✅ Prisma schema with proper relationships  
-✅ Database seeding with test users and sample trip  
-✅ Docker Compose for PostgreSQL  
-✅ Mobile-responsive UI + unified top bar/side menu/bottom tabs  
-✅ ESLint + Prettier setup
+✅ User authentication with role selection (Passenger/Driver/Bus Company/Admin)  
+✅ Trip creation, bid, award, withdrawal flows  
+✅ Reviews on completed trips; **driver rating on passenger bid list/detail**  
+✅ In-app + optional SMTP email notifications  
+✅ Kakao Places autocomplete + Directions on trip cards  
+✅ Profile/verification uploads (local storage, S3-ready abstraction)  
+✅ Trip grouping (`tripGroupsCore`) for round-trip pairing  
+✅ **Admin console**: user/bid search, block, verification queue, FAQ/inquiry ops, notification history  
+✅ **Admin revenue**: GMV & estimated fee by month, CSV export, `awardedAt` handling  
+✅ **Admin deep links** between users ↔ bids via URL query (`lib/adminNav.ts`)  
+✅ Shared admin loading/error UX components  
+✅ JWT cookies, RBAC on routes, Prisma schema, idempotent seed (sample trip if missing)  
+✅ `npm run dev:all` — frontend + backend concurrently  
 
-## File Structure
+## File Structure (condensed)
 
 ```
 goodbus/
-├── app/                          # Next.js app directory
-│   ├── dashboard/
-│   │   ├── company/page.tsx     # Bus company dashboard
-│   │   ├── driver/page.tsx      # Driver dashboard
-│   │   ├── passenger/page.tsx   # Passenger dashboard
-│   │   └── page.tsx             # Dashboard router
-│   ├── login/page.tsx           # Login page
-│   ├── signup/page.tsx          # Signup page
-│   ├── layout.tsx               # Root layout
-│   └── page.tsx                 # Homepage
+├── app/
+│   ├── admin/page.tsx              # Admin entry (query-driven tabs)
+│   ├── dashboard/                  # passenger | driver | company
+│   ├── login, signup, page.tsx
+│   └── api/kakao/                  # directions proxy
 ├── components/
-│   └── ui/                      # shadcn/ui components
-│       ├── badge.tsx
-│       ├── button.tsx
-│       ├── card.tsx
-│       ├── dialog.tsx
-│       ├── input.tsx
-│       ├── label.tsx
-│       ├── radio-group.tsx
-│       ├── select.tsx
-│       └── textarea.tsx
+│   ├── admin/
+│   │   ├── AdminShell.tsx
+│   │   ├── adminNav.ts             # Tab labels, CS visibility
+│   │   ├── panels/                 # Admin*Panel.tsx per tab
+│   │   ├── AdminErrorBanner.tsx
+│   │   ├── AdminLoadingSkeleton.tsx
+│   │   ├── AdminAsyncContent.tsx
+│   │   └── AdminDeepLink.tsx
+│   ├── dashboard/                  # Trip/bid UI, mobile shell
+│   └── ui/                         # shadcn
+├── hooks/
+│   └── useAdminDashboard.tsx
 ├── lib/
-│   ├── api.ts                   # API client
-│   └── utils.ts                 # Utility functions
-├── server/                      # Express backend
-│   ├── prisma/
-│   │   └── schema.prisma       # Database schema
-│   ├── src/
-│   │   ├── middleware/
-│   │   │   └── auth.ts         # Auth middleware
-│   │   ├── routes/
-│   │   │   ├── auth.ts         # Auth routes
-│   │   │   ├── bids.ts         # Bid routes
-│   │   │   └── trips.ts        # Trip routes
-│   │   ├── types/
-│   │   │   └── index.ts        # Type definitions
-│   │   ├── utils/
-│   │   │   ├── db.ts           # Prisma client
-│   │   │   └── jwt.ts          # JWT utilities
-│   │   ├── prisma/
-│   │   │   └── seed.ts         # Database seed
-│   │   └── index.ts            # Server entry point
-│   ├── docker-compose.yml      # PostgreSQL container
-│   ├── .env.example            # Environment template
-│   ├── package.json            # Backend dependencies
-│   └── tsconfig.json           # TypeScript config
-├── README.md                    # Main documentation
-├── SETUP.md                     # Quick start guide
-├── .env.example                 # Frontend env template
-└── package.json                # Frontend dependencies
+│   ├── api.ts
+│   ├── adminNav.ts                 # buildAdminHref query helper
+│   ├── adminRevenueDisplay.ts
+│   ├── adminStatusLabels.ts
+│   ├── exportRevenueCsv.ts
+│   └── tripGroups.ts
+├── types/admin.ts
+├── server/
+│   ├── prisma/schema.prisma
+│   └── src/
+│       ├── routes/                 # auth, trips, bids, admin, reviews, …
+│       ├── middleware/auth.ts
+│       └── utils/                    # adminRevenue, adminOverview, …
+├── README.md
+├── PROJECT_STATUS.md
+└── PROJECT_SUMMARY.md
 ```
 
 ## Tech Stack
 
 ### Frontend
 
--   **Framework**: Next.js 16 (App Router)
+-   **Framework**: Next.js (App Router)
 -   **Language**: TypeScript
 -   **Styling**: Tailwind CSS
 -   **Components**: shadcn/ui (Radix UI + Tailwind)
--   **Date Formatting**: date-fns
--   **HTTP Client**: Native Fetch API with credentials
+-   **HTTP**: Fetch with credentials
 
 ### Backend
 
@@ -136,83 +111,71 @@ goodbus/
 -   **Authentication**: JWT + bcrypt
 -   **Validation**: Zod
 -   **Container**: Docker Compose
--   **Build Tool**: tsx
 
-## Data Model
+## Data Model (key fields)
 
 ### User
 
--   id, email (unique), passwordHash, role (Passenger|Driver|BusCompany|Admin), status (Active|Blocked), adminRole (Super|CustomerSupport|Operations|Finance), displayName, companyName, phoneNumber, garageAddress, busNumber, busType, busYear, capacity, driverComment, profileImageUrl, vehicleImageUrls[], driverLicenseUrl/status, companyRegistrationUrl/status, createdAt
+-   id, email, passwordHash, role, status, **adminRole** (Super|CustomerSupport|Operations|Finance)
+-   profile/vehicle images, garage, bus fields, verification URLs/status, driverComment, phoneNumber
 
 ### Trip
 
--   id, passengerId, origin, destination, dateTime, paxCount, busSize (small|medium|large), status (open|awarded|cancelled), createdAt
+-   id, passengerId, origin, destination, dateTime, paxCount, busSize, status (open|awarded|cancelled)
+-   **awardedAt** (set on award; used for revenue stats, fallback to createdAt when null)
 
 ### Bid
 
--   id, tripId, bidderId, price (decimal), note, status (open|withdrawn|awarded|lost), createdAt
+-   id, tripId, bidderId, price, note, status (open|withdrawn|awarded|lost)
 
-## API Endpoints
+## Admin API (additions)
 
-### Authentication
+-   `GET /admin/overview` — stats, nav badges, recent trips/bids
+-   `GET /admin/users/:id` — `bidderStats`, `reviewSummary`, trip summary
+-   `GET /admin/users/:id/activity` — trips, bids, reviews
+-   `GET /admin/bids` — filters including `bidderId`, `passengerId`, `tripId`
+-   `GET /admin/support-inquiries` — `search`, `status`, `sort`
+-   `GET /admin/revenue-stats` — monthly GMV (`from`/`to` YYYY-MM)
+-   `GET /admin/revenue-stats/awards` — award rows for CSV
 
--   `POST /auth/signup` - Create user account
--   `POST /auth/login` - Login user
--   `POST /auth/logout` - Logout user
--   `GET /auth/me` - Get current user
+See **README.md** for the full endpoint list.
 
-### Trips
+## Reviews API (passenger bid UI)
 
--   `GET /trips` - List all trips (filter by status)
--   `GET /trips/:id` - Get trip details
--   `POST /trips` - Create trip (Passenger only)
--   `POST /trips/:id/award` - Award trip to bid (Passenger only)
-
-### Bids
-
--   `POST /bids` - Create bid (Driver/Company only)
--   `PATCH /bids/:id/withdraw` - Withdraw bid (owner only)
+-   `GET /reviews/drivers/summary?driverIds=`
+-   `GET /reviews/drivers/:driverId`
 
 ## Testing with Seeded Data
 
-The database comes pre-seeded with:
-
--   1 Passenger (passenger@example.com)
--   1 Driver (driver@example.com)
--   1 Bus Company (company@example.com)
--   1 Admin (admin@example.com)
--   1 Sample trip (New York → Boston)
--   All passwords: `password123`
+-   Passenger, Driver, Bus Company, Admin test accounts
+-   Sample trip (New York → Boston) created only if not already present
+-   Default password: `password123`
 
 ## Security Features
 
--   ✅ JWT tokens in HttpOnly cookies (not accessible via JS)
--   ✅ SameSite=Lax protection against CSRF
--   ✅ Secure flag in production
--   ✅ Password hashing with bcrypt (10 rounds)
--   ✅ Role-based authorization middleware
--   ✅ CORS protection (only allows frontend origin)
--   ✅ Prisma ORM prevents SQL injection
--   ✅ Zod validation on all inputs
+-   HttpOnly JWT cookies, SameSite=Lax, Secure in production
+-   bcrypt password hashing
+-   Role-based route middleware
+-   CORS restricted to frontend origin
+-   Prisma ORM + Zod validation
+
+## Not Yet Built (production gaps)
+
+-   Deployment / CI/CD
+-   Payment gateway, refunds, settlement
+-   OAuth (Google/Kakao)
+-   Rate limiting, audit log, full **adminRole API RBAC**
+-   Central logging/metrics (e.g. Sentry)
 
 ## Getting Started
 
-See `SETUP.md` for detailed step-by-step instructions.
-
-Quick commands:
+See `README.md` and `SETUP.md`.
 
 ```bash
-# 1. Start database
 cd server && docker-compose up -d
-
-# 2. Initialize database
-npm run db:push && npm run db:seed
-
-# 3. Start backend (in server/)
-npm run dev
-
-# 4. Start frontend (in root/)
-npm run dev
+cd server && npm run db:push && npm run db:seed
+# from repo root:
+npm run dev:all
 ```
 
-Then visit http://localhost:3000 and login with any seeded account!
+Then open http://localhost:3000 (frontend) and http://localhost:4000 (API).

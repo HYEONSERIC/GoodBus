@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Flag } from 'lucide-react';
 import { adminAPI } from '@/lib/api';
+import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
 import { getErrorMessage } from '@/lib/errors';
 
 export function AdminFaqPostsPanel() {
@@ -53,15 +54,18 @@ export function AdminFaqPostsPanel() {
                                 <h2 className="text-lg font-semibold text-slate-900">
                                     게시글 목록
                                 </h2>
-                                {supportPostsLoading ? (
-                                    <p className="mt-4 text-sm text-slate-500">
-                                        불러오는 중…
-                                    </p>
-                                ) : supportPosts.length === 0 ? (
-                                    <p className="mt-4 text-sm text-slate-500">
-                                        등록된 글이 없습니다.
-                                    </p>
-                                ) : (
+                                <AdminAsyncContent
+                                    loading={supportPostsLoading}
+                                    skeletonVariant="table"
+                                    skeletonRows={5}
+                                    skeletonColumns={5}
+                                    hasData={supportPosts.length > 0}
+                                    empty={
+                                        !supportPostsLoading &&
+                                        supportPosts.length === 0
+                                    }
+                                    emptyMessage="등록된 글이 없습니다."
+                                >
                                     <div className="mt-4 overflow-x-auto">
                                         <table className="w-full min-w-[600px] text-left text-sm">
                                             <thead>
@@ -175,7 +179,7 @@ export function AdminFaqPostsPanel() {
                                             </tbody>
                                         </table>
                                     </div>
-                                )}
+                                </AdminAsyncContent>
                                 <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
                                     <Button
                                         type="button"

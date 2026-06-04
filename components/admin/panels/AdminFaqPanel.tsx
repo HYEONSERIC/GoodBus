@@ -10,7 +10,11 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 export function AdminFaqPanel() {
     const { faqSectionTab, setFaqSectionTab } = useAdminDashboard();
     return (
-        <div className="mx-auto w-full max-w-3xl space-y-6">
+        <div
+            className={`mx-auto w-full space-y-6 ${
+                faqSectionTab === 'inquiries' ? 'max-w-5xl' : 'max-w-3xl'
+            }`}
+        >
             <DashboardSubTabs
                 tabs={ADMIN_FAQ_SUB_TABS}
                 activeTab={faqSectionTab}

@@ -15,7 +15,12 @@ import {
 } from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
+import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
 import { formatNotificationResult } from '@/lib/adminNotifications';
+import {
+    ADMIN_AMOUNT_HEADERS,
+    formatManWonOrDash,
+} from '@/lib/adminRevenueDisplay';
 
 export function AdminNotificationsPanel() {
   const {
@@ -32,6 +37,7 @@ export function AdminNotificationsPanel() {
     notificationTotalPages,
     notificationLoading,
     notificationError,
+    setNotificationError,
     handleNotificationHistorySearch,
 } = useAdminDashboard();
   return (
@@ -89,12 +95,21 @@ export function AdminNotificationsPanel() {
                         </Button>
                     </div>
 
-                    {notificationError && (
-                        <p className="text-sm text-red-500">
-                            {notificationError}
-                        </p>
-                    )}
-
+                    <AdminAsyncContent
+                        loading={notificationLoading}
+                        error={notificationError}
+                        onRetry={() => handleNotificationHistorySearch(1)}
+                        onDismissError={() => setNotificationError('')}
+                        skeletonVariant="table"
+                        skeletonRows={6}
+                        skeletonColumns={5}
+                        hasData={notificationHistory.length > 0}
+                        empty={
+                            !notificationLoading &&
+                            notificationHistory.length === 0
+                        }
+                        emptyMessage="검색 결과가 없습니다."
+                    >
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
@@ -102,32 +117,13 @@ export function AdminNotificationsPanel() {
                                     <th className="py-2 pr-4">날짜</th>
                                     <th className="py-2 pr-4">사용자</th>
                                     <th className="py-2 pr-4">여정</th>
-                                    <th className="py-2 pr-4">가격</th>
+                                    <th className="py-2 pr-4">
+                                        {ADMIN_AMOUNT_HEADERS.price}
+                                    </th>
                                     <th className="py-2 pr-4">타입</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {notificationLoading && (
-                                    <tr>
-                                        <td
-                                            className="py-4 text-sm text-gray-500"
-                                            colSpan={5}
-                                        >
-                                            조회 중...
-                                        </td>
-                                    </tr>
-                                )}
-                                {!notificationLoading &&
-                                    notificationHistory.length === 0 && (
-                                        <tr>
-                                            <td
-                                                className="py-4 text-sm text-gray-500"
-                                                colSpan={5}
-                                            >
-                                                검색 결과가 없습니다.
-                                            </td>
-                                        </tr>
-                                    )}
                                 {notificationHistory.map((item) => (
                                     <tr key={item.id} className="border-b">
                                         <td className="py-2 pr-4 whitespace-nowrap">
@@ -141,12 +137,12 @@ export function AdminNotificationsPanel() {
                                                 ? `${(item.trip || item.bid?.trip)!.origin} -> ${(item.trip || item.bid?.trip)!.destination}`
                                                 : '-'}
                                         </td>
-                                        <td className="py-2 pr-4">
-                                            {item.bid?.price
-                                                ? Number(
-                                                      item.bid.price
-                                                  ).toLocaleString()
-                                                : '-'}
+                                        <td className="py-2 pr-4 tabular-nums whitespace-nowrap">
+                                            {formatManWonOrDash(
+                                                item.bid?.price != null
+                                                    ? Number(item.bid.price)
+                                                    : null,
+                                            )}
                                         </td>
                                         <td className="py-2 pr-4">
                                             {formatNotificationResult(item)}
@@ -156,6 +152,7 @@ export function AdminNotificationsPanel() {
                             </tbody>
                         </table>
                     </div>
+                    </AdminAsyncContent>
 
                     <div className="flex items-center justify-between text-sm">
                         <span>

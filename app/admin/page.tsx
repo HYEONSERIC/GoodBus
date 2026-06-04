@@ -12,6 +12,9 @@ import { AdminVerificationPanel } from '@/components/admin/panels/AdminVerificat
 import { AdminRevenuePanel } from '@/components/admin/panels/AdminRevenuePanel';
 import { AdminFaqPanel } from '@/components/admin/panels/AdminFaqPanel';
 import { AdminCreatePanel } from '@/components/admin/panels/AdminCreatePanel';
+import { AdminErrorBanner } from '@/components/admin/AdminErrorBanner';
+import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function AdminPageContent() {
     const {
@@ -19,6 +22,7 @@ function AdminPageContent() {
         loading,
         overview,
         error,
+        setError,
         activeTab,
         setActiveTab,
         adminRole,
@@ -28,14 +32,21 @@ function AdminPageContent() {
     } = useAdminDashboard();
 
     if (loading) {
-        return <div className="p-8">Loading admin dashboard...</div>;
+        return (
+            <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+                <Skeleton className="mb-6 h-8 w-48" />
+                <AdminLoadingSkeleton variant="page" />
+            </div>
+        );
     }
 
     if (error && !overview) {
         return (
-            <div className="p-8 space-y-4">
-                <p className="text-red-600">{error}</p>
-                <Button onClick={() => router.push('/login')}>Back to login</Button>
+            <div className="min-h-screen space-y-4 bg-slate-50 p-6 md:p-8">
+                <AdminErrorBanner message={error} />
+                <Button onClick={() => router.push('/login')}>
+                    로그인으로 돌아가기
+                </Button>
             </div>
         );
     }
@@ -48,6 +59,9 @@ function AdminPageContent() {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onLogout={handleLogout}
+            navBadges={overview.navBadges}
+            globalError={error}
+            onDismissGlobalError={() => setError('')}
         >
             {activeTab === 'overview' && <AdminOverviewPanel />}
             {activeTab === 'users' && <AdminUsersPanel />}

@@ -36,7 +36,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Booking tab**: Awarded / in-progress vs completed trips (grouped display via shared `tripGroupsCore`)
 - **Trip cancel**: Cancel open or awarded trips with reason (`PassengerCancelTripDialog`)
 - **Trip update**: Edit open trips before award (`PATCH /trips/:id`)
-- **Reviews**: Star rating, comment, up to 4 photos on completed trips; view own reviews per trip
+- **Reviews**: Star rating, comment, up to 4 photos on completed trips; view own reviews per trip; **bid list/detail shows driver/company average rating** (`GET /reviews/drivers/summary`)
 - **Chat tab**: In-dashboard chat only (no quote summary / CTA cards on chat tab)
 - **Support tab**: Notices, FAQ search, 1:1 inquiries (`SupportCustomerCenter`, `SupportInquiryDialog`)
 
@@ -69,14 +69,16 @@ A full-stack web application connecting passengers with drivers and bus companie
 
 ### Admin console
 
-- **Overview**: Dashboard stats
-- **Users**: Search/filter by role, status, text; block/unblock; user detail (profile, garage, vehicles, phone, verification docs); passenger trip summary; activity feed
-- **Bids**: Search/filter bids by user, route, bid/trip status, date range
-- **Notification history**: Admin-wide notification log with filters
-- **Verification**: Driver license & company registration queue; approve/reject with reason; document download
-- **FAQ / support**: CRUD for notice & FAQ posts; list/reply to user inquiries
-- **Revenue**: Placeholder tab (“매출 (예정)”)
-- **Admin creation**: Super-only create admin accounts
+- **Shell**: Fixed sidebar + scrollable main; logout under nav; **CustomerSupport** hides **매출·거래** tab (UI only; API still Admin-wide today)
+- **Overview**: Today/week GMV (만원), pending inquiry & verification counts with badges; **deep links** from recent trips/bids to user & bid tabs
+- **Users**: Search/filter; block/unblock; detail with profile/vehicles/verification; **bidder awarded count + GMV**; activity (trips, bids, reviews) with pagination cap; links to bid tab
+- **Bids**: Search/filter; **deep links** to user profile & trip-scoped bid list; amounts labeled **(만원)**
+- **Notification history**: Admin-wide log with filters; price column in 만원
+- **Verification**: Approve/reject with reason; **Korean status labels** (승인 대기/완료/반려)
+- **FAQ / support**: Notice & FAQ CRUD; inquiries with **search, status filter, 미답변 우선 sort**, reply dialog
+- **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer
+- **Admin creation**: Super-only
+- **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`)
 
 ### Maps & data
 
@@ -215,7 +217,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `GET /trips/:id` - Trip detail with bids
 - `POST /trips` - Create trip (Passenger)
 - `PATCH /trips/:id` - Update open trip (Passenger)
-- `POST /trips/:id/award` - Award trip to bid (Passenger)
+- `POST /trips/:id/award` - Award trip to bid (Passenger); sets `Trip.awardedAt`
 - `PATCH /trips/:id/cancel` - Cancel trip (Passenger)
 
 ### Bids
@@ -248,6 +250,8 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `GET /reviews?tripIds=...` - Reviews for trips (Passenger: own trips)
 - `POST /reviews` - Create review with photos (Passenger, multipart)
 - `GET /reviews/driver/me` - Reviews received by driver/company + average rating
+- `GET /reviews/drivers/summary?driverIds=` - Batch avg rating for bid UI (Passenger)
+- `GET /reviews/drivers/:driverId` - Public driver review list for bid detail
 
 ### Support (public posts + authenticated inquiries)
 
@@ -276,12 +280,12 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 
 ### Admin
 
-- `GET /admin/overview` - Dashboard stats
+- `GET /admin/overview` - Stats, recent trips/bids, `navBadges`, today/week awards
 - `GET /admin/users` - List/filter users (`role`, `status`, `search`)
-- `GET /admin/users/:id` - User detail + passenger trip summary
+- `GET /admin/users/:id` - User detail, `bidderStats`, `reviewSummary`, passenger `tripSummary`
 - `PATCH /admin/users/:id/status` - Block/unblock
-- `GET /admin/users/:id/activity` - Trip/bid activity (`?take=`)
-- `GET /admin/bids` - Bid search/filter
+- `GET /admin/users/:id/activity` - Trips, bids, reviews (`?take=`, max 50)
+- `GET /admin/bids` - Bid search (`search`, `bidStatus`, `tripStatus`, dates, `bidderId`, `passengerId`, `tripId`)
 - `GET /admin/notification-history` - Notification log (filters)
 - `GET /admin/verifications` - Verification queue (`type`, `status`)
 - `GET /admin/verifications/:id/download` - Download submitted document
@@ -290,9 +294,11 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `POST /admin/support-posts` - Create post
 - `PATCH /admin/support-posts/:id` - Update post
 - `DELETE /admin/support-posts/:id` - Delete post
-- `GET /admin/support-inquiries` - List inquiries
+- `GET /admin/support-inquiries` - List inquiries (`search`, `status`, `sort`)
 - `GET /admin/support-inquiries/:id` - Inquiry detail
 - `PATCH /admin/support-inquiries/:id` - Reply to inquiry
+- `GET /admin/revenue-stats` - GMV stats (`from`, `to` as `YYYY-MM`)
+- `GET /admin/revenue-stats/awards` - Award rows for month or range (CSV source)
 - `POST /admin/admins` - Create admin (Super)
 
 ## Scripts
@@ -312,7 +318,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `npm run build` - Build TypeScript to JavaScript
 - `npm run start` - Start production server
 - `npm run db:push` - Push Prisma schema to database
-- `npm run db:seed` - Seed database with test data
+- `npm run db:seed` - Seed test users; sample NY→Boston trip only if missing (idempotent)
 
 ## Project Status
 
@@ -320,7 +326,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 
 | 영역 | 상태 | 비고 |
 |------|------|------|
-| 관리자 대시보드 | ✅ 완료 | `useAdminDashboard` + `app/admin/page.tsx` (~78줄) + `components/admin/panels/*` |
+| 관리자 대시보드 | ✅ 완료 | `useAdminDashboard` + `app/admin/page.tsx` + `components/admin/panels/*`, `adminNav.ts`, revenue/CS UX |
 | 기사 / 회사 / 승객 대시보드 | ✅ 완료 | 역할별 Provider 훅 + `*DashboardContent`, `page.tsx` 각 **~12줄** |
 | 입찰자 프로필 (기사·회사) | ✅ 완료 | `useBidderProfile`, `BidderProfileTabPanel` / `BidderProfileEditPanel` |
 | 낙찰·예약 카드·모바일 셸 | ✅ 완료 | `AwardedTripCard`, `BidderAwardedTripsList`, `DashboardMobileShell` |
@@ -328,7 +334,8 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 | `OpenTripBidDialog` 분리 | ✅ 완료 | 오케스트레이터 ~193줄 + `components/openTripBid/*`, `lib/openTripBidForm.ts` |
 | `tripGroups` | ✅ 완료 | 프론트·서버 공통 `server/src/utils/tripGroupsCore.ts` re-export |
 | `lib/adminApi.ts` | ✅ 완료 | `adminAPI` re-export (선택 import 경로) |
-| 관리자 패널 추가 분리 | 🔲 잔여 | `AdminUsersPanel` 등 대형 패널·`AdminFilterBar` 전면 적용은 선택 |
+| 관리자 공통 UX | ✅ 완료 | `AdminErrorBanner`, `AdminLoadingSkeleton`, `AdminAsyncContent`, `AdminDeepLink` |
+| 관리자 RBAC·감사 로그 | 🔲 예정 | 탭 숨김만 적용; API 권한·`AdminAuditLog`는 미구현 |
 
 ### Dashboard `page.tsx` (Before → After)
 
@@ -337,7 +344,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 | Driver | `app/dashboard/driver/page.tsx` | ~1,500+ 줄 | **12줄** (Provider 래퍼만) |
 | Company | `app/dashboard/company/page.tsx` | ~1,300+ 줄 | **12줄** |
 | Passenger | `app/dashboard/passenger/page.tsx` | ~670+ 줄 | **12줄** |
-| Admin | `app/admin/page.tsx` | — | **~78줄** (탭·패널 조립) |
+| Admin | `app/admin/page.tsx` | — | 탭·패널 조립 + 초기 스켈레톤·`globalError` |
 
 로직·상태는 각 `hooks/use*Dashboard.tsx`와 `components/*/*DashboardContent.tsx`로 이동했습니다.
 
@@ -403,7 +410,13 @@ goodbus/
 │   └── page.tsx
 ├── components/
 │   ├── ui/                     # shadcn/ui
-│   ├── admin/                  # AdminShell, AdminFilterBar, panels/
+│   ├── admin/                  # AdminShell, panels/, shared UX
+│   │   ├── panels/             # Overview, Users, Bids, Revenue, FAQ, …
+│   │   ├── adminNav.ts         # Tab titles, visibility, URL query helpers
+│   │   ├── AdminErrorBanner.tsx
+│   │   ├── AdminLoadingSkeleton.tsx
+│   │   ├── AdminAsyncContent.tsx
+│   │   └── AdminDeepLink.tsx
 │   ├── bidder/                 # 프로필·입찰 상세 오버레이
 │   ├── driver/                 # DriverDashboardContent
 │   ├── company/                # CompanyDashboardContent
@@ -423,6 +436,10 @@ goodbus/
 │   ├── api.ts
 │   ├── adminApi.ts             # adminAPI re-export
 │   ├── errors.ts
+│   ├── adminNav.ts             # Admin deep-link query builder
+│   ├── adminRevenueDisplay.ts  # formatManWon, CSV helpers
+│   ├── adminStatusLabels.ts    # Korean trip/bid/verification labels
+│   ├── exportRevenueCsv.ts
 │   ├── openTripBidForm.ts
 │   ├── tripGroups.ts           # → server tripGroupsCore
 │   └── …
@@ -432,7 +449,11 @@ goodbus/
 │   │   ├── routes/
 │   │   ├── types/
 │   │   └── utils/
-│   │       └── tripGroupsCore.ts
+│   │       ├── tripGroupsCore.ts
+│   │       ├── adminRevenue.ts
+│   │       ├── adminOverview.ts
+│   │       ├── adminUserStats.ts
+│   │       └── adminSupportInquiryList.ts
 │   ├── prisma/
 │   └── docker-compose.yml
 └── README.md

@@ -15,6 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
+import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
+import {
+    VERIFICATION_STATUS_FILTER_OPTIONS,
+    formatVerificationStatusLabel,
+} from '@/lib/adminStatusLabels';
 import { verificationDisplayForUser } from '@/lib/adminVerification';
 
 export function AdminVerificationPanel() {
@@ -63,9 +68,16 @@ export function AdminVerificationPanel() {
                                     setVerificationStatus(e.target.value)
                                 }
                             >
-                                <option value="pending">pending</option>
-                                <option value="approved">approved</option>
-                                <option value="rejected">rejected</option>
+                                {VERIFICATION_STATUS_FILTER_OPTIONS.map(
+                                    (opt) => (
+                                        <option
+                                            key={opt.value}
+                                            value={opt.value}
+                                        >
+                                            {opt.label}
+                                        </option>
+                                    ),
+                                )}
                             </select>
                         </div>
                         <Button variant="outline" onClick={loadVerifications}>
@@ -73,13 +85,14 @@ export function AdminVerificationPanel() {
                         </Button>
                     </div>
 
-                    {verificationLoading ? (
-                        <p className="text-sm text-gray-500">불러오는 중...</p>
-                    ) : verificationList.length === 0 ? (
-                        <p className="text-sm text-gray-500">
-                            해당 상태의 요청이 없습니다.
-                        </p>
-                    ) : (
+                    <AdminAsyncContent
+                        loading={verificationLoading}
+                        skeletonVariant="cards"
+                        skeletonRows={4}
+                        hasData={verificationList.length > 0}
+                        empty={!verificationLoading && verificationList.length === 0}
+                        emptyMessage="해당 상태의 요청이 없습니다."
+                    >
                         <div className="grid gap-4">
                             {verificationList.map((user) => {
                                 const {
@@ -105,7 +118,9 @@ export function AdminVerificationPanel() {
                                                         <p className="text-xs text-gray-500">
                                                             {roleLabel} ·{' '}
                                                             {docLabel} · 상태:{' '}
-                                                            {status}
+                                                            {formatVerificationStatusLabel(
+                                                                status,
+                                                            )}
                                                         </p>
                                                     </div>
                                                     <div className="flex gap-2">
@@ -199,7 +214,7 @@ export function AdminVerificationPanel() {
                                 );
                             })}
                         </div>
-                    )}
+                    </AdminAsyncContent>
 </AdminPanelCard>
   );
 }

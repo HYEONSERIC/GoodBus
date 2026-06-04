@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 
 import { Button } from '@/components/ui/button';
@@ -14,13 +15,23 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
+import {
+    formatBidStatusLabel,
+    formatTripStatusLabel,
+} from '@/lib/adminStatusLabels';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
+import { AdminActivitySectionFooter } from '@/components/admin/AdminActivitySectionFooter';
+import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
+import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
+import { formatManWon } from '@/lib/adminRevenueDisplay';
 
 export function AdminUsersPanel() {
   const {
     users,
     selectedUser,
     passengerTripSummary,
+    bidderStats,
+    reviewSummary,
     selectedUserActivity,
     detailLoading,
     roleFilter,
@@ -36,9 +47,28 @@ export function AdminUsersPanel() {
     handleFilter,
     toggleUserStatus,
     loadUserDetails,
+    openBidsForBidder,
+    openBidsForTrip,
     handleActivityMore,
     uploadBaseUrl,
 } = useAdminDashboard();
+
+    const isBidderRole =
+        selectedUser?.role === 'Driver' ||
+        selectedUser?.role === 'BusCompany';
+
+    const tripActivityTotal =
+        selectedUser?.role === 'Passenger' && passengerTripSummary
+            ? passengerTripSummary.totalGrouped
+            : selectedUser?._count.tripsAsPassenger;
+
+    useEffect(() => {
+        if (!selectedUser || detailLoading) return;
+        document
+            .getElementById('admin-user-detail')
+            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, [selectedUser?.id, detailLoading]);
+
   return (
 <AdminPanelCard>
 <div className="flex flex-wrap items-end gap-4">
@@ -137,11 +167,11 @@ export function AdminUsersPanel() {
                         </table>
                     </div>
 
-                    <div className="rounded-lg border p-4">
+                    <div id="admin-user-detail" className="rounded-lg border p-4">
                         <h3 className="text-lg font-semibold mb-2">사용자 상세</h3>
-                        {detailLoading && (
-                            <p className="text-sm text-gray-500">불러오는 중...</p>
-                        )}
+                        {detailLoading ? (
+                            <AdminLoadingSkeleton variant="detail" />
+                        ) : null}
                         {!detailLoading && !selectedUser && (
                             <p className="text-sm text-gray-500">
                                 사용자를 선택하면 상세가 표시됩니다.
@@ -273,7 +303,61 @@ export function AdminUsersPanel() {
                                 <div>
                                     <span className="font-medium">입찰 수:</span>{' '}
                                     {selectedUser._count.bids}
+                                    {isBidderRole && selectedUser._count.bids > 0 ? (
+                                        <span className="ml-2">
+                                            <AdminDeepLink
+                                                onNavigate={() =>
+                                                    openBidsForBidder({
+                                                        bidderId: selectedUser.id,
+                                                        email: selectedUser.email,
+                                                    })
+                                                }
+                                            >
+                                                입찰 탭에서 보기
+                                            </AdminDeepLink>
+                                        </span>
+                                    ) : null}
                                 </div>
+                                {isBidderRole && bidderStats ? (
+                                    <div className="rounded-md border border-emerald-100 bg-emerald-50/80 px-3 py-2 text-sm">
+                                        <span className="font-medium text-emerald-900">
+                                            낙찰 {bidderStats.awardedCount}건
+                                        </span>
+                                        <span className="text-emerald-800">
+                                            {' '}
+                                            · 총 거래액{' '}
+                                            {formatManWon(bidderStats.gmvManWon)}
+                                        </span>
+                                        {bidderStats.awardedCount > 0 ? (
+                                            <span className="ml-2">
+                                                <AdminDeepLink
+                                                    onNavigate={() =>
+                                                        openBidsForBidder({
+                                                            bidderId:
+                                                                selectedUser.id,
+                                                            email: selectedUser.email,
+                                                            bidStatus: 'awarded',
+                                                        })
+                                                    }
+                                                >
+                                                    낙찰 목록
+                                                </AdminDeepLink>
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                                {reviewSummary && reviewSummary.count > 0 ? (
+                                    <div className="text-sm text-gray-700">
+                                        <span className="font-medium">
+                                            {reviewSummary.as === 'received'
+                                                ? '받은 리뷰'
+                                                : '작성한 리뷰'}
+                                            :
+                                        </span>{' '}
+                                        평균 {reviewSummary.avgRating ?? '-'}점
+                                        · {reviewSummary.count}건
+                                    </div>
+                                ) : null}
                                 {selectedUser.role === 'Driver' && (
                                     <div className="pt-2 space-y-2">
                                         <span className="font-medium">
@@ -387,27 +471,41 @@ export function AdminUsersPanel() {
                                                         (trip) => (
                                                             <div
                                                                 key={trip.id}
-                                                                className="rounded border p-2 text-xs"
+                                                                className="rounded border p-2 text-xs space-y-1"
                                                             >
-                                                                {trip.origin} →{' '}
-                                                                {trip.destination} (
-                                                                {trip.status})
+                                                                <div>
+                                                                    {trip.origin} →{' '}
+                                                                    {trip.destination}{' '}
+                                                                    (
+                                                                    {formatTripStatusLabel(
+                                                                        trip.status,
+                                                                    )}
+                                                                    )
+                                                                </div>
+                                                                <AdminDeepLink
+                                                                    className="text-xs"
+                                                                    onNavigate={() =>
+                                                                        openBidsForTrip(
+                                                                            trip.id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    이 여정 입찰 보기
+                                                                </AdminDeepLink>
                                                             </div>
                                                         )
                                                     )
                                                 )}
                                             </div>
-                                            {selectedUserActivity.trips.length >=
-                                                activityTake && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="mt-2"
-                                                    onClick={handleActivityMore}
-                                                >
-                                                    더보기
-                                                </Button>
-                                            )}
+                                            <AdminActivitySectionFooter
+                                                shownCount={
+                                                    selectedUserActivity.trips
+                                                        .length
+                                                }
+                                                totalCount={tripActivityTotal}
+                                                activityTake={activityTake}
+                                                onLoadMore={handleActivityMore}
+                                            />
                                         </div>
                                         <div className="pt-2">
                                             <span className="font-medium">
@@ -424,30 +522,137 @@ export function AdminUsersPanel() {
                                                         (bid) => (
                                                             <div
                                                                 key={bid.id}
-                                                                className="rounded border p-2 text-xs"
+                                                                className="rounded border p-2 text-xs space-y-1"
                                                             >
-                                                                {bid.trip.origin} →{' '}
-                                                                {bid.trip.destination} /
-                                                                {Number(
-                                                                    bid.price
-                                                                ).toLocaleString()}
-                                                                원 ({bid.status})
+                                                                <div>
+                                                                    {bid.trip.origin} →{' '}
+                                                                    {bid.trip.destination}{' '}
+                                                                    /{' '}
+                                                                    {formatManWon(
+                                                                        Number(
+                                                                            bid.price,
+                                                                        ),
+                                                                    )}{' '}
+                                                                    (
+                                                                    {formatBidStatusLabel(
+                                                                        bid.status,
+                                                                    )}
+                                                                    ·{' '}
+                                                                    {formatTripStatusLabel(
+                                                                        bid.trip.status,
+                                                                    )}
+                                                                    )
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    <AdminDeepLink
+                                                                        className="text-xs"
+                                                                        onNavigate={() =>
+                                                                            openBidsForBidder(
+                                                                                {
+                                                                                    bidderId:
+                                                                                        selectedUser.id,
+                                                                                    email: selectedUser.email,
+                                                                                    highlightBidId:
+                                                                                        bid.id,
+                                                                                },
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        입찰 탭
+                                                                    </AdminDeepLink>
+                                                                    <AdminDeepLink
+                                                                        className="text-xs"
+                                                                        onNavigate={() =>
+                                                                            openBidsForTrip(
+                                                                                bid.trip.id,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        여정 입찰
+                                                                    </AdminDeepLink>
+                                                                </div>
                                                             </div>
                                                         )
                                                     )
                                                 )}
                                             </div>
-                                            {selectedUserActivity.bids.length >=
-                                                activityTake && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="mt-2"
-                                                    onClick={handleActivityMore}
-                                                >
-                                                    더보기
-                                                </Button>
-                                            )}
+                                            <AdminActivitySectionFooter
+                                                shownCount={
+                                                    selectedUserActivity.bids
+                                                        .length
+                                                }
+                                                totalCount={
+                                                    selectedUser._count.bids
+                                                }
+                                                activityTake={activityTake}
+                                                onLoadMore={handleActivityMore}
+                                            />
+                                        </div>
+                                        <div className="pt-2">
+                                            <span className="font-medium">
+                                                최근 리뷰
+                                            </span>
+                                            <div className="mt-2 space-y-2">
+                                                {selectedUserActivity.reviews
+                                                    .length === 0 ? (
+                                                    <p className="text-xs text-gray-500">
+                                                        리뷰 기록이 없습니다.
+                                                    </p>
+                                                ) : (
+                                                    selectedUserActivity.reviews.map(
+                                                        (review) => (
+                                                            <div
+                                                                key={review.id}
+                                                                className="rounded border p-2 text-xs space-y-1"
+                                                            >
+                                                                <div>
+                                                                    ★{review.rating}{' '}
+                                                                    {review.trip.origin}{' '}
+                                                                    →{' '}
+                                                                    {
+                                                                        review.trip
+                                                                            .destination
+                                                                    }
+                                                                </div>
+                                                                <div className="text-gray-500">
+                                                                    상대:{' '}
+                                                                    {
+                                                                        review.counterpartyEmail
+                                                                    }
+                                                                </div>
+                                                                {review.comment ? (
+                                                                    <p className="text-gray-600 line-clamp-2">
+                                                                        {
+                                                                            review.comment
+                                                                        }
+                                                                    </p>
+                                                                ) : null}
+                                                                <AdminDeepLink
+                                                                    className="text-xs"
+                                                                    onNavigate={() =>
+                                                                        openBidsForTrip(
+                                                                            review.trip.id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    여정 입찰 보기
+                                                                </AdminDeepLink>
+                                                            </div>
+                                                        ),
+                                                    )
+                                                )}
+                                            </div>
+                                            <AdminActivitySectionFooter
+                                                shownCount={
+                                                    selectedUserActivity.reviews
+                                                        .length
+                                                }
+                                                totalCount={
+                                                    reviewSummary?.count
+                                                }
+                                                activityTake={activityTake}
+                                                onLoadMore={handleActivityMore}
+                                            />
                                         </div>
                                     </>
                                 )}

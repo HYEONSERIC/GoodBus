@@ -526,7 +526,7 @@ router.post(
                 // Update trip status
                 prisma.trip.update({
                     where: { id: trip.id },
-                    data: { status: 'awarded' },
+                    data: { status: 'awarded', awardedAt: new Date() },
                 }),
             ]);
 

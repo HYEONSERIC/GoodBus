@@ -19,16 +19,34 @@ import {
     parseNotificationType,
     parsePagination,
 } from '../utils/notificationHistory';
+import {
+    computeAdminRevenueStats,
+    listRevenueAwardsForMonth,
+    listRevenueAwardsInRange,
+    monthRangeBounds,
+    parseYearMonth,
+} from '../utils/adminRevenue';
+import { getAdminOverviewExtras } from '../utils/adminOverview';
+import {
+    computeBidderAwardStats,
+    computeReviewSummaryForUser,
+} from '../utils/adminUserStats';
+import {
+    listAdminSupportInquiries,
+    parseSupportInquiryListSort,
+    parseSupportInquiryListStatus,
+} from '../utils/adminSupportInquiryList';
 
 const router = express.Router();
 
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
     const activeTripWhere = { status: { not: TripStatus.cancelled } };
 
-    const [userCount, tripCount, bidCount] = await Promise.all([
+    const [userCount, tripCount, bidCount, extras] = await Promise.all([
         prisma.user.count(),
         prisma.trip.count({ where: activeTripWhere }),
         prisma.bid.count(),
+        getAdminOverviewExtras(),
     ]);
 
     const recentTrips = await prisma.trip.findMany({
@@ -72,6 +90,11 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
             trips: tripCount,
             bids: bidCount,
         },
+        awardsToday: extras.awardsToday,
+        awardsThisWeek: extras.awardsThisWeek,
+        pendingInquiries: extras.pendingInquiries,
+        pendingVerifications: extras.pendingVerifications,
+        navBadges: extras.navBadges,
         recentTrips,
         recentBids,
     });
@@ -283,7 +306,20 @@ router.get(
             tripSummary = summarizePassengerTrips(passengerTrips);
         }
 
-        res.json({ user, tripSummary });
+        let bidderStats = null;
+        if (
+            user.role === UserRole.Driver ||
+            user.role === UserRole.BusCompany
+        ) {
+            bidderStats = await computeBidderAwardStats(user.id);
+        }
+
+        const reviewSummary = await computeReviewSummaryForUser(
+            user.id,
+            user.role,
+        );
+
+        res.json({ user, tripSummary, bidderStats, reviewSummary });
     }
 );
 
@@ -329,12 +365,90 @@ router.get(
                         id: true,
                         origin: true,
                         destination: true,
+                        status: true,
                     },
                 },
             },
         });
 
-        res.json({ trips, bids });
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true },
+        });
+
+        let reviews: Array<{
+            id: string;
+            rating: number;
+            comment: string | null;
+            createdAt: Date;
+            trip: { id: string; origin: string; destination: string };
+            counterpartyEmail: string;
+        }> = [];
+
+        if (user) {
+            if (
+                user.role === UserRole.Driver ||
+                user.role === UserRole.BusCompany
+            ) {
+                const rows = await prisma.tripReview.findMany({
+                    where: { driverId: userId },
+                    orderBy: { createdAt: 'desc' },
+                    take,
+                    select: {
+                        id: true,
+                        rating: true,
+                        comment: true,
+                        createdAt: true,
+                        trip: {
+                            select: {
+                                id: true,
+                                origin: true,
+                                destination: true,
+                            },
+                        },
+                        passenger: { select: { email: true } },
+                    },
+                });
+                reviews = rows.map((r) => ({
+                    id: r.id,
+                    rating: r.rating,
+                    comment: r.comment,
+                    createdAt: r.createdAt,
+                    trip: r.trip,
+                    counterpartyEmail: r.passenger.email,
+                }));
+            } else if (user.role === UserRole.Passenger) {
+                const rows = await prisma.tripReview.findMany({
+                    where: { passengerId: userId },
+                    orderBy: { createdAt: 'desc' },
+                    take,
+                    select: {
+                        id: true,
+                        rating: true,
+                        comment: true,
+                        createdAt: true,
+                        trip: {
+                            select: {
+                                id: true,
+                                origin: true,
+                                destination: true,
+                            },
+                        },
+                        driver: { select: { email: true } },
+                    },
+                });
+                reviews = rows.map((r) => ({
+                    id: r.id,
+                    rating: r.rating,
+                    comment: r.comment,
+                    createdAt: r.createdAt,
+                    trip: r.trip,
+                    counterpartyEmail: r.driver.email,
+                }));
+            }
+        }
+
+        res.json({ trips, bids, reviews });
     }
 );
 
@@ -516,6 +630,9 @@ router.get(
         const tripStatus = String(req.query.tripStatus || '').trim();
         const startDate = String(req.query.startDate || '').trim();
         const endDate = String(req.query.endDate || '').trim();
+        const bidderId = String(req.query.bidderId || '').trim();
+        const passengerId = String(req.query.passengerId || '').trim();
+        const tripId = String(req.query.tripId || '').trim();
 
         const createdAt: { gte?: Date; lte?: Date } = {};
         if (startDate) {
@@ -527,15 +644,21 @@ router.get(
             createdAt.lte = end;
         }
 
+        const tripWhere: {
+            id?: string;
+            passengerId?: string;
+            status?: TripStatus;
+        } = {};
+        if (tripId) tripWhere.id = tripId;
+        if (passengerId) tripWhere.passengerId = passengerId;
+        if (tripStatus) tripWhere.status = tripStatus as TripStatus;
+
         const bids = await prisma.bid.findMany({
             where: {
+                bidderId: bidderId || undefined,
                 status: bidStatus ? (bidStatus as any) : undefined,
                 createdAt: Object.keys(createdAt).length ? createdAt : undefined,
-                trip: tripStatus
-                    ? {
-                          status: tripStatus as any,
-                      }
-                    : undefined,
+                ...(Object.keys(tripWhere).length ? { trip: tripWhere } : {}),
                 ...(search
                     ? {
                           OR: [
@@ -904,46 +1027,14 @@ router.get(
     '/support-inquiries',
     requireAuth,
     requireRole(UserRole.Admin),
-    async (_req, res) => {
+    async (req, res) => {
         try {
-            const rows = await prisma.supportInquiry.findMany({
-                orderBy: { createdAt: 'desc' },
-                take: 300,
-                select: {
-                    id: true,
-                    title: true,
-                    category: true,
-                    createdAt: true,
-                    repliedAt: true,
-                    user: {
-                        select: {
-                            email: true,
-                            role: true,
-                            displayName: true,
-                            companyName: true,
-                        },
-                    },
-                },
+            const result = await listAdminSupportInquiries({
+                search: String(req.query.search || '').trim() || undefined,
+                status: parseSupportInquiryListStatus(req.query.status),
+                sort: parseSupportInquiryListSort(req.query.sort),
             });
-
-            res.json({
-                inquiries: rows.map((r) => ({
-                    id: r.id,
-                    title: r.title,
-                    category: r.category,
-                    categoryLabel: formatSupportInquiryCategory(r.category),
-                    createdAt: r.createdAt.toISOString(),
-                    repliedAt: r.repliedAt
-                        ? r.repliedAt.toISOString()
-                        : null,
-                    authorEmail: r.user.email,
-                    authorRole: r.user.role,
-                    authorDisplay:
-                        r.user.displayName ||
-                        r.user.companyName ||
-                        r.user.email,
-                })),
-            });
+            res.json(result);
         } catch (e) {
             console.error('admin support inquiries list', e);
             res.status(500).json({ error: 'Internal server error' });
@@ -1092,6 +1183,87 @@ router.patch(
             });
         } catch (e) {
             console.error('admin support inquiry reply', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+/** 낙찰 기준 거래액·추정 플랫폼 매출 (Finance/Super/Operations 등, CustomerSupport 제외는 프론트에서) */
+router.get(
+    '/revenue-stats',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const from = parseYearMonth(req.query.from);
+            const to = parseYearMonth(req.query.to);
+            if (!from || !to) {
+                return res.status(400).json({
+                    error: 'from, to 쿼리는 YYYY-MM 형식이어야 합니다.',
+                });
+            }
+
+            const stats = await computeAdminRevenueStats({
+                fromYear: from.year,
+                fromMonth: from.month,
+                toYear: to.year,
+                toMonth: to.month,
+            });
+            res.json(stats);
+        } catch (e) {
+            const message =
+                e instanceof Error ? e.message : 'Internal server error';
+            if (message.includes('시작 연월')) {
+                return res.status(400).json({ error: message });
+            }
+            console.error('admin revenue-stats', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+/** 기간 또는 특정 월의 낙찰 상세 목록 */
+router.get(
+    '/revenue-stats/awards',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    async (req, res) => {
+        try {
+            const year = Number(req.query.year);
+            const month = Number(req.query.month);
+            const from = parseYearMonth(req.query.from);
+            const to = parseYearMonth(req.query.to);
+
+            if (Number.isFinite(year) && Number.isFinite(month) && month >= 1 && month <= 12) {
+                const awards = await listRevenueAwardsForMonth(year, month);
+                return res.json({ year, month, awards });
+            }
+
+            if (from && to) {
+                const { start, end } = monthRangeBounds(
+                    from.year,
+                    from.month,
+                    to.year,
+                    to.month,
+                );
+                if (start.getTime() > end.getTime()) {
+                    return res.status(400).json({
+                        error: '시작 연월이 종료 연월보다 늦을 수 없습니다.',
+                    });
+                }
+                const awards = await listRevenueAwardsInRange(start, end);
+                return res.json({
+                    from: `${from.year}-${String(from.month).padStart(2, '0')}`,
+                    to: `${to.year}-${String(to.month).padStart(2, '0')}`,
+                    awards,
+                });
+            }
+
+            return res.status(400).json({
+                error: 'year·month 또는 from·to(YYYY-MM) 쿼리가 필요합니다.',
+            });
+        } catch (e) {
+            console.error('admin revenue-stats awards', e);
             res.status(500).json({ error: 'Internal server error' });
         }
     },

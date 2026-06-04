@@ -223,6 +223,9 @@ export const adminAPI = {
         tripStatus?: string;
         startDate?: string;
         endDate?: string;
+        bidderId?: string;
+        passengerId?: string;
+        tripId?: string;
     }) => {
         const query = params
             ? `?${new URLSearchParams(
@@ -287,7 +290,11 @@ export const adminAPI = {
         fetchAPI(`/admin/support-posts/${id}`, {
             method: 'DELETE',
         }),
-    getSupportInquiries: async () => fetchAPI('/admin/support-inquiries'),
+    getSupportInquiries: async (params?: {
+        search?: string;
+        status?: string;
+        sort?: string;
+    }) => fetchAPI(`/admin/support-inquiries${toQuery(params)}`),
     getSupportInquiry: async (id: string) =>
         fetchAPI(`/admin/support-inquiries/${id}`),
     replySupportInquiry: async (id: string, body: { adminReply: string }) =>
@@ -295,6 +302,24 @@ export const adminAPI = {
             method: 'PATCH',
             body: JSON.stringify(body),
         }),
+    getRevenueStats: async (params: { from: string; to: string }) =>
+        fetchAPI(
+            `/admin/revenue-stats${toQuery({
+                from: params.from,
+                to: params.to,
+            })}`,
+        ),
+    getRevenueAwardsForMonth: async (year: number, month: number) =>
+        fetchAPI(
+            `/admin/revenue-stats/awards?year=${year}&month=${month}`,
+        ) as Promise<{ year: number; month: number; awards: unknown[] }>,
+    getRevenueAwardsForRange: async (params: { from: string; to: string }) =>
+        fetchAPI(
+            `/admin/revenue-stats/awards${toQuery({
+                from: params.from,
+                to: params.to,
+            })}`,
+        ) as Promise<{ from: string; to: string; awards: unknown[] }>,
 };
 
 export const supportAPI = {
