@@ -93,7 +93,7 @@ export default function SignupPage() {
 
                     <Button
                         type="submit"
-                        className="h-11 w-full bg-[#e85b4f] hover:bg-[#d85045]"
+                        className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
                         disabled={loading}
                     >
                         {loading ? '계정 생성 중...' : '회원가입'}

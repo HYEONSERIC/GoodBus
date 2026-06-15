@@ -121,6 +121,11 @@ export const bidsAPI = {
 };
 
 export const chatsAPI = {
+    ensureQuoteRoom: async (tripId: string, bidderId: string) =>
+        fetchAPI('/chats/rooms/for-quote', {
+            method: 'POST',
+            body: JSON.stringify({ tripId, bidderId }),
+        }),
     getRooms: async () => fetchAPI('/chats/rooms'),
     getMessages: async (roomId: string, params?: { after?: string }) =>
         fetchAPI(`/chats/rooms/${roomId}/messages${toQuery(params)}`),
@@ -129,9 +134,27 @@ export const chatsAPI = {
             method: 'POST',
             body: JSON.stringify({ message }),
         }),
+    uploadImage: async (roomId: string, file: File) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        return fetchAPI(`/chats/rooms/${roomId}/image`, {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        });
+    },
     markRead: async (roomId: string) =>
         fetchAPI(`/chats/rooms/${roomId}/read`, {
             method: 'PATCH',
+        }),
+    leaveRoom: async (roomId: string) =>
+        fetchAPI(`/chats/rooms/${roomId}/leave`, {
+            method: 'POST',
+        }),
+    updateRoom: async (roomId: string, body: { customTitle: string | null }) =>
+        fetchAPI(`/chats/rooms/${roomId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
         }),
 };
 
@@ -200,6 +223,9 @@ export const adminAPI = {
         tripStatus?: string;
         startDate?: string;
         endDate?: string;
+        bidderId?: string;
+        passengerId?: string;
+        tripId?: string;
     }) => {
         const query = params
             ? `?${new URLSearchParams(
@@ -235,6 +261,87 @@ export const adminAPI = {
             method: 'PATCH',
             body: JSON.stringify({ status, reason }),
         }),
+    getSupportPosts: async (params?: { kind?: string }) =>
+        fetchAPI(`/admin/support-posts${toQuery(params)}`),
+    createSupportPost: async (body: {
+        kind: 'notice' | 'faq';
+        title: string;
+        body: string;
+        pinned: boolean;
+    }) =>
+        fetchAPI('/admin/support-posts', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    updateSupportPost: async (
+        id: string,
+        body: Partial<{
+            kind: 'notice' | 'faq';
+            title: string;
+            body: string;
+            pinned: boolean;
+        }>
+    ) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+    deleteSupportPost: async (id: string) =>
+        fetchAPI(`/admin/support-posts/${id}`, {
+            method: 'DELETE',
+        }),
+    getSupportInquiries: async (params?: {
+        search?: string;
+        status?: string;
+        sort?: string;
+    }) => fetchAPI(`/admin/support-inquiries${toQuery(params)}`),
+    getSupportInquiry: async (id: string) =>
+        fetchAPI(`/admin/support-inquiries/${id}`),
+    replySupportInquiry: async (id: string, body: { adminReply: string }) =>
+        fetchAPI(`/admin/support-inquiries/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+    getRevenueStats: async (params: { from: string; to: string }) =>
+        fetchAPI(
+            `/admin/revenue-stats${toQuery({
+                from: params.from,
+                to: params.to,
+            })}`,
+        ),
+    getRevenueAwardsForMonth: async (year: number, month: number) =>
+        fetchAPI(
+            `/admin/revenue-stats/awards?year=${year}&month=${month}`,
+        ) as Promise<{ year: number; month: number; awards: unknown[] }>,
+    getRevenueAwardsForRange: async (params: { from: string; to: string }) =>
+        fetchAPI(
+            `/admin/revenue-stats/awards${toQuery({
+                from: params.from,
+                to: params.to,
+            })}`,
+        ) as Promise<{ from: string; to: string; awards: unknown[] }>,
+};
+
+export const supportAPI = {
+    listPosts: async (params: { kind: 'notice' | 'faq'; q?: string }) =>
+        fetchAPI(`/support/posts${toQuery(params)}`),
+    getPost: async (id: string) => fetchAPI(`/support/posts/${id}`),
+    createInquiry: async (body: {
+        category:
+            | 'quote_amount'
+            | 'reservation_progress'
+            | 'verification'
+            | 'other';
+        title: string;
+        body: string;
+    }) =>
+        fetchAPI('/support/inquiries', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    listMyInquiries: async () => fetchAPI('/support/my-inquiries'),
+    getMyInquiry: async (id: string) =>
+        fetchAPI(`/support/my-inquiries/${id}`),
 };
 
 export const verificationAPI = {
@@ -248,6 +355,39 @@ export const verificationAPI = {
             headers: {},
         });
     },
+};
+
+export type DriverReviewStats = {
+    avgRating: number | null;
+    count: number;
+};
+
+export const reviewsAPI = {
+    listForTrips: async (tripIds: string[]) => {
+        if (tripIds.length === 0) return { reviews: [] };
+        return fetchAPI(`/reviews?tripIds=${tripIds.join(',')}`);
+    },
+    create: async (formData: FormData) =>
+        fetchAPI('/reviews', {
+            method: 'POST',
+            body: formData,
+            headers: {},
+        }),
+    getDriverMe: async () => fetchAPI('/reviews/driver/me'),
+    getDriversSummary: async (driverIds: string[]) => {
+        if (driverIds.length === 0) {
+            return { byDriverId: {} as Record<string, DriverReviewStats> };
+        }
+        return fetchAPI(
+            `/reviews/drivers/summary?driverIds=${driverIds.join(',')}`,
+        ) as Promise<{ byDriverId: Record<string, DriverReviewStats> }>;
+    },
+    getDriverById: async (driverId: string) =>
+        fetchAPI(`/reviews/drivers/${driverId}`) as Promise<{
+            reviews: unknown[];
+            avgRating: number | null;
+            count: number;
+        }>,
 };
 
 export const profileAPI = {

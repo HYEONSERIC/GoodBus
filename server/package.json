@@ -10,7 +10,9 @@
         "db:push": "prisma db push",
         "db:seed": "tsx src/prisma/seed.ts",
         "db:clear": "tsx src/prisma/clear.ts",
-        "db:reset": "tsx src/prisma/clear.ts && tsx src/prisma/seed.ts"
+        "db:reset": "tsx src/prisma/clear.ts && tsx src/prisma/seed.ts",
+        "db:purge-cancelled-trips": "tsx src/prisma/purge-cancelled-trips.ts",
+        "db:purge-expired-open-trips": "tsx src/prisma/purge-expired-open-trips.ts"
     },
     "dependencies": {
         "@prisma/client": "^5.19.1",

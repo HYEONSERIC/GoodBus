@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { randomBytes } from 'crypto';
 
 type SaveFileInput = {
     buffer: Buffer;
@@ -23,7 +24,7 @@ class LocalStorageService implements StorageService {
     }: SaveFileInput): Promise<string> {
         const ext = path.extname(originalName || '') || '.jpg';
         const dir = path.join(this.root, folder);
-        const filename = `${filePrefix}-${Date.now()}${ext}`;
+        const filename = `${filePrefix}-${Date.now()}-${randomBytes(4).toString('hex')}${ext}`;
         const absolutePath = path.join(dir, filename);
 
         await fs.mkdir(dir, { recursive: true });
