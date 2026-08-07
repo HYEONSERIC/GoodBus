@@ -4,11 +4,13 @@ import { UserRole } from '@prisma/client';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { getStorageService } from '../services/storage';
+import { imageFileFilter } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
 });
 const storage = getStorageService();
 
@@ -76,7 +78,7 @@ router.patch(
         if (profilePhoto) {
             profileImageUrl = await storage.saveFile({
                 buffer: profilePhoto.buffer,
-                originalName: profilePhoto.originalname,
+                mimetype: profilePhoto.mimetype,
                 folder: 'profile-images',
                 filePrefix: req.user!.userId,
             });
@@ -105,7 +107,7 @@ router.patch(
                 vehiclePhotos.slice(0, 4).map((file, index) =>
                     storage.saveFile({
                         buffer: file.buffer,
-                        originalName: file.originalname,
+                        mimetype: file.mimetype,
                         folder: 'vehicle-images',
                         filePrefix: `${req.user!.userId}-${Date.now()}-${index}`,
                     })

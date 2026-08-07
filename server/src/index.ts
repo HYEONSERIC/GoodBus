@@ -1,7 +1,8 @@
-import express from 'express';
+import './loadEnv';
+import express, { NextFunction, Request, Response } from 'express';
+import multer from 'multer';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
 import path from 'path';
 import authRoutes from './routes/auth';
 import tripsRoutes from './routes/trips';
@@ -15,11 +16,6 @@ import profileRoutes from './routes/profile';
 import supportRoutes from './routes/support';
 import reviewsRoutes from './routes/reviews';
 
-dotenv.config({
-    path: path.resolve(__dirname, '../.env'),
-    override: true,
-});
-
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -32,7 +28,15 @@ app.use(
 
 app.use(cookieParser());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use(
+    '/uploads',
+    express.static(path.join(process.cwd(), 'uploads'), {
+        setHeaders: (res) => {
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+        },
+    })
+);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
@@ -49,6 +53,17 @@ app.use('/verification', verificationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/support', supportRoutes);
 app.use('/reviews', reviewsRoutes);
+
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+        return next(err);
+    }
+    if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: '업로드할 수 없는 파일입니다.' });
+    }
+    console.error('Unhandled error:', req.method, req.path, err);
+    return res.status(500).json({ error: 'Internal server error' });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

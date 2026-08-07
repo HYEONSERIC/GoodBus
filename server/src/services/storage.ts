@@ -1,10 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { randomBytes } from 'crypto';
+import { IMAGE_MIME_TO_EXTENSION } from '../utils/uploadFileFilter';
 
 type SaveFileInput = {
     buffer: Buffer;
-    originalName: string;
+    mimetype: string;
     folder: string;
     filePrefix: string;
 };
@@ -18,11 +19,11 @@ class LocalStorageService implements StorageService {
 
     async saveFile({
         buffer,
-        originalName,
+        mimetype,
         folder,
         filePrefix,
     }: SaveFileInput): Promise<string> {
-        const ext = path.extname(originalName || '') || '.jpg';
+        const ext = IMAGE_MIME_TO_EXTENSION[mimetype] ?? '.bin';
         const dir = path.join(this.root, folder);
         const filename = `${filePrefix}-${Date.now()}-${randomBytes(4).toString('hex')}${ext}`;
         const absolutePath = path.join(dir, filename);
