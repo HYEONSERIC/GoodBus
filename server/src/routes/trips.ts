@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { requireAuth, requireRole, canViewRevenue } from '../middleware/auth';
 import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
 import { sendBidAwardedEmail } from '../utils/email';
 import { deleteTripFully } from '../utils/tripDelete';
@@ -95,7 +95,23 @@ router.get('/', requireAuth, async (req, res) => {
         })
     );
 
-    res.json({ trips: tripsWithMinBid });
+    // Admin sub-roles like CustomerSupport can see trips (for support/
+    // moderation) but not revenue — mask bid prices the same way the
+    // /admin/* revenue views do, without changing behavior for the
+    // Passenger/Driver/BusCompany callers this route also serves.
+    const maskRevenue =
+        req.user!.role === UserRole.Admin &&
+        !(await canViewRevenue(req.user!.userId));
+
+    res.json({
+        trips: maskRevenue
+            ? tripsWithMinBid.map((trip) => ({
+                  ...trip,
+                  minBidPrice: null,
+                  bids: trip.bids.map((bid) => ({ ...bid, price: 0 })),
+              }))
+            : tripsWithMinBid,
+    });
 });
 
 router.post(
@@ -236,7 +252,19 @@ router.get('/:id', requireAuth, async (req, res) => {
             : null,
     };
 
-    res.json({ trip: tripWithMinBid });
+    const maskRevenue =
+        req.user!.role === UserRole.Admin &&
+        !(await canViewRevenue(req.user!.userId));
+
+    res.json({
+        trip: maskRevenue
+            ? {
+                  ...tripWithMinBid,
+                  minBidPrice: null,
+                  bids: tripWithMinBid.bids.map((bid) => ({ ...bid, price: 0 })),
+              }
+            : tripWithMinBid,
+    });
 });
 
 const updateTripSchema = z.object({

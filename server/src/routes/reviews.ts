@@ -5,6 +5,7 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole } from '@prisma/client';
 import { getStorageService } from '../services/storage';
+import { imageFileFilter } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const storage = getStorageService();
@@ -12,6 +13,7 @@ const storage = getStorageService();
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
 });
 
 const MAX_REVIEW_PHOTOS = 4;
@@ -246,7 +248,7 @@ router.post(
                 }
                 const url = await storage.saveFile({
                     buffer: file.buffer,
-                    originalName: file.originalname,
+                    mimetype: file.mimetype,
                     folder: 'trip-reviews',
                     filePrefix: `${req.user!.userId}-${tripId}-${index}`,
                 });
@@ -270,7 +272,8 @@ router.post(
             if (e instanceof z.ZodError) {
                 return res.status(400).json({ error: e.errors[0]?.message || 'Invalid input' });
             }
-            throw e;
+            console.error('Create review error:', e);
+            res.status(500).json({ error: 'Internal server error' });
         }
     },
 );

@@ -1,8 +1,8 @@
 import express from 'express';
 import path from 'path';
 import prisma from '../utils/db';
-import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole, AdminRole, SupportPostKind, TripStatus } from '@prisma/client';
+import { requireAuth, requireRole, requireAdminRole, canViewRevenue } from '../middleware/auth';
+import { UserRole, AdminRole, SupportPostKind, TripStatus, NotificationType } from '@prisma/client';
 import {
     formatSupportAuthorLabel,
     parseSupportPostKind,
@@ -42,11 +42,12 @@ const router = express.Router();
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
     const activeTripWhere = { status: { not: TripStatus.cancelled } };
 
-    const [userCount, tripCount, bidCount, extras] = await Promise.all([
+    const [userCount, tripCount, bidCount, extras, canSeeRevenue] = await Promise.all([
         prisma.user.count(),
         prisma.trip.count({ where: activeTripWhere }),
         prisma.bid.count(),
         getAdminOverviewExtras(),
+        canViewRevenue(req.user!.userId),
     ]);
 
     const recentTrips = await prisma.trip.findMany({
@@ -90,13 +91,19 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
             trips: tripCount,
             bids: bidCount,
         },
-        awardsToday: extras.awardsToday,
-        awardsThisWeek: extras.awardsThisWeek,
+        awardsToday: canSeeRevenue
+            ? extras.awardsToday
+            : { ...extras.awardsToday, gmvManWon: 0 },
+        awardsThisWeek: canSeeRevenue
+            ? extras.awardsThisWeek
+            : { ...extras.awardsThisWeek, gmvManWon: 0 },
         pendingInquiries: extras.pendingInquiries,
         pendingVerifications: extras.pendingVerifications,
         navBadges: extras.navBadges,
         recentTrips,
-        recentBids,
+        recentBids: canSeeRevenue
+            ? recentBids
+            : recentBids.map((bid) => ({ ...bid, price: 0 })),
     });
 });
 
@@ -136,6 +143,8 @@ router.get(
         try {
             await deleteExpiredNotificationHistory();
 
+            const canSeeRevenue = await canViewRevenue(req.user!.userId);
+
             const { page, pageSize, skip, take } = parsePagination(req.query);
             const search = String(req.query.search || '').trim();
             const userId = String(req.query.userId || '').trim();
@@ -145,6 +154,9 @@ router.get(
                 req.query.endDate
             );
 
+            // message embeds bid prices for BID_RECEIVED/BID_AWARDED rows —
+            // dropping it from the search OR-clause for revenue-restricted
+            // admins closes an enumerate-by-price side channel (?search=$777).
             const where = {
                 type,
                 readAt,
@@ -166,12 +178,16 @@ router.get(
                                       mode: 'insensitive' as const,
                                   },
                               },
-                              {
-                                  message: {
-                                      contains: search,
-                                      mode: 'insensitive' as const,
-                                  },
-                              },
+                              ...(canSeeRevenue
+                                  ? [
+                                        {
+                                            message: {
+                                                contains: search,
+                                                mode: 'insensitive' as const,
+                                            },
+                                        },
+                                    ]
+                                  : []),
                           ],
                       }
                     : {}),
@@ -197,9 +213,20 @@ router.get(
             ]);
 
             const history = await attachNotificationHistoryDetails(rows);
+            const isRevenueType = (t: NotificationType) =>
+                t === NotificationType.BID_RECEIVED ||
+                t === NotificationType.BID_AWARDED;
 
             res.json({
-                history,
+                history: canSeeRevenue
+                    ? history
+                    : history.map((row) => ({
+                          ...row,
+                          bid: row.bid ? { ...row.bid, price: 0 } : row.bid,
+                          message: isRevenueType(row.type)
+                              ? '[금액 정보 비공개]'
+                              : row.message,
+                      })),
                 pagination: {
                     page,
                     pageSize,
@@ -223,6 +250,28 @@ router.patch(
 
         if (!status || !['Active', 'Blocked'].includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const target = await prisma.user.findUnique({
+            where: { id: req.params.id },
+            select: { role: true, adminRole: true },
+        });
+
+        if (!target) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (target.role === UserRole.Admin) {
+            const actor = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: { adminRole: true },
+            });
+
+            if (actor?.adminRole !== AdminRole.Super) {
+                return res
+                    .status(403)
+                    .json({ error: 'Only super admins can modify admin accounts' });
+            }
         }
 
         const user = await prisma.user.update({
@@ -319,7 +368,16 @@ router.get(
             user.role,
         );
 
-        res.json({ user, tripSummary, bidderStats, reviewSummary });
+        const canSeeRevenue = await canViewRevenue(req.user!.userId);
+        res.json({
+            user,
+            tripSummary,
+            bidderStats:
+                bidderStats && !canSeeRevenue
+                    ? { ...bidderStats, gmvManWon: 0 }
+                    : bidderStats,
+            reviewSummary,
+        });
     }
 );
 
@@ -448,7 +506,14 @@ router.get(
             }
         }
 
-        res.json({ trips, bids, reviews });
+        const canSeeRevenue = await canViewRevenue(req.user!.userId);
+        res.json({
+            trips,
+            bids: canSeeRevenue
+                ? bids
+                : bids.map((bid) => ({ ...bid, price: 0 })),
+            reviews,
+        });
     }
 );
 
@@ -720,7 +785,12 @@ router.get(
             },
         });
 
-        res.json({ bids });
+        const canSeeRevenue = await canViewRevenue(req.user!.userId);
+        res.json({
+            bids: canSeeRevenue
+                ? bids
+                : bids.map((bid) => ({ ...bid, price: 0 })),
+        });
     }
 );
 
@@ -728,6 +798,7 @@ router.post(
     '/admins',
     requireAuth,
     requireRole(UserRole.Admin),
+    requireAdminRole(AdminRole.Super),
     async (req, res) => {
         const { email, password, adminRole } = req.body as {
             email?: string;
@@ -737,17 +808,6 @@ router.post(
 
         if (!email || !password || !adminRole) {
             return res.status(400).json({ error: 'Missing required fields' });
-        }
-
-        const creator = await prisma.user.findUnique({
-            where: { id: req.user!.userId },
-            select: { adminRole: true },
-        });
-
-        if (!creator || creator.adminRole !== AdminRole.Super) {
-            return res
-                .status(403)
-                .json({ error: 'Only super admins can create admins' });
         }
 
         if (adminRole === 'Super') {
@@ -1193,6 +1253,7 @@ router.get(
     '/revenue-stats',
     requireAuth,
     requireRole(UserRole.Admin),
+    requireAdminRole(AdminRole.Super, AdminRole.Operations, AdminRole.Finance),
     async (req, res) => {
         try {
             const from = parseYearMonth(req.query.from);
@@ -1227,6 +1288,7 @@ router.get(
     '/revenue-stats/awards',
     requireAuth,
     requireRole(UserRole.Admin),
+    requireAdminRole(AdminRole.Super, AdminRole.Operations, AdminRole.Finance),
     async (req, res) => {
         try {
             const year = Number(req.query.year);

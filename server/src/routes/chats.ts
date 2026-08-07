@@ -5,11 +5,13 @@ import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
 import { getStorageService } from '../services/storage';
+import { imageFileFilter } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
 });
 const storage = getStorageService();
 
@@ -440,7 +442,7 @@ router.post(
 
             const imageUrl = await storage.saveFile({
                 buffer: file.buffer,
-                originalName: file.originalname,
+                mimetype: file.mimetype,
                 folder: 'chat-images',
                 filePrefix: `${room.id}-${req.user!.userId}`,
             });

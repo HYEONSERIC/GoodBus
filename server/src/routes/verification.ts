@@ -5,6 +5,7 @@ import fs from 'fs';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole, VerificationStatus } from '@prisma/client';
+import { imageFileFilter, IMAGE_MIME_TO_EXTENSION } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const uploadRoot = path.join(process.cwd(), 'uploads');
@@ -23,8 +24,7 @@ const storage = multer.diskStorage({
         cb(null, targetDir);
     },
     filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname || '');
-        const safeExt = ext || '.jpg';
+        const safeExt = IMAGE_MIME_TO_EXTENSION[file.mimetype] ?? '.jpg';
         const name = `${req.user?.userId}-${Date.now()}${safeExt}`;
         cb(null, name);
     },
@@ -33,6 +33,7 @@ const storage = multer.diskStorage({
 const upload = multer({
     storage,
     limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
 });
 
 router.get(
