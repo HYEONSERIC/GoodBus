@@ -5,7 +5,6 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Dialog,
@@ -23,6 +22,7 @@ import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/componen
 import { AdminActivitySectionFooter } from '@/components/admin/AdminActivitySectionFooter';
 import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
+import { AdminStatusBadge } from '@/components/admin/AdminStatusBadge';
 import { formatManWon } from '@/lib/adminRevenueDisplay';
 
 export function AdminUsersPanel() {
@@ -71,11 +71,10 @@ export function AdminUsersPanel() {
 
   return (
 <AdminPanelCard>
-<div className="flex flex-wrap items-end gap-4">
-                        <div className="flex flex-col gap-1">
-                            <Label>역할</Label>
+<AdminFilterBar>
+                        <AdminFilterField label="역할">
                             <select
-                                className="border rounded px-2 py-1"
+                                className={ADMIN_SELECT_CLASS}
                                 value={roleFilter}
                                 onChange={(e) => setRoleFilter(e.target.value)}
                             >
@@ -85,11 +84,10 @@ export function AdminUsersPanel() {
                             <option value="BusCompany">버스회사</option>
                             <option value="Admin">관리자</option>
                             </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>상태</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="상태">
                             <select
-                                className="border rounded px-2 py-1"
+                                className={ADMIN_SELECT_CLASS}
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
                             >
@@ -97,56 +95,75 @@ export function AdminUsersPanel() {
                             <option value="Active">활성</option>
                             <option value="Blocked">차단</option>
                             </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>이메일</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="이메일">
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             placeholder="이메일 검색"
                             />
-                        </div>
+                        </AdminFilterField>
                         <Button variant="outline" onClick={handleFilter}>
                         적용
                         </Button>
-                    </div>
+                    </AdminFilterBar>
 
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b text-left">
-                                    <th className="py-2 pr-4">이메일</th>
-                                    <th className="py-2 pr-4">역할</th>
-                                    <th className="py-2 pr-4">상태</th>
-                                    <th className="py-2 pr-4">가입일</th>
-                                    <th className="py-2 pr-4">관리</th>
+                                <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                                    <th className="py-2.5 pr-4 pl-4 text-xs font-semibold uppercase tracking-wide text-slate-500">이메일</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">역할</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">상태</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">가입일</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">관리</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                {users.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={5}
+                                            className="py-8 text-center text-sm text-slate-500"
+                                        >
+                                            조건에 맞는 회원이 없습니다. 역할·상태 필터나 이메일 검색어를 조정해 보세요.
+                                        </td>
+                                    </tr>
+                                ) : null}
                                 {users.map((user) => (
                                     <tr
                                         key={user.id}
-                                        className="border-b cursor-pointer"
+                                        className="cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50"
                                         onClick={() => {
                                             setActivityTake(10);
                                             loadUserDetails(user.id, 10);
                                         }}
                                     >
-                                        <td className="py-2 pr-4">{user.email}</td>
-                                        <td className="py-2 pr-4">{user.role}</td>
-                                        <td className="py-2 pr-4">{user.status}</td>
-                                        <td className="py-2 pr-4">
+                                        <td className="py-3 pr-4 pl-4 text-slate-900">{user.email}</td>
+                                        <td className="py-3 pr-4 text-slate-600">{user.role}</td>
+                                        <td className="py-3 pr-4">
+                                            <AdminStatusBadge
+                                                tone={
+                                                    user.status === 'Active'
+                                                        ? 'success'
+                                                        : 'danger'
+                                                }
+                                            >
+                                                {user.status}
+                                            </AdminStatusBadge>
+                                        </td>
+                                        <td className="py-3 pr-4 text-slate-500">
                                             {new Date(
                                                 user.createdAt
                                             ).toLocaleDateString()}
                                         </td>
                                         <td
-                                            className="py-2 pr-4"
+                                            className="py-3 pr-4"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                         {user.role === 'Admin' &&
                                         adminRole !== 'Super' ? (
-                                            <span className="text-xs text-gray-500">
+                                            <span className="text-xs text-slate-500">
                                                 보호됨
                                             </span>
                                         ) : (
@@ -167,13 +184,13 @@ export function AdminUsersPanel() {
                         </table>
                     </div>
 
-                    <div id="admin-user-detail" className="rounded-lg border p-4">
-                        <h3 className="text-lg font-semibold mb-2">사용자 상세</h3>
+                    <div id="admin-user-detail" className="rounded-xl border border-slate-200 p-4">
+                        <h3 className="text-lg font-semibold mb-2 text-slate-900">사용자 상세</h3>
                         {detailLoading ? (
                             <AdminLoadingSkeleton variant="detail" />
                         ) : null}
                         {!detailLoading && !selectedUser && (
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-slate-500">
                                 사용자를 선택하면 상세가 표시됩니다.
                             </p>
                         )}
@@ -191,8 +208,8 @@ export function AdminUsersPanel() {
                                     selectedUser.busType ||
                                     selectedUser.busYear ||
                                     selectedUser.capacity !== null) && (
-                                    <div className="rounded border bg-gray-50 p-3">
-                                        <div className="grid gap-1 text-xs text-gray-700">
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                        <div className="grid gap-1 text-xs text-slate-700">
                                             {selectedUser.displayName && (
                                                 <div>
                                                     <span className="font-medium">
@@ -282,7 +299,7 @@ export function AdminUsersPanel() {
                                     건
                                     {selectedUser.role === 'Passenger' &&
                                     passengerTripSummary ? (
-                                        <p className="mt-1 text-xs text-gray-500">
+                                        <p className="mt-1 text-xs text-slate-500">
                                             견적 {passengerTripSummary.quoteOpen} ·
                                             예약{' '}
                                             {
@@ -295,7 +312,7 @@ export function AdminUsersPanel() {
                                             (승객 앱 기준, 왕복 1건·출발 전만)
                                         </p>
                                     ) : (
-                                        <span className="ml-1 text-xs text-gray-500">
+                                        <span className="ml-1 text-xs text-slate-500">
                                             (취소·삭제 제외)
                                         </span>
                                     )}
@@ -347,7 +364,7 @@ export function AdminUsersPanel() {
                                     </div>
                                 ) : null}
                                 {reviewSummary && reviewSummary.count > 0 ? (
-                                    <div className="text-sm text-gray-700">
+                                    <div className="text-sm text-slate-700">
                                         <span className="font-medium">
                                             {reviewSummary.as === 'received'
                                                 ? '받은 리뷰'
@@ -363,11 +380,11 @@ export function AdminUsersPanel() {
                                         <span className="font-medium">
                                             운전자격증
                                         </span>
-                                        <p className="text-xs text-gray-500">
+                                        <p className="text-xs text-slate-500">
                                             상태: {selectedUser.driverLicenseStatus || '없음'}
                                         </p>
                                         {selectedUser.driverLicenseNote && (
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-xs text-slate-500">
                                                 사유: {selectedUser.driverLicenseNote}
                                             </p>
                                         )}
@@ -376,7 +393,7 @@ export function AdminUsersPanel() {
                                                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                                                     <button
                                                         type="button"
-                                                        className="aspect-square overflow-hidden rounded-md border bg-gray-50"
+                                                        className="aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50"
                                                         onClick={() =>
                                                             setPreviewUrl(
                                                                 `${uploadBaseUrl}${selectedUser.driverLicenseUrl}`
@@ -393,13 +410,13 @@ export function AdminUsersPanel() {
                                                 <a
                                                     href={`/api/admin/verifications/${selectedUser.id}/download?type=driver`}
                                                     download
-                                                    className="text-sm text-blue-600 hover:underline"
+                                                    className="text-sm text-sky-700 hover:underline"
                                                 >
                                                     파일 다운로드
                                                 </a>
                                             </div>
                                         ) : (
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-xs text-slate-500">
                                                 등록된 파일이 없습니다.
                                             </p>
                                         )}
@@ -410,13 +427,13 @@ export function AdminUsersPanel() {
                                         <span className="font-medium">
                                             사업자등록증
                                         </span>
-                                        <p className="text-xs text-gray-500">
+                                        <p className="text-xs text-slate-500">
                                             상태:{' '}
                                             {selectedUser.companyRegistrationStatus ||
                                                 '없음'}
                                         </p>
                                         {selectedUser.companyRegistrationNote && (
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-xs text-slate-500">
                                                 사유: {selectedUser.companyRegistrationNote}
                                             </p>
                                         )}
@@ -425,7 +442,7 @@ export function AdminUsersPanel() {
                                                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                                                     <button
                                                         type="button"
-                                                        className="aspect-square overflow-hidden rounded-md border bg-gray-50"
+                                                        className="aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50"
                                                         onClick={() =>
                                                             setPreviewUrl(
                                                                 `${uploadBaseUrl}${selectedUser.companyRegistrationUrl}`
@@ -442,13 +459,13 @@ export function AdminUsersPanel() {
                                                 <a
                                                     href={`/api/admin/verifications/${selectedUser.id}/download?type=company`}
                                                     download
-                                                    className="text-sm text-blue-600 hover:underline"
+                                                    className="text-sm text-sky-700 hover:underline"
                                                 >
                                                     파일 다운로드
                                                 </a>
                                             </div>
                                         ) : (
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-xs text-slate-500">
                                                 등록된 파일이 없습니다.
                                             </p>
                                         )}
@@ -463,7 +480,7 @@ export function AdminUsersPanel() {
                                             <div className="mt-2 space-y-2">
                                                 {selectedUserActivity.trips.length ===
                                                 0 ? (
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-xs text-slate-500">
                                                         여정 기록이 없습니다.
                                                     </p>
                                                 ) : (
@@ -471,7 +488,7 @@ export function AdminUsersPanel() {
                                                         (trip) => (
                                                             <div
                                                                 key={trip.id}
-                                                                className="rounded border p-2 text-xs space-y-1"
+                                                                className="rounded-lg border border-slate-200 p-2 text-xs space-y-1"
                                                             >
                                                                 <div>
                                                                     {trip.origin} →{' '}
@@ -514,7 +531,7 @@ export function AdminUsersPanel() {
                                             <div className="mt-2 space-y-2">
                                                 {selectedUserActivity.bids.length ===
                                                 0 ? (
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-xs text-slate-500">
                                                         입찰 기록이 없습니다.
                                                     </p>
                                                 ) : (
@@ -522,7 +539,7 @@ export function AdminUsersPanel() {
                                                         (bid) => (
                                                             <div
                                                                 key={bid.id}
-                                                                className="rounded border p-2 text-xs space-y-1"
+                                                                className="rounded-lg border border-slate-200 p-2 text-xs space-y-1"
                                                             >
                                                                 <div>
                                                                     {bid.trip.origin} →{' '}
@@ -595,7 +612,7 @@ export function AdminUsersPanel() {
                                             <div className="mt-2 space-y-2">
                                                 {selectedUserActivity.reviews
                                                     .length === 0 ? (
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-xs text-slate-500">
                                                         리뷰 기록이 없습니다.
                                                     </p>
                                                 ) : (
@@ -603,7 +620,7 @@ export function AdminUsersPanel() {
                                                         (review) => (
                                                             <div
                                                                 key={review.id}
-                                                                className="rounded border p-2 text-xs space-y-1"
+                                                                className="rounded-lg border border-slate-200 p-2 text-xs space-y-1"
                                                             >
                                                                 <div>
                                                                     ★{review.rating}{' '}

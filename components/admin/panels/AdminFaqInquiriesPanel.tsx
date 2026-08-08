@@ -71,7 +71,7 @@ export function AdminFaqInquiriesPanel() {
 
     return (
         <>
-            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div>
                     <h2 className="text-lg font-semibold text-slate-900">
                         1:1 문의
@@ -191,30 +191,30 @@ export function AdminFaqInquiriesPanel() {
                         !supportInquiriesLoading &&
                         supportInquiries.length === 0
                     }
-                    emptyMessage="조건에 맞는 문의가 없습니다."
+                    emptyMessage="조건에 맞는 문의가 없습니다. 검색어나 상태 필터를 조정해 보세요."
                 >
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full min-w-[640px] text-left text-sm">
                             <thead>
-                                <tr className="border-b text-xs text-slate-500">
-                                    <th className="pb-2 pr-2">제목</th>
-                                    <th className="pb-2 pr-2">유형</th>
-                                    <th className="pb-2 pr-2">작성자</th>
-                                    <th className="pb-2 pr-2">상태</th>
-                                    <th className="pb-2">접수일</th>
+                                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                    <th className="py-2.5 pr-2 pl-4">제목</th>
+                                    <th className="py-2.5 pr-2">유형</th>
+                                    <th className="py-2.5 pr-2">작성자</th>
+                                    <th className="py-2.5 pr-2">상태</th>
+                                    <th className="py-2.5 pr-4">접수일</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {supportInquiries.map((row) => (
                                     <tr
                                         key={row.id}
-                                        className={`border-b border-slate-100 ${
+                                        className={`border-b border-slate-100 last:border-0 ${
                                             !row.repliedAt
                                                 ? 'bg-amber-50/40'
-                                                : ''
+                                                : 'hover:bg-slate-50'
                                         }`}
                                     >
-                                        <td className="max-w-[200px] py-2 pr-2">
+                                        <td className="max-w-[200px] py-2.5 pr-2 pl-4">
                                             <button
                                                 type="button"
                                                 className="w-full truncate text-left font-medium text-slate-900 underline-offset-2 hover:underline"
@@ -246,7 +246,7 @@ export function AdminFaqInquiriesPanel() {
                                                     : '답변 대기'}
                                             </span>
                                         </td>
-                                        <td className="whitespace-nowrap py-2 text-slate-500">
+                                        <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">
                                             {row.createdAt.slice(0, 10)}
                                         </td>
                                     </tr>
@@ -355,7 +355,7 @@ export function AdminFaqInquiriesPanel() {
                                     ) : null}
                                     <Button
                                         type="button"
-                                        className="w-full sm:w-auto"
+                                        className="w-full bg-sky-700 hover:bg-sky-800 sm:w-auto"
                                         disabled={supportInquiryReplySaving}
                                         onClick={async () => {
                                             if (!supportInquiryDetail) return;

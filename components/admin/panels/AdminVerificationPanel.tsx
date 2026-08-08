@@ -16,9 +16,11 @@ import {
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
+import { AdminStatusBadge } from '@/components/admin/AdminStatusBadge';
 import {
     VERIFICATION_STATUS_FILTER_OPTIONS,
     formatVerificationStatusLabel,
+    verificationStatusTone,
 } from '@/lib/adminStatusLabels';
 import { verificationDisplayForUser } from '@/lib/adminVerification';
 
@@ -39,11 +41,10 @@ export function AdminVerificationPanel() {
 } = useAdminDashboard();
   return (
 <AdminPanelCard>
-<div className="flex flex-wrap items-end gap-4">
-                        <div className="flex flex-col gap-1">
-                            <Label>구분</Label>
+<AdminFilterBar>
+                        <AdminFilterField label="구분">
                             <select
-                                className="border rounded px-2 py-1"
+                                className={ADMIN_SELECT_CLASS}
                                 value={verificationType}
                                 onChange={(e) =>
                                     setVerificationType(
@@ -58,11 +59,10 @@ export function AdminVerificationPanel() {
                                 <option value="driver">기사</option>
                                 <option value="company">버스회사</option>
                             </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>상태</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="상태">
                             <select
-                                className="border rounded px-2 py-1"
+                                className={ADMIN_SELECT_CLASS}
                                 value={verificationStatus}
                                 onChange={(e) =>
                                     setVerificationStatus(e.target.value)
@@ -79,11 +79,11 @@ export function AdminVerificationPanel() {
                                     ),
                                 )}
                             </select>
-                        </div>
+                        </AdminFilterField>
                         <Button variant="outline" onClick={loadVerifications}>
                             새로고침
                         </Button>
-                    </div>
+                    </AdminFilterBar>
 
                     <AdminAsyncContent
                         loading={verificationLoading}
@@ -91,7 +91,7 @@ export function AdminVerificationPanel() {
                         skeletonRows={4}
                         hasData={verificationList.length > 0}
                         empty={!verificationLoading && verificationList.length === 0}
-                        emptyMessage="해당 상태의 요청이 없습니다."
+                        emptyMessage="선택한 구분·상태에 해당하는 승인 요청이 없습니다."
                     >
                         <div className="grid gap-4">
                             {verificationList.map((user) => {
@@ -106,27 +106,29 @@ export function AdminVerificationPanel() {
                                 return (
                                     <div
                                         key={user.id}
-                                        className="rounded-lg border p-4 space-y-4"
+                                        className="rounded-xl border border-slate-200 p-4 space-y-4"
                                     >
                                         <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
                                             <div className="space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-sm font-medium">
+                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <p className="break-all text-sm font-medium text-slate-900">
                                                             {user.email}
                                                         </p>
-                                                        <p className="text-xs text-gray-500">
+                                                        <p className="text-xs text-slate-500">
                                                             {roleLabel} ·{' '}
-                                                            {docLabel} · 상태:{' '}
+                                                            {docLabel}
+                                                        </p>
+                                                        <AdminStatusBadge tone={verificationStatusTone(status)}>
                                                             {formatVerificationStatusLabel(
                                                                 status,
                                                             )}
-                                                        </p>
+                                                        </AdminStatusBadge>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <div className="flex shrink-0 gap-2">
                                                         <Button
                                                             size="sm"
-                                                            variant="outline"
+                                                            className="bg-sky-700 hover:bg-sky-800"
                                                             onClick={() =>
                                                                 updateVerificationStatus(
                                                                     user,
@@ -139,6 +141,7 @@ export function AdminVerificationPanel() {
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
+                                                            className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"
                                                             onClick={() =>
                                                                 updateVerificationStatus(
                                                                     user,
@@ -169,7 +172,7 @@ export function AdminVerificationPanel() {
                                                         placeholder="반려 사유를 입력하세요"
                                                     />
                                                     {note && (
-                                                        <p className="text-xs text-gray-500">
+                                                        <p className="text-xs text-slate-500">
                                                             이전 사유: {note}
                                                         </p>
                                                     )}
@@ -178,7 +181,7 @@ export function AdminVerificationPanel() {
                                             <div className="space-y-2">
                                                 {imagePath ? (
                                                     <>
-                                                        <div className="rounded border bg-white p-2">
+                                                        <div className="rounded-lg border border-slate-200 bg-white p-2">
                                                             <img
                                                                 src={`${uploadBaseUrl}${imagePath}`}
                                                                 alt={docLabel}
@@ -191,20 +194,20 @@ export function AdminVerificationPanel() {
                                                             />
                                                         </div>
                                                         <div className="flex items-center justify-between text-sm">
-                                                            <span className="text-gray-500">
+                                                            <span className="text-slate-500">
                                                                 클릭하면 확대됩니다.
                                                             </span>
                                                             <a
                                                                 href={`/api/admin/verifications/${user.id}/download?type=${kind}`}
                                                                 download
-                                                                className="text-blue-600 hover:underline"
+                                                                className="text-sky-700 hover:underline"
                                                             >
                                                                 파일 다운로드
                                                             </a>
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-xs text-slate-500">
                                                         업로드된 이미지가 없습니다.
                                                     </p>
                                                 )}

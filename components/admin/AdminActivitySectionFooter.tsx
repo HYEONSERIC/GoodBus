@@ -27,7 +27,7 @@ export function AdminActivitySectionFooter({
     return (
         <div className="mt-2 space-y-1">
             {totalCount !== undefined && totalCount > 0 ? (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-slate-500">
                     전체 {totalCount.toLocaleString('ko-KR')}건 · 아래{' '}
                     {shownCount.toLocaleString('ko-KR')}건 표시
                 </p>

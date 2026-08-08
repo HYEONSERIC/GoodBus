@@ -20,7 +20,7 @@ export function AdminFaqPanel() {
                 activeTab={faqSectionTab}
                 onChange={setFaqSectionTab}
                 columnClass="grid-cols-2"
-                wrapperClassName="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                wrapperClassName="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
             />
             {faqSectionTab === 'inquiries' ? (
                 <AdminFaqInquiriesPanel />

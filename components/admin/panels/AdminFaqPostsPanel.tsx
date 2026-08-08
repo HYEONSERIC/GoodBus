@@ -50,7 +50,7 @@ export function AdminFaqPostsPanel() {
   } = useAdminDashboard();
   return (
 <>
-<div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+<div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                                 <h2 className="text-lg font-semibold text-slate-900">
                                     게시글 목록
                                 </h2>
@@ -64,37 +64,37 @@ export function AdminFaqPostsPanel() {
                                         !supportPostsLoading &&
                                         supportPosts.length === 0
                                     }
-                                    emptyMessage="등록된 글이 없습니다."
+                                    emptyMessage="등록된 공지·FAQ가 없습니다. 아래 '글쓰기'로 새로 작성해 보세요."
                                 >
-                                    <div className="mt-4 overflow-x-auto">
+                                    <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
                                         <table className="w-full min-w-[600px] text-left text-sm">
                                             <thead>
-                                                <tr className="border-b text-xs text-slate-500">
-                                                    <th className="pb-2 pr-2">
+                                                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                    <th className="py-2.5 pr-2 pl-4">
                                                         유형
                                                     </th>
-                                                    <th className="pb-2 pr-2">
+                                                    <th className="py-2.5 pr-2">
                                                         중요
                                                     </th>
-                                                    <th className="pb-2 pr-2">
+                                                    <th className="py-2.5 pr-2">
                                                         제목
                                                     </th>
-                                                    <th className="pb-2 pr-2">
+                                                    <th className="py-2.5 pr-2">
                                                         글쓴이
                                                     </th>
-                                                    <th className="pb-2 pr-2">
+                                                    <th className="py-2.5 pr-2">
                                                         작성일
                                                     </th>
-                                                    <th className="pb-2">관리</th>
+                                                    <th className="py-2.5 pr-4">관리</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {supportPosts.map((p) => (
                                                     <tr
                                                         key={p.id}
-                                                        className="border-b border-slate-100"
+                                                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                                                     >
-                                                        <td className="whitespace-nowrap py-2 pr-2">
+                                                        <td className="whitespace-nowrap py-2.5 pr-2 pl-4 text-slate-700">
                                                             {p.kind === 'faq'
                                                                 ? 'FAQ'
                                                                 : '공지'}
@@ -124,7 +124,7 @@ export function AdminFaqPostsPanel() {
                                                                 10,
                                                             )}
                                                         </td>
-                                                        <td className="whitespace-nowrap py-2">
+                                                        <td className="whitespace-nowrap py-2.5 pr-4">
                                                             <div className="flex flex-wrap items-center gap-2">
                                                             <Button
                                                                 type="button"
@@ -183,7 +183,7 @@ export function AdminFaqPostsPanel() {
                                 <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
                                     <Button
                                         type="button"
-                                        className="h-9 min-w-[5.5rem] bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-black"
+                                        className="h-9 min-w-[5.5rem] bg-sky-700 px-4 text-sm font-semibold text-white hover:bg-sky-800"
                                         onClick={() => {
                                             setError('');
                                             setNewPostKind('notice');
@@ -303,7 +303,7 @@ export function AdminFaqPostsPanel() {
                                             <Button
                                                 type="button"
                                                 disabled={creatingPost}
-                                                className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
+                                                className="h-9 min-w-[4.5rem] bg-sky-700 font-semibold text-white hover:bg-sky-800"
                                                 onClick={async () => {
                                                     setCreatingPost(true);
                                                     setError('');
@@ -428,7 +428,7 @@ export function AdminFaqPostsPanel() {
                                         <Button
                                             type="button"
                                             disabled={savingEdit}
-                                            className="h-9 min-w-[4.5rem] bg-slate-900 font-semibold text-white hover:bg-black"
+                                            className="h-9 min-w-[4.5rem] bg-sky-700 font-semibold text-white hover:bg-sky-800"
                                             onClick={async () => {
                                                 if (!editPost) return;
                                                 setSavingEdit(true);

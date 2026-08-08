@@ -4,7 +4,6 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
     Dialog,
@@ -42,9 +41,8 @@ export function AdminNotificationsPanel() {
 } = useAdminDashboard();
   return (
 <AdminPanelCard>
-<div className="flex flex-wrap items-end gap-4">
-                        <div className="flex flex-col gap-1">
-                            <Label>사용자/메시지 검색</Label>
+<AdminFilterBar>
+                        <AdminFilterField label="사용자/메시지 검색">
                             <Input
                                 value={notificationSearch}
                                 onChange={(e) =>
@@ -52,11 +50,10 @@ export function AdminNotificationsPanel() {
                                 }
                                 placeholder="email, title, message"
                             />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>타입</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="타입">
                             <select
-                                className="border rounded px-2 py-1"
+                                className={ADMIN_SELECT_CLASS}
                                 value={notificationTypeFilter}
                                 onChange={(e) =>
                                     setNotificationTypeFilter(e.target.value)
@@ -66,9 +63,8 @@ export function AdminNotificationsPanel() {
                                 <option value="BID_RECEIVED">입찰 도착</option>
                                 <option value="BID_AWARDED">입찰 완료</option>
                             </select>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>시작일</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="시작일">
                             <Input
                                 type="date"
                                 value={notificationStartDate}
@@ -76,9 +72,8 @@ export function AdminNotificationsPanel() {
                                     setNotificationStartDate(e.target.value)
                                 }
                             />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <Label>종료일</Label>
+                        </AdminFilterField>
+                        <AdminFilterField label="종료일">
                             <Input
                                 type="date"
                                 value={notificationEndDate}
@@ -86,14 +81,14 @@ export function AdminNotificationsPanel() {
                                     setNotificationEndDate(e.target.value)
                                 }
                             />
-                        </div>
+                        </AdminFilterField>
                         <Button
                             variant="outline"
                             onClick={() => handleNotificationHistorySearch(1)}
                         >
                             검색
                         </Button>
-                    </div>
+                    </AdminFilterBar>
 
                     <AdminAsyncContent
                         loading={notificationLoading}
@@ -108,43 +103,43 @@ export function AdminNotificationsPanel() {
                             !notificationLoading &&
                             notificationHistory.length === 0
                         }
-                        emptyMessage="검색 결과가 없습니다."
+                        emptyMessage="조건에 맞는 알림이 없습니다. 검색어나 기간을 넓혀 보세요."
                     >
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="border-b text-left">
-                                    <th className="py-2 pr-4">날짜</th>
-                                    <th className="py-2 pr-4">사용자</th>
-                                    <th className="py-2 pr-4">여정</th>
-                                    <th className="py-2 pr-4">
+                                <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                                    <th className="py-2.5 pr-4 pl-4 text-xs font-semibold uppercase tracking-wide text-slate-500">날짜</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">사용자</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">여정</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
                                         {ADMIN_AMOUNT_HEADERS.price}
                                     </th>
-                                    <th className="py-2 pr-4">타입</th>
+                                    <th className="py-2.5 pr-4 text-xs font-semibold uppercase tracking-wide text-slate-500">타입</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {notificationHistory.map((item) => (
-                                    <tr key={item.id} className="border-b">
-                                        <td className="py-2 pr-4 whitespace-nowrap">
+                                    <tr key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                        <td className="py-3 pr-4 pl-4 whitespace-nowrap text-slate-500">
                                             {new Date(item.readAt).toLocaleString()}
                                         </td>
-                                        <td className="py-2 pr-4">
+                                        <td className="py-3 pr-4 text-slate-900">
                                             {item.user.email}
                                         </td>
-                                        <td className="py-2 pr-4">
+                                        <td className="py-3 pr-4 text-slate-600">
                                             {item.trip || item.bid?.trip
                                                 ? `${(item.trip || item.bid?.trip)!.origin} -> ${(item.trip || item.bid?.trip)!.destination}`
                                                 : '-'}
                                         </td>
-                                        <td className="py-2 pr-4 tabular-nums whitespace-nowrap">
+                                        <td className="py-3 pr-4 tabular-nums whitespace-nowrap text-slate-700">
                                             {formatManWonOrDash(
                                                 item.bid?.price != null
                                                     ? Number(item.bid.price)
                                                     : null,
                                             )}
                                         </td>
-                                        <td className="py-2 pr-4">
+                                        <td className="py-3 pr-4 text-slate-600">
                                             {formatNotificationResult(item)}
                                         </td>
                                     </tr>
