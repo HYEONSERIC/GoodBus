@@ -29,6 +29,9 @@ import type { DashboardHeaderVariant } from '@/components/layout/DashboardMobile
 import type {
     DashboardBid,
     DashboardBidderTrip,
+    DashboardMembershipPlan,
+    DashboardSessionUser,
+    DashboardVerification,
     MyBidDetailState,
 } from '@/types/dashboard';
 
@@ -45,9 +48,10 @@ const CompanyDashboardContext =
     createContext<CompanyDashboardContextValue | null>(null);
 
 function useCompanyDashboardState() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<DashboardSessionUser | null>(null);
     const profile = useBidderProfile('company', { userEmail: user?.email });
-    const [membershipPlan, setMembershipPlan] = useState<any>(null);
+    const [membershipPlan, setMembershipPlan] =
+        useState<DashboardMembershipPlan | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
@@ -55,7 +59,8 @@ function useCompanyDashboardState() {
     const [bidTripPartner, setBidTripPartner] = useState<Trip | undefined>(
         undefined,
     );
-    const [verification, setVerification] = useState<any>(null);
+    const [verification, setVerification] =
+        useState<DashboardVerification | null>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
     const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
     const [verificationFile, setVerificationFile] = useState<File | null>(null);

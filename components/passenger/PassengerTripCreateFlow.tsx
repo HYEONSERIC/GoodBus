@@ -715,8 +715,8 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         <DialogHeader>
                             <DialogTitle>기사님 동행 여부?</DialogTitle>
                             <DialogDescription className="text-sm">
-                                '출발, 귀환만 운송'은 목적지까지 왕복
-                                수송만 하는 운행이고, '일정 동행'은 수학여행
+                                &apos;출발, 귀환만 운송&apos;은 목적지까지 왕복
+                                수송만 하는 운행이고, &apos;일정 동행&apos;은 수학여행
                                 처럼 승객님의 일정에 따라 기사님이 계속
                                 동행해서 함께하는 운행입니다.
                             </DialogDescription>

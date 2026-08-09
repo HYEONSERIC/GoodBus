@@ -32,6 +32,7 @@ import type {
     PassengerTrip,
 } from '@/types/passenger';
 import type { PassengerEditTripValues } from '@/components/passenger/dialogs';
+import type { DashboardSessionUser } from '@/types/dashboard';
 
 const PASSENGER_ROUND_OPTS = { matchStatus: true } as const;
 
@@ -46,7 +47,7 @@ const PassengerDashboardContext =
     createContext<PassengerDashboardContextValue | null>(null);
 
 function usePassengerDashboardState() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<DashboardSessionUser | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<
@@ -113,7 +114,11 @@ function usePassengerDashboardState() {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             const tripData = await tripsAPI.getAll();
-            const myTrips = (tripData.trips || []).filter((trip: any) => {
+            const myTrips = (tripData.trips || []).filter((trip: {
+                passenger?: { id?: string } | null;
+                passengerId?: string;
+                status: string;
+            }) => {
                 const tripPassengerId = trip?.passenger?.id ?? trip?.passengerId;
                 return (
                     tripPassengerId === userData.user.id &&
