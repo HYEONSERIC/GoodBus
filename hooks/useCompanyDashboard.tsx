@@ -137,9 +137,28 @@ function useCompanyDashboardState() {
     }, []);
 
     useEffect(() => {
-        if (activeTab === 'contract') {
+        if (activeTab === 'contract' || activeTab === 'available') {
             loadData();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        const refreshOnFocus = () => {
+            if (activeTab === 'available') {
+                loadData();
+            }
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshOnFocus();
+            }
+        };
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
     }, [activeTab]);
 
     useEffect(() => {

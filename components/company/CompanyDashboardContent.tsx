@@ -23,7 +23,7 @@ import { VerificationUploadDialog } from '@/components/auth/VerificationUploadDi
 import { MembershipPlansPanel } from '@/components/membership/MembershipPlansPanel';
 import {
     SupportInquiryDialog,
-    DRIVER_SUPPORT_MENU,
+    COMPANY_SUPPORT_MENU,
 } from '@/components/support/SupportInquiryDialog';
 import {
     Dialog,
@@ -111,7 +111,7 @@ export function CompanyDashboardContent() {
                 <SupportInquiryDialog
                     open={c.companySupportOpen}
                     onOpenChange={c.setCompanySupportOpen}
-                    menuOptions={DRIVER_SUPPORT_MENU}
+                    menuOptions={COMPANY_SUPPORT_MENU}
                     titleInputId="company-inquiry-title"
                     bodyInputId="company-inquiry-body"
                     onSubmitted={() =>
@@ -210,7 +210,8 @@ export function CompanyDashboardContent() {
                         {c.contractSubTab === 'bidding' && (
                             <ContractOpenBidsList
                                 cardTrips={c.myBidCardTrips}
-                                partnerPool={c.myBids}
+                                partnerPool={c.openTripsPool}
+                                roundOptions={c.COMPANY_ROUND_OPTS}
                                 distanceByTripId={c.distanceByTripId}
                                 userId={c.user?.id}
                                 onOpenDetail={(trip, partner) =>

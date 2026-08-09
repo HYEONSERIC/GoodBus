@@ -71,7 +71,7 @@ export function BidderProfileTabPanel({
     onHome: () => void;
     onEdit: () => void;
 }) {
-    const showReviews = role === 'driver' && onProfileSectionChange != null;
+    const showReviews = onProfileSectionChange != null;
     const bannerHeight = role === 'driver' ? 'h-48' : 'h-40';
 
     return (

@@ -197,3 +197,9 @@ export const DRIVER_SUPPORT_MENU: SupportInquiryMenuOption[] = [
     { id: 'verification', label: '자격증·인증 문의' },
     { id: 'other', label: '기타 문의' },
 ];
+
+export const COMPANY_SUPPORT_MENU: SupportInquiryMenuOption[] = [
+    { id: 'quote_amount', label: '입찰·견적 문의' },
+    { id: 'verification', label: '사업자등록증·인증 문의' },
+    { id: 'other', label: '기타 문의' },
+];

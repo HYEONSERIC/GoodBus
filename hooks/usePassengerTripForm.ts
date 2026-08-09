@@ -13,9 +13,8 @@ export function toDatetimeLocalInputValue(date: Date): string {
     return `${y}-${m}-${d}T${h}:${min}`;
 }
 
-export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
-    const [openDialog, setOpenDialog] = useState(false);
-    const [newTrip, setNewTrip] = useState({
+function createInitialTripState() {
+    return {
         origin: '',
         originX: null as number | null,
         originY: null as number | null,
@@ -33,7 +32,12 @@ export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
         additionalRequest: '',
         paxCount: '',
         busSize: 'small',
-    });
+    };
+}
+
+export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
+    const [openDialog, setOpenDialog] = useState(false);
+    const [newTrip, setNewTrip] = useState(createInitialTripState());
     const [stopoverOpen, setStopoverOpen] = useState(false);
     const [companionInfoOpen, setCompanionInfoOpen] = useState(false);
     const [companionInfoConfirmed, setCompanionInfoConfirmed] = useState(false);
@@ -44,6 +48,23 @@ export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
     const [destinationResults, setDestinationResults] = useState<KakaoPlace[]>(
         [],
     );
+
+    function resetForm() {
+        setNewTrip(createInitialTripState());
+        setStopoverOpen(false);
+        setCompanionInfoOpen(false);
+        setCompanionInfoConfirmed(false);
+        setKakaoStatusMessage('');
+        setOriginResults([]);
+        setDestinationResults([]);
+    }
+
+    function closeDialog(open: boolean) {
+        if (!open) {
+            resetForm();
+        }
+        setOpenDialog(open);
+    }
 
     const goingScheduleMin = toDatetimeLocalInputValue(new Date());
     const returnScheduleMin =
@@ -189,6 +210,7 @@ export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
                 });
             }
 
+            resetForm();
             setOpenDialog(false);
             onCreated();
         } catch (error) {
@@ -204,6 +226,8 @@ export function usePassengerTripForm({ onCreated }: { onCreated: () => void }) {
     return {
         openDialog,
         setOpenDialog,
+        closeDialog,
+        resetForm,
         newTrip,
         setNewTrip,
         stopoverOpen,

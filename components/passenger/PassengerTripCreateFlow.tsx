@@ -30,7 +30,7 @@ import type { PassengerTripFormApi } from '@/hooks/usePassengerTripForm';
 export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripFormApi }) {
   const {
     openDialog,
-    setOpenDialog,
+    closeDialog,
     newTrip,
     setNewTrip,
     stopoverOpen,
@@ -53,7 +53,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
   } = tripForm;
   return (
 <>
-<Dialog open={openDialog} onOpenChange={setOpenDialog}>
+<Dialog open={openDialog} onOpenChange={closeDialog}>
                     <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-lg [&>button]:top-3 [&>button]:right-4">
                         <DialogHeader className="sr-only">
                             <DialogTitle>여정 만들기</DialogTitle>
@@ -64,7 +64,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-3">
                             <button
                                 type="button"
-                                onClick={() => setOpenDialog(false)}
+                                onClick={() => closeDialog(false)}
                                 className="min-w-[4rem] text-left text-sm text-gray-700 hover:text-black"
                             >
                                 &lt; 이전

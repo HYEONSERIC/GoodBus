@@ -98,14 +98,8 @@ export function PassengerQuoteTripsList({
                         onToggleCancelMenu={() =>
                             onToggleCancelMenu(trip.id)
                         }
-                        onOpenCancelDialog={() => {
-                            onOpenCancelDialog(trip);
-                            onToggleCancelMenu(trip.id);
-                        }}
-                        onOpenEditDialog={() => {
-                            onOpenEditDialog(trip);
-                            onToggleCancelMenu(trip.id);
-                        }}
+                        onOpenCancelDialog={() => onOpenCancelDialog(trip)}
+                        onOpenEditDialog={() => onOpenEditDialog(trip)}
                         onToggleQuotes={() => onToggleQuotesTrip(trip.id)}
                         onSelectBid={onSelectBid}
                         formatDriverRating={formatDriverRating}

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { ArrowLeft, Home, Menu } from 'lucide-react';
 import { Notifications } from '@/components/Notifications';
 import {
     DashboardBottomTabs,
@@ -54,10 +55,11 @@ export function DashboardMobileShell<T extends string>({
                                 <div className="absolute left-3 sm:left-4">
                                     <button
                                         type="button"
-                                        className="text-gray-600"
+                                        aria-label="뒤로가기"
+                                        className="-m-2.5 flex size-11 items-center justify-center text-gray-600 hover:text-black"
                                         onClick={onBack}
                                     >
-                                        ←
+                                        <ArrowLeft className="size-5" strokeWidth={2} />
                                     </button>
                                 </div>
                                 <span className="text-lg font-semibold">
@@ -66,10 +68,11 @@ export function DashboardMobileShell<T extends string>({
                                 <div className="absolute right-3 sm:right-4">
                                     <button
                                         type="button"
-                                        className="text-gray-600"
+                                        aria-label="홈으로"
+                                        className="-m-2.5 flex size-11 items-center justify-center text-gray-600 hover:text-black"
                                         onClick={onHome}
                                     >
-                                        ⌂
+                                        <Home className="size-5" strokeWidth={2} />
                                     </button>
                                 </div>
                             </>
@@ -78,12 +81,11 @@ export function DashboardMobileShell<T extends string>({
                                 <div className="absolute left-3 sm:left-4">
                                     <button
                                         type="button"
-                                        className="inline-flex items-center gap-1 text-sm text-gray-700 hover:text-black"
+                                        aria-label="메뉴 열기"
+                                        className="-m-2.5 inline-flex min-h-11 items-center gap-1 px-2.5 text-sm text-gray-700 hover:text-black"
                                         onClick={onMenuClick}
                                     >
-                                        <span className="text-base leading-none">
-                                            ☰
-                                        </span>
+                                        <Menu className="size-4.5" strokeWidth={2} />
                                         <span>메뉴</span>
                                     </button>
                                 </div>

@@ -5,6 +5,7 @@ import {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type ReactNode,
 } from 'react';
@@ -79,6 +80,7 @@ function usePassengerDashboardState() {
         bid: Bid;
         bidTrip: Trip;
     } | null>(null);
+    const bidDetailRequestRef = useRef(0);
     const [bidGalleryIndex, setBidGalleryIndex] = useState(0);
     const [driverStatsById, setDriverStatsById] = useState<
         Record<string, DriverReviewStats>
@@ -151,10 +153,12 @@ function usePassengerDashboardState() {
     }
 
     async function openBidDetail(bid: Bid, bidTrip: Trip) {
+        const requestId = ++bidDetailRequestRef.current;
         setBidDetail({ bid, bidTrip });
         setBidDetailReviewsLoading(true);
         try {
             const data = await reviewsAPI.getDriverById(bid.bidder.id);
+            if (bidDetailRequestRef.current !== requestId) return;
             const reviews = (data.reviews || []) as TripReviewRecord[];
             const stats: DriverReviewStats = {
                 avgRating: data.avgRating ?? null,
@@ -167,10 +171,13 @@ function usePassengerDashboardState() {
                 [bid.bidder.id]: stats,
             }));
         } catch {
+            if (bidDetailRequestRef.current !== requestId) return;
             setBidDetailReviews([]);
             setBidDetailReviewStats({ avgRating: null, count: 0 });
         } finally {
-            setBidDetailReviewsLoading(false);
+            if (bidDetailRequestRef.current === requestId) {
+                setBidDetailReviewsLoading(false);
+            }
         }
     }
 
