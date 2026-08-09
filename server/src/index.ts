@@ -1,4 +1,6 @@
 import './loadEnv';
+import './instrument';
+import * as Sentry from '@sentry/node';
 import express, { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import cors from 'cors';
@@ -53,6 +55,8 @@ app.use('/verification', verificationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/support', supportRoutes);
 app.use('/reviews', reviewsRoutes);
+
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {

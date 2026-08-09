@@ -26,7 +26,7 @@ function startOfLocalWeek(d = new Date()) {
     return startOfLocalDay(monday);
 }
 
-function summarizeAwardsInRange(
+export function summarizeAwardsInRange(
     bids: {
         price: unknown;
         trip: { awardedAt: Date | null; createdAt: Date };

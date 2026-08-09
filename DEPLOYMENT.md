@@ -147,10 +147,14 @@ NODE_ENV=production
 API_URL=http://127.0.0.1:4000
 NEXT_PUBLIC_API_URL=https://your-domain.com
 NEXT_PUBLIC_KAKAO_JS_KEY=your_kakao_js_key
+
+# 선택: 에러 트래킹 (Sentry) — DSN 없으면 비활성 상태로 빌드/실행됨
+NEXT_PUBLIC_SENTRY_DSN=
 ```
 
 - `API_URL`: **서버 내부** Express 주소 (프록시용, 외부 노출 X)
 - `NEXT_PUBLIC_API_URL`: 브라우저가 `/uploads` 이미지를 불러올 **공개 URL**
+- `NEXT_PUBLIC_SENTRY_DSN`: Sentry 프로젝트 DSN. 비워두면 Sentry가 비활성화되며 빌드·실행에 영향 없음
 
 ### `server/.env` (Express)
 
@@ -163,6 +167,9 @@ CORS_ORIGIN=https://your-domain.com
 KAKAO_REST_API_KEY=your_rest_key
 KAKAO_MOBILITY_API_KEY=your_mobility_key
 STORAGE_PROVIDER=local
+
+# 선택: 에러 트래킹 (Sentry) — DSN 없으면 비활성 상태로 실행됨
+SENTRY_DSN=
 ```
 
 `JWT_SECRET` 생성 예:
@@ -235,6 +242,7 @@ pm2 restart all
 - [ ] 프로필·면허증 업로드 → 이미지 표시
 - [ ] 관리자 로그인·매출 탭
 - [ ] `curl https://도메인/api/health` 또는 Express `/health` (내부)
+- [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인
 
 ---
 

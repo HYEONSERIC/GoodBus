@@ -7,6 +7,8 @@
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
+        "test": "vitest run",
+        "test:watch": "vitest",
         "db:push": "prisma db push",
         "db:seed": "tsx src/prisma/seed.ts",
         "db:clear": "tsx src/prisma/clear.ts",
@@ -16,6 +18,7 @@
     },
     "dependencies": {
         "@prisma/client": "^5.19.1",
+        "@sentry/node": "^10.69.0",
         "bcrypt": "^5.1.1",
         "cookie-parser": "^1.4.6",
         "cors": "^2.8.5",
@@ -38,6 +41,7 @@
         "prisma": "^5.19.1",
         "prisma-erd-generator": "^2.1.0",
         "tsx": "^4.16.2",
-        "typescript": "^5.5.4"
+        "typescript": "^5.5.4",
+        "vitest": "^4.1.10"
     }
 }

@@ -174,7 +174,6 @@ router.get('/directions', async (req, res) => {
 
     const kakaoDirectionsKey =
         process.env.KAKAO_MOBILITY_API_KEY || process.env.KAKAO_REST_API_KEY;
-    const kakaoLocalKey = process.env.KAKAO_REST_API_KEY || kakaoDirectionsKey;
     if (!kakaoDirectionsKey) {
         return res
             .status(500)
@@ -182,6 +181,7 @@ router.get('/directions', async (req, res) => {
                 error: 'KAKAO_MOBILITY_API_KEY or KAKAO_REST_API_KEY is not set',
             });
     }
+    const kakaoLocalKey = process.env.KAKAO_REST_API_KEY || kakaoDirectionsKey;
 
     try {
         const origin = { x: originX, y: originY };

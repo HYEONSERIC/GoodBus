@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 import fs from 'fs';
 import path from 'path';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const envPath = path.join(process.cwd(), '.env.local');
 const envFile = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
@@ -22,4 +23,14 @@ const nextConfig: NextConfig = {
     },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+    silent: true,
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+    // 소스맵 업로드는 SENTRY_AUTH_TOKEN이 있을 때만 실행 (없으면 빌드에 영향 없음)
+    sourcemaps: {
+        disable: !process.env.SENTRY_AUTH_TOKEN,
+    },
+    widenClientFileUpload: true,
+});
