@@ -35,7 +35,7 @@ export async function sendBidReceivedEmail(
                     <p>You have received a new bid on your trip:</p>
                     <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
                         <p><strong>Route:</strong> ${tripOrigin} → ${tripDestination}</p>
-                        <p><strong>Bid Amount:</strong> $${bidPrice}</p>
+                        <p><strong>Bid Amount:</strong> ${bidPrice}만원</p>
                         <p><strong>From:</strong> ${bidderEmail}</p>
                     </div>
                     <p>Log in to your dashboard to view and manage all bids.</p>
@@ -74,7 +74,7 @@ export async function sendBidAwardedEmail(
                     <p>Congratulations! Your bid has been selected for the following trip:</p>
                     <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #28a745;">
                         <p><strong>Route:</strong> ${tripOrigin} → ${tripDestination}</p>
-                        <p><strong>Your Bid Amount:</strong> $${bidPrice}</p>
+                        <p><strong>Your Bid Amount:</strong> ${bidPrice}만원</p>
                         <p><strong>Passenger:</strong> ${passengerEmail}</p>
                     </div>
                     <p>Please contact the passenger to finalize the trip details.</p>

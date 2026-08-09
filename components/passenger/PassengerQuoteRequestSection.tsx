@@ -23,8 +23,8 @@ export function PassengerQuoteRequestSection({
                             회원등급
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        일반회원
+                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center text-gray-400">
+                        준비중
                     </CardContent>
                 </Card>
                 <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
@@ -33,8 +33,8 @@ export function PassengerQuoteRequestSection({
                             적립금
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        0원
+                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center text-gray-400">
+                        준비중
                     </CardContent>
                 </Card>
                 <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
@@ -43,8 +43,8 @@ export function PassengerQuoteRequestSection({
                             추천 혜택
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        월 100만원
+                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center text-gray-400">
+                        준비중
                     </CardContent>
                 </Card>
             </div>

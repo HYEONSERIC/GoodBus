@@ -31,6 +31,7 @@ export function PassengerQuoteTripCard({
     onToggleDetail,
     onToggleCancelMenu,
     onOpenCancelDialog,
+    onOpenEditDialog,
     onToggleQuotes,
     onSelectBid,
     formatDriverRating,
@@ -49,6 +50,7 @@ export function PassengerQuoteTripCard({
     onToggleDetail: () => void;
     onToggleCancelMenu: () => void;
     onOpenCancelDialog: () => void;
+    onOpenEditDialog: () => void;
     onToggleQuotes: () => void;
     onSelectBid: (bid: PassengerBid, bidTrip: PassengerTrip) => void;
     formatDriverRating: (driverId: string) => string;
@@ -82,6 +84,15 @@ export function PassengerQuoteTripCard({
                     </button>
                     {cancelMenuOpen ? (
                         <div className="absolute right-0 top-9 z-20 min-w-[130px] rounded-md border bg-white p-1 shadow-lg">
+                            {trip.status === 'open' ? (
+                                <button
+                                    type="button"
+                                    className="w-full rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                    onClick={onOpenEditDialog}
+                                >
+                                    여정 수정
+                                </button>
+                            ) : null}
                             <button
                                 type="button"
                                 className="w-full rounded px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50"

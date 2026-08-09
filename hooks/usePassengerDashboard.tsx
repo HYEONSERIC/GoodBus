@@ -30,6 +30,7 @@ import type {
     PassengerBid,
     PassengerTrip,
 } from '@/types/passenger';
+import type { PassengerEditTripValues } from '@/components/passenger/dialogs';
 
 const PASSENGER_ROUND_OPTS = { matchStatus: true } as const;
 
@@ -67,6 +68,10 @@ function usePassengerDashboardState() {
     );
     const [cancelDialogTrip, setCancelDialogTrip] = useState<Trip | null>(null);
     const [cancelReason, setCancelReason] = useState('');
+    const [editTripDialogTrip, setEditTripDialogTrip] = useState<Trip | null>(
+        null,
+    );
+    const [editTripSubmitting, setEditTripSubmitting] = useState(false);
     const [quotesExpandedTripIds, setQuotesExpandedTripIds] = useState<
         string[]
     >([]);
@@ -228,7 +233,9 @@ function usePassengerDashboardState() {
         }
         try {
             await Promise.all(
-                cancellableTripIds.map((tripId) => tripsAPI.cancel(tripId)),
+                cancellableTripIds.map((tripId) =>
+                    tripsAPI.cancel(tripId, reason),
+                ),
             );
             setCancelDialogTrip(null);
             setCancelReason('');
@@ -244,6 +251,36 @@ function usePassengerDashboardState() {
         const partner = getRoundPartnerTrip(trip, trips, PASSENGER_ROUND_OPTS);
         if (!partner) return [trip.id];
         return [trip.id, partner.id];
+    }
+
+    function closeEditTripDialog() {
+        setEditTripDialogTrip(null);
+    }
+
+    async function submitEditTrip(values: PassengerEditTripValues) {
+        if (!editTripDialogTrip) return;
+        setEditTripSubmitting(true);
+        try {
+            await tripsAPI.update(editTripDialogTrip.id, {
+                dateTime: new Date(values.dateTime).toISOString(),
+                paxCount: values.paxCount,
+                busSize: values.busSize,
+                stopoverDetail: values.stopoverDetail,
+                additionalRequest: values.additionalRequest,
+                paymentMethod: values.paymentMethod,
+            });
+            setEditTripDialogTrip(null);
+            setCancelMenuTripId(null);
+            await loadData();
+        } catch (error) {
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : '여정 수정에 실패했습니다',
+            );
+        } finally {
+            setEditTripSubmitting(false);
+        }
     }
 
     function toggleTripDetail(tripId: string) {
@@ -447,6 +484,11 @@ function usePassengerDashboardState() {
         tripForm,
         closeCancelDialog,
         confirmCancelTrip,
+        editTripDialogTrip,
+        setEditTripDialogTrip,
+        editTripSubmitting,
+        closeEditTripDialog,
+        submitEditTrip,
     };
 }
 

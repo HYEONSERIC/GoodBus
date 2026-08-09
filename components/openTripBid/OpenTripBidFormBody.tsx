@@ -1,7 +1,5 @@
 'use client';
 
-import type { ChangeEvent } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,16 +14,10 @@ export function OpenTripBidFormBody({
     extendedBid,
     setExtendedBid,
     profileForm,
-    bidPhotoUrls,
-    onBidPhotosPicked,
-    removeBidPhoto,
 }: {
     extendedBid: ExtendedBidForm;
     setExtendedBid: React.Dispatch<React.SetStateAction<ExtendedBidForm>>;
     profileForm: BidProfileForm;
-    bidPhotoUrls: string[];
-    onBidPhotosPicked: (e: ChangeEvent<HTMLInputElement>) => void;
-    removeBidPhoto: (slot: number) => void;
 }) {
     return (
         <>
@@ -337,59 +329,6 @@ export function OpenTripBidFormBody({
                             }
                             className="resize-none text-sm"
                         />
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            id="bid-photo-input"
-                            onChange={onBidPhotosPicked}
-                        />
-                        <div className="flex gap-2">
-                            {[0, 1, 2].map((slot) => (
-                                <div
-                                    key={slot}
-                                    className="relative flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded border border-dashed border-gray-300 bg-gray-50"
-                                >
-                                    {bidPhotoUrls[
-                                        slot
-                                    ] ? (
-                                        <>
-                                            <img
-                                                alt=""
-                                                src={
-                                                    bidPhotoUrls[
-                                                        slot
-                                                    ]
-                                                }
-                                                className="size-full object-cover"
-                                            />
-                                            <button
-                                                type="button"
-                                                className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-xs text-white"
-                                                onClick={() =>
-                                                    removeBidPhoto(
-                                                        slot
-                                                    )
-                                                }
-                                            >
-                                                −
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <label
-                                            htmlFor="bid-photo-input"
-                                            className="flex size-full cursor-pointer flex-col items-center justify-center gap-1 text-[10px] text-gray-500"
-                                        >
-                                            <span>
-                                                📷
-                                            </span>
-                                            추가
-                                        </label>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
                     </div>
 
                     <div className="space-y-3 border-t border-gray-100 py-4">

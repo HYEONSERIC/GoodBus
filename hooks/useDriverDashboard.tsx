@@ -207,21 +207,31 @@ function useDriverDashboardState() {
             setTrips(tripsWithoutMyBids);
             setMyBids(tripsWithMyBids);
 
-            const awardedTripData = await tripsAPI.getAll('awarded');
+            const [awardedTripData, cancelledTripData] = await Promise.all([
+                tripsAPI.getAll('awarded'),
+                tripsAPI.getAll('cancelled'),
+            ]);
 
-            const awardedTripsFiltered = (awardedTripData.trips || []).filter(
-                (trip: Trip) => {
-                    const hasMyAwardedBid = trip.bids?.some(
-                        (bid: Bid) =>
-                            bid.bidder.id === userData.user.id &&
-                            bid.status === 'awarded',
-                    );
+            const hasMyAwardedBid = (trip: Trip) =>
+                trip.bids?.some(
+                    (bid: Bid) =>
+                        bid.bidder.id === userData.user.id &&
+                        bid.status === 'awarded',
+                );
 
-                    return hasMyAwardedBid;
-                },
-            );
+            const awardedTripsFiltered = (
+                awardedTripData.trips || []
+            ).filter(hasMyAwardedBid);
+            // Trips the passenger cancelled after this bidder was awarded —
+            // shown with a "취소됨" badge instead of silently disappearing.
+            const cancelledTripsFiltered = (
+                cancelledTripData.trips || []
+            ).filter(hasMyAwardedBid);
 
-            setAwardedTrips(awardedTripsFiltered);
+            setAwardedTrips([
+                ...awardedTripsFiltered,
+                ...cancelledTripsFiltered,
+            ]);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';

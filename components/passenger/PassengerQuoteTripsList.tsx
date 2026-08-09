@@ -21,6 +21,7 @@ export function PassengerQuoteTripsList({
     onToggleQuotesTrip,
     onToggleCancelMenu,
     onOpenCancelDialog,
+    onOpenEditDialog,
     onSelectBid,
     formatDriverRating,
     resolveMediaUrl,
@@ -35,6 +36,7 @@ export function PassengerQuoteTripsList({
     onToggleQuotesTrip: (tripId: string) => void;
     onToggleCancelMenu: (tripId: string) => void;
     onOpenCancelDialog: (trip: PassengerTrip) => void;
+    onOpenEditDialog: (trip: PassengerTrip) => void;
     onSelectBid: (bid: PassengerBid, bidTrip: PassengerTrip) => void;
     formatDriverRating: (driverId: string) => string;
     resolveMediaUrl: (url?: string | null) => string | null;
@@ -98,6 +100,10 @@ export function PassengerQuoteTripsList({
                         }
                         onOpenCancelDialog={() => {
                             onOpenCancelDialog(trip);
+                            onToggleCancelMenu(trip.id);
+                        }}
+                        onOpenEditDialog={() => {
+                            onOpenEditDialog(trip);
                             onToggleCancelMenu(trip.id);
                         }}
                         onToggleQuotes={() => onToggleQuotesTrip(trip.id)}

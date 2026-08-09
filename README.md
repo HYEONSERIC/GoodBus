@@ -334,7 +334,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 | 기사 / 회사 / 승객 대시보드 | ✅ 완료 | 역할별 Provider 훅 + `*DashboardContent`, `page.tsx` 각 **~12줄**                                      |
 | 입찰자 프로필 (기사·회사)   | ✅ 완료 | `useBidderProfile`, `BidderProfileTabPanel` / `BidderProfileEditPanel`                                 |
 | 낙찰·예약 카드·모바일 셸    | ✅ 완료 | `AwardedTripCard`, `BidderAwardedTripsList`, `DashboardMobileShell`                                    |
-| 승객 Dialog 묶음            | ✅ 완료 | `components/passenger/dialogs/*` (취소·입찰 상세)                                                      |
+| 승객 Dialog 묶음            | ✅ 완료 | `components/passenger/dialogs/*` (취소·수정·입찰 상세)                                                 |
 | `OpenTripBidDialog` 분리    | ✅ 완료 | 오케스트레이터 ~193줄 + `components/openTripBid/*`, `lib/openTripBidForm.ts`                           |
 | `tripGroups`                | ✅ 완료 | 프론트·서버 공통 `server/src/utils/tripGroupsCore.ts` re-export                                        |
 | `lib/adminApi.ts`           | ✅ 완료 | `adminAPI` re-export (선택 import 경로)                                                                |
@@ -377,7 +377,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 | 여정 그룹   | `lib/tripGroups.ts` → `tripGroupsCore`                                                                           | 왕복·표시 그룹핑 (서버와 공유)                          |
 | 입찰자 UI   | `components/bidder/*`, `components/contracts/BidderAwardedTripsList.tsx`, `components/trips/AwardedTripCard.tsx` | 프로필·낙찰 목록·카드                                   |
 | 레이아웃    | `components/layout/DashboardMobileShell.tsx`                                                                     | 모바일 하단 탭·헤더 셸                                  |
-| 승객 Dialog | `components/passenger/dialogs/`                                                                                  | `PassengerCancelTripDialog`, `PassengerBidDetailDialog` |
+| 승객 Dialog | `components/passenger/dialogs/`                                                                                  | `PassengerCancelTripDialog`, `PassengerEditTripDialog`, `PassengerBidDetailDialog` |
 | 입찰 Dialog | `components/OpenTripBidDialog.tsx` + `components/openTripBid/*`                                                  | 수수료 단계·여정 요약·폼 본문 분리                      |
 
 ### `OpenTripBidDialog` 분리 (~951줄 → ~193줄)

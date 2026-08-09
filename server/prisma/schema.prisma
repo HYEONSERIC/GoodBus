@@ -158,6 +158,8 @@ model Trip {
   additionalRequest String?
   status      TripStatus @default(open)
   awardedAt   DateTime?
+  cancelReason String?
+  cancelledAt DateTime?
   createdAt   DateTime   @default(now())
   
   bids Bid[]

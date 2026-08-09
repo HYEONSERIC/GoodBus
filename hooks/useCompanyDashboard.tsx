@@ -14,7 +14,9 @@ import {
     bidsAPI,
     chatsAPI,
     verificationAPI,
+    reviewsAPI,
 } from '@/lib/api';
+import { type TripReviewRecord } from '@/components/TripReviewSection';
 import { useBidderProfile } from '@/hooks/useBidderProfile';
 import { useTripListFilters } from '@/hooks/useTripListFilters';
 import { useTripDistances } from '@/hooks/useTripDistances';
@@ -55,6 +57,7 @@ function useCompanyDashboardState() {
     );
     const [verification, setVerification] = useState<any>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
+    const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
     const [verificationFile, setVerificationFile] = useState<File | null>(null);
     const [verificationUploading, setVerificationUploading] = useState(false);
     const uploadBaseUrl =
@@ -77,6 +80,8 @@ function useCompanyDashboardState() {
     const [chatFocusRoomId, setChatFocusRoomId] = useState<string | null>(
         null,
     );
+    const [companySupportOpen, setCompanySupportOpen] = useState(false);
+    const [companyInquiryListKey, setCompanyInquiryListKey] = useState(0);
     const [membershipPrevTab, setMembershipPrevTab] = useState<
         | 'available'
         | 'contract'
@@ -100,6 +105,24 @@ function useCompanyDashboardState() {
     const currentMembershipLabel = getMembershipDisplayLabel(
         membershipPlan?.name,
     );
+    const [profileSection, setProfileSection] = useState<'details' | 'review'>(
+        'details',
+    );
+    const [driverReviews, setDriverReviews] = useState<
+        Array<
+            TripReviewRecord & {
+                trip?: {
+                    origin: string;
+                    destination: string;
+                    dateTime: string;
+                };
+            }
+        >
+    >([]);
+    const [driverReviewStats, setDriverReviewStats] = useState<{
+        avgRating: number | null;
+        count: number;
+    }>({ avgRating: null, count: 0 });
     const companyRegistrationUrl =
         verification?.companyRegistrationUrl ||
         user?.companyRegistrationUrl ||
@@ -117,6 +140,23 @@ function useCompanyDashboardState() {
         if (activeTab === 'contract') {
             loadData();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
+        reviewsAPI
+            .getDriverMe()
+            .then((data) => {
+                setDriverReviews(data.reviews || []);
+                setDriverReviewStats({
+                    avgRating: data.avgRating ?? null,
+                    count: data.count ?? 0,
+                });
+            })
+            .catch(() => {
+                setDriverReviews([]);
+                setDriverReviewStats({ avgRating: null, count: 0 });
+            });
     }, [activeTab]);
 
     async function loadData() {
@@ -153,21 +193,31 @@ function useCompanyDashboardState() {
             setTrips(tripsWithoutMyBids);
             setMyBids(tripsWithMyBids);
 
-            const awardedTripData = await tripsAPI.getAll('awarded');
+            const [awardedTripData, cancelledTripData] = await Promise.all([
+                tripsAPI.getAll('awarded'),
+                tripsAPI.getAll('cancelled'),
+            ]);
 
-            const awardedTripsFiltered = (awardedTripData.trips || []).filter(
-                (trip: Trip) => {
-                    const hasMyAwardedBid = trip.bids?.some(
-                        (bid: Bid) =>
-                            bid.bidder.id === userData.user.id &&
-                            bid.status === 'awarded',
-                    );
+            const hasMyAwardedBid = (trip: Trip) =>
+                trip.bids?.some(
+                    (bid: Bid) =>
+                        bid.bidder.id === userData.user.id &&
+                        bid.status === 'awarded',
+                );
 
-                    return hasMyAwardedBid;
-                },
-            );
+            const awardedTripsFiltered = (
+                awardedTripData.trips || []
+            ).filter(hasMyAwardedBid);
+            // Trips the passenger cancelled after this bidder was awarded —
+            // shown with a "취소됨" badge instead of silently disappearing.
+            const cancelledTripsFiltered = (
+                cancelledTripData.trips || []
+            ).filter(hasMyAwardedBid);
 
-            setAwardedTrips(awardedTripsFiltered);
+            setAwardedTrips([
+                ...awardedTripsFiltered,
+                ...cancelledTripsFiltered,
+            ]);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';
@@ -188,18 +238,35 @@ function useCompanyDashboardState() {
         totalManwon: number,
         note: string,
     ) {
-        if (verification?.companyRegistrationStatus !== 'approved') {
-            setVerificationDialogOpen(true);
-            return;
+        const registrationStatus = verification?.companyRegistrationStatus;
+        if (registrationStatus === 'pending') {
+            setPendingDialogOpen(true);
+            throw new Error('사업자등록증 승인 대기 중입니다.');
         }
-        await bidsAPI.create(tripId, totalManwon, note);
-        setBidDialogTrip(null);
-        setBidTripPartner(undefined);
-        await loadData();
+        if (registrationStatus !== 'approved') {
+            setVerificationDialogOpen(true);
+            throw new Error('사업자등록증 인증이 필요합니다.');
+        }
+        try {
+            await bidsAPI.create(tripId, totalManwon, note);
+            setBidDialogTrip(null);
+            setBidTripPartner(undefined);
+            await loadData();
+        } catch (error: unknown) {
+            await loadData();
+            throw error instanceof Error
+                ? error
+                : new Error('입찰 생성에 실패했습니다');
+        }
     }
 
     function handleBidButtonClick(trip: Trip) {
-        if (verification?.companyRegistrationStatus !== 'approved') {
+        const registrationStatus = verification?.companyRegistrationStatus;
+        if (registrationStatus === 'pending') {
+            setPendingDialogOpen(true);
+            return;
+        }
+        if (registrationStatus !== 'approved') {
             setVerificationDialogOpen(true);
             return;
         }
@@ -383,6 +450,8 @@ function useCompanyDashboardState() {
         verification,
         verificationDialogOpen,
         setVerificationDialogOpen,
+        pendingDialogOpen,
+        setPendingDialogOpen,
         verificationFile,
         setVerificationFile,
         verificationUploading,
@@ -425,6 +494,14 @@ function useCompanyDashboardState() {
         showMainHeader,
         headerVariant,
         headerTitle,
+        profileSection,
+        setProfileSection,
+        driverReviews,
+        driverReviewStats,
+        companySupportOpen,
+        setCompanySupportOpen,
+        companyInquiryListKey,
+        setCompanyInquiryListKey,
     };
 }
 

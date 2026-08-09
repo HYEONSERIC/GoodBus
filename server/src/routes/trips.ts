@@ -4,7 +4,6 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole, canViewRevenue } from '../middleware/auth';
 import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
 import { sendBidAwardedEmail } from '../utils/email';
-import { deleteTripFully } from '../utils/tripDelete';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
 
 const router = express.Router();
@@ -103,14 +102,45 @@ router.get('/', requireAuth, async (req, res) => {
         req.user!.role === UserRole.Admin &&
         !(await canViewRevenue(req.user!.userId));
 
+    // Drivers/companies must not see other bidders' prices or contact info
+    // (own bid stays intact). Currently applied to everyone in that role —
+    // there's no real paid-membership tier yet to gate this by, see
+    // PROJECT_STATUS.md. When one exists, branch here on the requester's
+    // membership before masking.
+    const isBidderRole =
+        req.user!.role === UserRole.Driver ||
+        req.user!.role === UserRole.BusCompany;
+    const tripsWithBidderMasking = isBidderRole
+        ? tripsWithMinBid.map((trip) => ({
+              ...trip,
+              bids: trip.bids.map((bid) =>
+                  bid.bidderId === req.user!.userId
+                      ? bid
+                      : {
+                            ...bid,
+                            price: 0,
+                            bidder: {
+                                ...bid.bidder,
+                                email: '',
+                                phoneNumber: null,
+                                displayName: null,
+                                companyName: null,
+                                profileImageUrl: null,
+                                vehicleImageUrls: [],
+                            },
+                        },
+              ),
+          }))
+        : tripsWithMinBid;
+
     res.json({
         trips: maskRevenue
-            ? tripsWithMinBid.map((trip) => ({
+            ? tripsWithBidderMasking.map((trip) => ({
                   ...trip,
                   minBidPrice: null,
                   bids: trip.bids.map((bid) => ({ ...bid, price: 0 })),
               }))
-            : tripsWithMinBid,
+            : tripsWithBidderMasking,
     });
 });
 
@@ -283,6 +313,10 @@ const updateTripSchema = z.object({
     servicePurpose: z.string().optional(),
     paymentMethod: z.enum(['cash', 'card']).optional(),
     additionalRequest: z.string().optional(),
+});
+
+const cancelTripSchema = z.object({
+    reason: z.string().trim().min(1).max(200),
 });
 
 router.patch(
@@ -580,7 +614,7 @@ router.post(
                         userId: awardedBid.bidder.id,
                         type: NotificationType.BID_AWARDED,
                         title: 'Bid Awarded',
-                        message: `Congratulations! Your bid of $${awardedBid.price} has been awarded for the trip from ${tripWithDetails.origin} to ${tripWithDetails.destination}`,
+                        message: `Congratulations! Your bid of ${awardedBid.price}만원 has been awarded for the trip from ${tripWithDetails.origin} to ${tripWithDetails.destination}`,
                         tripId: trip.id,
                         bidId: bidId,
                     },
@@ -610,6 +644,8 @@ router.patch(
     requireRole(UserRole.Passenger),
     async (req, res) => {
         try {
+            const { reason } = cancelTripSchema.parse(req.body);
+
             const trip = await prisma.trip.findUnique({
                 where: { id: req.params.id },
             });
@@ -628,12 +664,24 @@ router.patch(
                     .json({ error: 'Only open or awarded trips can be cancelled' });
             }
 
-            await prisma.$transaction(async (tx) => {
-                await deleteTripFully(trip.id, tx);
+            // Soft-cancel: keep the trip row (and its bids/chats/review) so the
+            // driver's UI can show a "취소됨" status instead of the trip just
+            // disappearing. `npm run db:purge-cancelled-trips` hard-deletes
+            // cancelled trips after the fact.
+            await prisma.trip.update({
+                where: { id: trip.id },
+                data: {
+                    status: TripStatus.cancelled,
+                    cancelReason: reason,
+                    cancelledAt: new Date(),
+                },
             });
 
-            res.json({ message: 'Trip deleted successfully' });
+            res.json({ message: 'Trip cancelled successfully' });
         } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res.status(400).json({ error: error.issues[0].message });
+            }
             console.error('Cancel trip error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }

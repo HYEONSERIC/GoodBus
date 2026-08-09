@@ -9,8 +9,11 @@ import { PassengerBookingTripsSection } from '@/components/passenger/PassengerBo
 import { PassengerQuoteTripsList } from '@/components/passenger/PassengerQuoteTripsList';
 import { PassengerQuoteRequestSection } from '@/components/passenger/PassengerQuoteRequestSection';
 import { PassengerTripCreateFlow } from '@/components/passenger/PassengerTripCreateFlow';
-import { PassengerBidDetailDialog } from '@/components/passenger/PassengerBidDetailDialog';
-import { PassengerCancelTripDialog } from '@/components/passenger/dialogs';
+import {
+    PassengerBidDetailDialog,
+    PassengerCancelTripDialog,
+    PassengerEditTripDialog,
+} from '@/components/passenger/dialogs';
 import {
     SupportInquiryDialog,
     PASSENGER_SUPPORT_MENU,
@@ -121,6 +124,14 @@ export function PassengerDashboardContent() {
                     onConfirm={p.confirmCancelTrip}
                 />
 
+                <PassengerEditTripDialog
+                    key={p.editTripDialogTrip?.id ?? 'closed'}
+                    trip={p.editTripDialogTrip}
+                    submitting={p.editTripSubmitting}
+                    onClose={p.closeEditTripDialog}
+                    onSubmit={p.submitEditTrip}
+                />
+
                 {p.activeTab === 'quote' && (
                     <div className="grid w-full max-w-xl gap-4 mx-auto">
                         <PassengerQuoteTripsList
@@ -140,6 +151,10 @@ export function PassengerDashboardContent() {
                             onOpenCancelDialog={(trip) => {
                                 p.setCancelDialogTrip(trip as Trip);
                                 p.setCancelReason('');
+                                p.setCancelMenuTripId(null);
+                            }}
+                            onOpenEditDialog={(trip) => {
+                                p.setEditTripDialogTrip(trip as Trip);
                                 p.setCancelMenuTripId(null);
                             }}
                             onSelectBid={(bid, bidTrip) =>

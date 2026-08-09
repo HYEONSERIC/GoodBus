@@ -97,9 +97,10 @@ export const tripsAPI = {
             method: 'POST',
             body: JSON.stringify({ bidId }),
         }),
-    cancel: async (tripId: string) =>
+    cancel: async (tripId: string, reason: string) =>
         fetchAPI(`/trips/${tripId}/cancel`, {
             method: 'PATCH',
+            body: JSON.stringify({ reason }),
         }),
     update: async (tripId: string, data: Record<string, unknown>) =>
         fetchAPI(`/trips/${tripId}`, {

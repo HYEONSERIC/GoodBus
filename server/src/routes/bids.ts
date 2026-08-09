@@ -102,7 +102,7 @@ router.post(
                     userId: bid.trip.passenger.id,
                     type: NotificationType.BID_RECEIVED,
                     title: 'New Bid Received',
-                    message: `You received a new bid of $${price} from ${bid.bidder.email} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
+                    message: `You received a new bid of ${price}만원 from ${bid.bidder.email} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
                     tripId: tripId,
                     bidId: bid.id,
                 },

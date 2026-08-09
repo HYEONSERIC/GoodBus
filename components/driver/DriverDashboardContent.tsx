@@ -319,6 +319,9 @@ export function DriverDashboardContent() {
                         onGarageSelect={d.profile.selectGaragePlace}
                         documentUrl={d.driverLicenseUrl}
                         uploadBaseUrl={d.uploadBaseUrl}
+                        onOpenVerification={() =>
+                            d.setVerificationDialogOpen(true)
+                        }
                         onSave={async () => {
                             await d.profile.handleProfileSave();
                             await d.loadData();
@@ -351,7 +354,12 @@ export function DriverDashboardContent() {
                             <p className="mt-3 text-lg font-semibold">
                                 {d.profile.displayName}
                             </p>
-                            <p className="text-xs text-gray-500">★★★★☆</p>
+                            <p className="text-xs text-gray-500">
+                                {formatBidderRatingLine(
+                                    d.driverReviewStats.avgRating,
+                                    d.driverReviewStats.count,
+                                )}
+                            </p>
                         </div>
                         <div className="divide-y border-y">
                             <button

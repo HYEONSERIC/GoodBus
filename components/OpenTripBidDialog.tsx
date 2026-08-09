@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ChangeEvent } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -51,8 +50,6 @@ export function OpenTripBidDialog({
     const [extendedBid, setExtendedBid] = useState<ExtendedBidForm>(() =>
         defaultExtendedBidForm(profileForm),
     );
-    const [bidPhotoFiles, setBidPhotoFiles] = useState<File[]>([]);
-    const [bidPhotoUrls, setBidPhotoUrls] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
     const tripRound = Boolean(partner);
@@ -61,33 +58,14 @@ export function OpenTripBidDialog({
         if (open && trip) {
             setUiStep('fee');
             setExtendedBid(defaultExtendedBidForm(profileForm));
-            setBidPhotoFiles([]);
         }
     }, [open, trip?.id, profileForm.busType, profileForm.capacity, profileForm.busYear]);
-
-    useEffect(() => {
-        const urls = bidPhotoFiles.map((f) => URL.createObjectURL(f));
-        setBidPhotoUrls(urls);
-        return () => urls.forEach((url) => URL.revokeObjectURL(url));
-    }, [bidPhotoFiles]);
 
     function handleOpenChange(next: boolean) {
         if (!next) {
             setUiStep('fee');
-            setBidPhotoFiles([]);
         }
         onOpenChange(next);
-    }
-
-    function onBidPhotosPicked(e: ChangeEvent<HTMLInputElement>) {
-        const incoming = Array.from(e.target.files || []);
-        if (incoming.length === 0) return;
-        setBidPhotoFiles((prev) => [...prev, ...incoming].slice(0, 3));
-        e.target.value = '';
-    }
-
-    function removeBidPhoto(slot: number) {
-        setBidPhotoFiles((prev) => prev.filter((_, i) => i !== slot));
     }
 
     async function handleSubmit() {
@@ -106,12 +84,7 @@ export function OpenTripBidDialog({
         }
         setSubmitting(true);
         try {
-            const note = assembleBidNote(
-                extendedBid,
-                per,
-                vehicleCount,
-                bidPhotoFiles.length,
-            );
+            const note = assembleBidNote(extendedBid, per, vehicleCount);
             await onSubmit({ tripId: trip.id, totalManwon, note });
             handleOpenChange(false);
         } catch (e) {
@@ -168,9 +141,6 @@ export function OpenTripBidDialog({
                                     extendedBid={extendedBid}
                                     setExtendedBid={setExtendedBid}
                                     profileForm={profileForm}
-                                    bidPhotoUrls={bidPhotoUrls}
-                                    onBidPhotosPicked={onBidPhotosPicked}
-                                    removeBidPhoto={removeBidPhoto}
                                 />
                             </div>
 
