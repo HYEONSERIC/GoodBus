@@ -11,6 +11,7 @@ const signupSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6),
     role: z.enum(['Passenger', 'Driver', 'BusCompany']),
+    displayName: z.string().trim().min(1).max(50).optional(),
 });
 
 const loginSchema = z.object({
@@ -20,7 +21,8 @@ const loginSchema = z.object({
 
 router.post('/signup', async (req, res) => {
     try {
-        const { email, password, role } = signupSchema.parse(req.body);
+        const { email, password, role, displayName } =
+            signupSchema.parse(req.body);
 
         const existingUser = await prisma.user.findUnique({
             where: { email },
@@ -37,11 +39,13 @@ router.post('/signup', async (req, res) => {
                 email,
                 passwordHash,
                 role: role as any,
+                displayName,
             },
             select: {
                 id: true,
                 email: true,
                 role: true,
+                displayName: true,
                 createdAt: true,
             },
         });

@@ -23,13 +23,18 @@ import {
 } from '@/components/admin/adminFaqConstants';
 import { adminAPI } from '@/lib/api';
 import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
+import { AdminActivitySectionFooter } from '@/components/admin/AdminActivitySectionFooter';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
 import { getErrorMessage } from '@/lib/errors';
+
+const SUPPORT_INQUIRY_LIST_MAX = 500;
 
 export function AdminFaqInquiriesPanel() {
     const {
         supportInquiries,
         supportInquiryMeta,
+        supportInquiryTake,
+        handleSupportInquiryLoadMore,
         supportInquiriesLoading,
         inquirySearch,
         setInquirySearch,
@@ -116,7 +121,7 @@ export function AdminFaqInquiriesPanel() {
                             placeholder="제목·내용·이메일·이름"
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
-                                    void loadSupportInquiries();
+                                    void loadSupportInquiries({ take: 300 });
                                 }
                             }}
                         />
@@ -158,7 +163,7 @@ export function AdminFaqInquiriesPanel() {
                     </AdminFilterField>
                     <Button
                         variant="outline"
-                        onClick={() => void loadSupportInquiries()}
+                        onClick={() => void loadSupportInquiries({ take: 300 })}
                     >
                         조회
                     </Button>
@@ -174,6 +179,7 @@ export function AdminFaqInquiriesPanel() {
                                 search: '',
                                 status: 'pending',
                                 sort: 'unanswered_first',
+                                take: 300,
                             });
                         }}
                     >
@@ -253,14 +259,14 @@ export function AdminFaqInquiriesPanel() {
                                 ))}
                             </tbody>
                         </table>
-                        {supportInquiryMeta &&
-                        supportInquiryMeta.returned <
-                            supportInquiryMeta.totalMatching ? (
-                            <p className="mt-2 text-xs text-slate-500">
-                                최근 {supportInquiryMeta.returned}건만 표시됩니다.
-                                검색·필터를 좁혀 주세요.
-                            </p>
-                        ) : null}
+                        <AdminActivitySectionFooter
+                            shownCount={supportInquiries.length}
+                            totalCount={supportInquiryMeta?.totalMatching}
+                            activityTake={supportInquiryTake}
+                            onLoadMore={handleSupportInquiryLoadMore}
+                            max={SUPPORT_INQUIRY_LIST_MAX}
+                            step={100}
+                        />
                     </div>
                 </AdminAsyncContent>
             </div>

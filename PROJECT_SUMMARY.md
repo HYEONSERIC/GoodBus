@@ -137,6 +137,7 @@ goodbus/
 -   `GET /admin/support-inquiries` — `search`, `status`, `sort`
 -   `GET /admin/revenue-stats` — monthly GMV (`from`/`to` YYYY-MM)
 -   `GET /admin/revenue-stats/awards` — award rows for CSV
+-   `GET /admin/audit-log` — admin action history (Super/Operations only)
 
 See **README.md** for the full endpoint list.
 
@@ -159,13 +160,21 @@ See **README.md** for the full endpoint list.
 -   CORS restricted to frontend origin
 -   Prisma ORM + Zod validation
 
+## Automated Testing, CI & Observability
+
+-   Vitest unit tests (pure-logic focus, ~48 tests total): `npm test` (frontend), `cd server && npm test` (backend)
+-   GitHub Actions CI (`.github/workflows/ci.yml`) — lint + build + test on push/PR to `main`/`aligo`; no CD (deploy is still manual)
+-   Sentry error tracking (`@sentry/nextjs` frontend, `@sentry/node` backend) — enabled only when `NODE_ENV=production` and a DSN is set
+-   Admin audit log (`AdminAuditLog` + `recordAdminAudit`) covers 5 admin write routes; viewable at `GET /admin/audit-log` / `AdminAuditLogPanel`
+
 ## Not Yet Built (production gaps)
 
--   Deployment / CI/CD
+-   Deployment automation (CD) — CI exists, but deploys are manual
 -   Payment gateway, refunds, settlement
 -   OAuth (Google/Kakao)
--   Rate limiting, audit log, full **adminRole API RBAC**
--   Central logging/metrics (e.g. Sentry)
+-   Rate limiting; full **adminRole API RBAC** (only a few routes use `requireAdminRole` today)
+-   Central logging/metrics beyond Sentry error tracking (no request metrics/dashboards)
+-   Route-level integration tests (current tests are pure-logic unit tests only)
 
 ## Getting Started
 

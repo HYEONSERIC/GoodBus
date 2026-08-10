@@ -188,3 +188,71 @@
 1. 입찰 데이터가 `note` 필드에 텍스트로 뭉쳐 저장되는 구조(추가비용·차량정보·부가서비스가 전부 자유텍스트) — 스키마·파싱 로직을 통째로 바꿔야 하는 큰 작업이라 범위 밖으로 판단, 다음에 별도 논의
 2. 왕복 여정 취소가 API 2번(`Promise.all`)으로 처리되는 원자성 문제 — 소프트 삭제 전환으로 리스크는 줄었지만(삭제가 아니라 상태 갱신), 트랜잭션 묶음 자체는 이번 라운드 합의 범위 밖이라 손대지 않음
 3. 경쟁 입찰 마스킹의 멤버십 등급별 차등 해제 — 실제 멤버십이 서버에 없어 구현 보류, 훅포인트만 남김
+
+# 테스트·CI·에러 트래킹 도입 (2026-08-10, 오전)
+
+원래 요청: "테스트·CI·에러 트래킹 도입 계획" → 계획 승인 후 구현. 목표는 회귀를 막을 최소한의 자동 검증(유닛 테스트+CI)과 프로덕션 장애를 알 수 있는 관측성(Sentry)을 갖추는 것.
+
+## 구현 내용
+
+| 영역 | 내용 |
+|---|---|
+| 유닛 테스트 | 프론트 Vitest(`vitest.config.mts`) + 백엔드 Vitest(`server/vitest.config.mts`, `server/vitest.setup.ts`로 `DATABASE_URL`/`JWT_SECRET` 더미값 주입) 도입. 순수 로직 위주로 46개 테스트 작성 (프론트: `lib/tripFilters`, `lib/adminRevenueDisplay`, `lib/exportRevenueCsv` / 백엔드: `tripGroupsCore`, `adminRevenue`, `adminOverview`, `uploadFileFilter`, `jwt`) |
+| CI | `.github/workflows/ci.yml` 신규 — `main`/`aligo` push·PR에서 프론트(`lint`→`build`→`test`)·백엔드(`prisma generate`→`build`→`test`) 2개 job 실행 |
+| 에러 트래킹 | Sentry 도입 — 프론트(`@sentry/nextjs`: `sentry.client/server/edge.config.ts`, `instrumentation.ts`, `next.config.ts`를 `withSentryConfig`로 래핑) + 백엔드(`@sentry/node`: `server/src/instrument.ts`를 진입점 최상단에서 import, `Sentry.setupExpressErrorHandler`). `NODE_ENV==='production'`이고 DSN이 설정된 경우에만 활성화 |
+| 린트 정리 | 루트 `npm run lint`가 `server/`·`deploy/`까지 스캔하던 문제 수정(`eslint.config.mjs`에 ignore 추가). React Compiler purity 경고 2건은 조사 후 **의도적으로 남김**(아래 참고) |
+
+## 검증
+
+- `npx tsc --noEmit`(루트+server), `npm run build`(루트+server), `npm run lint`(0 에러), `npm test`(루트+server, 46개 전부 통과)
+
+## 의도적으로 손 안 댄 것
+
+1. `components/PaymentCardsPanel.tsx`의 `react-hooks/set-state-in-effect` 경고, `components/passenger/PassengerQuoteTripsList.tsx`의 `react-hooks/purity`(`Date.now()`) 경고 — 둘 다 "정상적인" 방식(지연 초기화, `useMemo`)으로 고쳐봤지만 `BUGFIXES_2026-08-09.md`에 기록된 것과 동일한 회귀(로그인 직후 카드 안 보임 / 오래된 여정이 계속 "예정"으로 남음)가 재현됨 → 원복하고 `eslint-disable-next-line` + 이유를 코드에 주석으로 남김
+2. 라우트 레벨 통합 테스트(실제 DB 붙여서 API 엔드투엔드 검증)는 없음 — 이번 범위는 순수 함수 위주 유닛 테스트로 한정, 통합 테스트 인프라(테스트 DB 스핀업 등)는 별도 작업
+
+## 수정된 파일
+
+- `package.json`, `server/package.json` — 의존성(`@sentry/nextjs`, `@sentry/node`, `vitest`, `npm-run-all`) + `test`/`test:all` 스크립트
+- `next.config.ts`, `sentry.client.config.ts`/`sentry.server.config.ts`/`sentry.edge.config.ts`(신규), `instrumentation.ts`(신규), `server/src/instrument.ts`(신규), `server/src/index.ts`
+- `.github/workflows/ci.yml`(신규), `vitest.config.mts`/`server/vitest.config.mts`/`server/vitest.setup.ts`(신규)
+- `eslint.config.mjs` — `server/**`, `deploy/**` ignore 추가
+- `server/src/utils/adminOverview.ts`(`summarizeAwardsInRange` export), `lib/exportRevenueCsv.ts`(`buildRevenueAwardsCsv` 순수 함수 분리) — 테스트 가능하게 리팩터
+- `server/src/routes/kakao.ts` — 무관한 기존 TS 타입 에러 1건 수정(변수 할당 순서)
+- `.env.production.example`, `server/.env.example`, `DEPLOYMENT.md` — Sentry 환경변수·체크리스트
+- 신규 테스트 파일 9개(위 표 참고)
+- `CLAUDE.md` — 작업 브랜치 `aligo` 명시, 테스트/CI 서술 추가
+
+# 회원가입 이름 버그 + 관리자 감사 로그 + 목록 페이지네이션 (2026-08-10, 오후)
+
+원래 요청: 프로젝트 시급 이슈 분석(analyst 서브에이전트) → "운영/데이터" 카테고리 3건(감사 로그 없음, 입찰/문의 페이지네이션 미비, signup 이름 필드 누락 버그) 확정 → 계획 수립 후 구현.
+
+## 1. signup 이름(displayName) 저장 버그
+
+두 회원가입 화면 모두 이름 입력 state는 있었지만 `authAPI.signup` 호출 시 넘기지 않아 버려지던 문제. `lib/api.ts`(`authAPI.signup` 4번째 파라미터), `server/src/routes/auth.ts`(`signupSchema`에 `displayName` 추가, `user.create`에 반영), 두 signup 페이지(호출부만 `name.trim() || undefined`로 수정 — 빈 값은 `undefined`로 보내 서버의 `min(1)` 검증과 충돌하지 않게 처리)를 연결.
+
+**주의**: 이번 수정은 "저장"만 해결했고, 사이드바 등 화면에 `user.email`을 그대로 표시하는 부분(예: `components/passenger/PassengerDashboardContent.tsx:51`)은 그대로 남아 있음 — `displayName` 우선 표시 fallback은 이번 범위 밖(`PROJECT_STATUS.md`의 기존 버그 기록에 언급돼 있던 후속 작업, 아직 미완료).
+
+## 2. 관리자 감사 로그(AdminAuditLog)
+
+- **스키마**: `server/prisma/schema.prisma`에 `AdminAuditLog` 모델(`actorId`/`action`/`targetType`/`targetId`/`metadata` Json/`createdAt`) 추가, `User`에 역관계 추가, `db:push`로 반영(로컬 Postgres 컨테이너 기동 후 진행)
+- **기록 유틸**: `server/src/utils/adminAuditLog.ts`의 `recordAdminAudit` — DB 클라이언트를 파라미터로 주입 가능하게(`= prisma` 기본값) 만들어 테스트 가능하게 함, 내부 `try/catch`로 실패를 삼켜 실제 관리자 작업(차단·승인 등)을 막지 않음(fire-and-forget, `void recordAdminAudit(...)` 형태로 호출)
+- **기록 지점 5곳**(`server/src/routes/admin.ts`): 사용자 차단/해제, 서류 심사, 서브관리자 생성, 공지/FAQ 작성·수정·삭제, 문의 답변
+- **조회**: `GET /admin/audit-log`(`requireAdminRole(Super, Operations)` — revenue-stats와 동일하게 CustomerSupport 제외), 프론트 `AdminAuditLogPanel`(시각/관리자/행위/대상/메모 테이블 + 이전/다음 페이저), `adminNav.ts`에 "감사 로그" 탭 추가(Super/Operations만 노출)
+
+## 3. 입찰·문의 목록 페이지네이션
+
+- `components/admin/AdminActivitySectionFooter.tsx`를 `max`/`step` prop 기반으로 범용화(기존 3곳은 기본값으로 하위 호환 유지)
+- `GET /admin/bids`: `take` 고정값(50) → 쿼리 파라미터화(최대 200) + `prisma.bid.count`를 병렬 실행해 `meta.totalMatching` 추가. `where` 절을 변수로 추출하면서 타입이 widen되는 문제가 생겨 `Prisma.BidWhereInput` 명시적 타입 추가로 해결
+- `GET /admin/support-inquiries`: 유틸(`adminSupportInquiryList.ts`)은 이미 `take` 지원했지만 라우트가 안 전달하던 것만 연결
+- 프론트: `bidsTake`(+50, 최대 200)/`supportInquiryTake`(+100, 최대 500) state와 "더보기" 핸들러를 `useAdminDashboard.tsx`에 추가, 검색 조건이 바뀌는 지점(검색 버튼·딥링크 이동 등)마다 take를 초기값으로 리셋
+
+## 검증
+
+- `npx tsc --noEmit`(루트+server), `npm run build`(루트+server), `npm run lint`(0 에러, 기존 84개 경고 그대로), `npm test`(루트 18개+server 30개=48개, 신규 `recordAdminAudit` 테스트 2개 포함)
+
+## 의도적으로 손 안 댄 것
+
+1. 사이드바 등 화면의 이름 표시 fallback(위 1번 참고) — 저장 버그만 이번 범위
+2. `adminRole`별 API 권한의 전면 RBAC화 — 감사 로그 조회에는 `requireAdminRole` 적용했지만, 다른 admin 서브 라우트(공지/문의 등)는 여전히 서브롤 구분 없음(기존과 동일, 계획 범위 밖)
+3. 감사 로그 조회 화면의 필터(행위 종류·기간·관리자별 검색) — 1차는 최근순 목록+페이지네이션만, 필터는 후속 작업으로 남김

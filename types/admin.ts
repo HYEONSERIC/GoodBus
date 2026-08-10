@@ -6,7 +6,8 @@ export type AdminTabId =
     | 'verification'
     | 'revenue'
     | 'faq'
-    | 'adminCreate';
+    | 'adminCreate'
+    | 'auditLog';
 
 export interface SupportAdminPostRow {
     id: string;
@@ -263,6 +264,22 @@ export interface AdminNotificationHistoryRow {
             dateTime: string;
         } | null;
     } | null;
+}
+
+export interface AdminAuditLogRow {
+    id: string;
+    action: string;
+    targetType: string | null;
+    targetId: string | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+    actor: { email: string; adminRole: string | null };
+}
+
+export interface AdminAuditLogMeta {
+    page: number;
+    pageSize: number;
+    total: number;
 }
 
 export interface VerificationRow {

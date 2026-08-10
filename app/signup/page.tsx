@@ -27,7 +27,12 @@ export default function SignupPage() {
         setLoading(true);
 
         try {
-            await authAPI.signup(email, password, 'Passenger');
+            await authAPI.signup(
+                email,
+                password,
+                'Passenger',
+                name.trim() || undefined
+            );
             router.push('/dashboard');
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : '회원가입에 실패했습니다');

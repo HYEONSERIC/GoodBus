@@ -2,9 +2,9 @@ name: CI
 
 on:
     push:
-        branches: [main, refactor/GB]
+        branches: [main, aligo]
     pull_request:
-        branches: [main, refactor/GB]
+        branches: [main, aligo]
 
 jobs:
     frontend:

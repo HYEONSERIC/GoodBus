@@ -104,6 +104,7 @@ model User {
   supportInquiries     SupportInquiry[]
   reviewsWritten       TripReview[] @relation("PassengerReviews")
   reviewsReceived      TripReview[] @relation("DriverReviews")
+  adminAuditLogs       AdminAuditLog[] @relation("AdminAuditActor")
 }
 
 model SupportPost {
@@ -278,6 +279,21 @@ model ChatMessage {
   @@index([roomId])
   @@index([senderId])
   @@index([readAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation("AdminAuditActor", fields: [actorId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
 
 generator erd {

@@ -36,6 +36,7 @@ export function parseAdminNavQuery(
         'revenue',
         'faq',
         'adminCreate',
+        'auditLog',
     ];
     return {
         tab:

@@ -24,7 +24,12 @@ export default function SignupBusinessPage() {
         setError('');
         setLoading(true);
         try {
-            await authAPI.signup(email, password, accountType);
+            await authAPI.signup(
+                email,
+                password,
+                accountType,
+                name.trim() || undefined
+            );
             router.push('/dashboard');
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : '가입에 실패했습니다.');

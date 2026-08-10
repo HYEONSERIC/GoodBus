@@ -10,6 +10,10 @@ type AdminActivitySectionFooterProps = {
     totalCount?: number;
     activityTake: number;
     onLoadMore: () => void;
+    /** 목록이 불러올 수 있는 최대 건수. 기본값은 사용자 활동 목록 상한. */
+    max?: number;
+    /** "더보기" 클릭 시 늘어나는 건수(안내 문구에만 사용). 기본값 10. */
+    step?: number;
 };
 
 export function AdminActivitySectionFooter({
@@ -17,10 +21,11 @@ export function AdminActivitySectionFooter({
     totalCount,
     activityTake,
     onLoadMore,
+    max = ADMIN_ACTIVITY_LIST_MAX,
+    step = 10,
 }: AdminActivitySectionFooterProps) {
-    const canLoadMore =
-        shownCount >= activityTake && activityTake < ADMIN_ACTIVITY_LIST_MAX;
-    const atCap = activityTake >= ADMIN_ACTIVITY_LIST_MAX;
+    const canLoadMore = shownCount >= activityTake && activityTake < max;
+    const atCap = activityTake >= max;
     const hasMoreTotal =
         totalCount !== undefined && totalCount > shownCount;
 
@@ -34,13 +39,13 @@ export function AdminActivitySectionFooter({
             ) : null}
             {canLoadMore ? (
                 <Button size="sm" variant="outline" onClick={onLoadMore}>
-                    더보기 (+10건, 최대 {ADMIN_ACTIVITY_LIST_MAX}건)
+                    더보기 (+{step}건, 최대 {max}건)
                 </Button>
             ) : null}
             {atCap && hasMoreTotal ? (
                 <p className="text-xs text-amber-800">
-                    목록은 최대 {ADMIN_ACTIVITY_LIST_MAX}건까지 불러옵니다.
-                    상단 평균·건수 요약은 전체 기준입니다.
+                    목록은 최대 {max}건까지 불러옵니다. 상단 평균·건수 요약은
+                    전체 기준입니다.
                 </p>
             ) : null}
         </div>

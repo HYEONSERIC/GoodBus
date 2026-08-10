@@ -72,6 +72,12 @@ export function PaymentCardsPanel({ userId }: { userId?: string }) {
             const raw = localStorage.getItem(storageKey(userId));
             if (raw) {
                 const parsed = JSON.parse(raw) as PaymentCard[];
+                // 의도적: userId는 로그인 직후 undefined -> 인증 완료 후 실제
+                // 값으로 바뀌고, 그 변화에 반응해 해당 사용자의 카드 목록을
+                // 다시 읽어야 한다. useState 지연 초기화로 바꾸면 마운트
+                // 시점(userId 미확정)의 빈 값에 영영 고정된다.
+                // (BUGFIXES_2026-08-09.md 참고)
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 if (Array.isArray(parsed)) setCards(parsed);
             }
         } catch {

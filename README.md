@@ -78,7 +78,8 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **FAQ / support**: Notice & FAQ CRUD; inquiries with **search, status filter, 미답변 우선 sort**, reply dialog
 - **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer
 - **Admin creation**: Super-only
-- **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`)
+- **Audit log**: `AdminAuditLog` model + `recordAdminAudit` util records user block/unblock, verification review, admin creation, support post CRUD, and inquiry reply; `AdminAuditLogPanel` (Super/Operations only) shows a paginated, read-only table (time/admin/action/target/metadata)
+- **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`); **`AdminActivitySectionFooter`** ("더보기" load-more, configurable `max`/`step`) used for user activity, bids, and support inquiries lists
 
 ### Maps & data
 
@@ -289,7 +290,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `GET /admin/users/:id` - User detail, `bidderStats`, `reviewSummary`, passenger `tripSummary`
 - `PATCH /admin/users/:id/status` - Block/unblock
 - `GET /admin/users/:id/activity` - Trips, bids, reviews (`?take=`, max 50)
-- `GET /admin/bids` - Bid search (`search`, `bidStatus`, `tripStatus`, dates, `bidderId`, `passengerId`, `tripId`)
+- `GET /admin/bids` - Bid search (`search`, `bidStatus`, `tripStatus`, dates, `bidderId`, `passengerId`, `tripId`, `take` max 200)
 - `GET /admin/notification-history` - Notification log (filters)
 - `GET /admin/verifications` - Verification queue (`type`, `status`)
 - `GET /admin/verifications/:id/download` - Download submitted document
@@ -298,12 +299,13 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `POST /admin/support-posts` - Create post
 - `PATCH /admin/support-posts/:id` - Update post
 - `DELETE /admin/support-posts/:id` - Delete post
-- `GET /admin/support-inquiries` - List inquiries (`search`, `status`, `sort`)
+- `GET /admin/support-inquiries` - List inquiries (`search`, `status`, `sort`, `take` max 500)
 - `GET /admin/support-inquiries/:id` - Inquiry detail
 - `PATCH /admin/support-inquiries/:id` - Reply to inquiry
 - `GET /admin/revenue-stats` - GMV stats (`from`, `to` as `YYYY-MM`)
 - `GET /admin/revenue-stats/awards` - Award rows for month or range (CSV source)
 - `POST /admin/admins` - Create admin (Super)
+- `GET /admin/audit-log` - Admin action history (Super/Operations only, `page`/`pageSize`)
 
 ## Scripts
 
@@ -315,6 +317,8 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run linter
+- `npm test` - Run Vitest unit tests (frontend only)
+- `npm run test:all` - Run frontend + backend unit tests in parallel
 
 ### Backend
 
@@ -323,6 +327,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `npm run start` - Start production server
 - `npm run db:push` - Push Prisma schema to database
 - `npm run db:seed` - Seed test users; sample NY→Boston trip only if missing (idempotent)
+- `npm test` - Run Vitest unit tests (backend only)
 
 ## Project Status
 
@@ -339,7 +344,8 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 | `tripGroups`                | ✅ 완료 | 프론트·서버 공통 `server/src/utils/tripGroupsCore.ts` re-export                                        |
 | `lib/adminApi.ts`           | ✅ 완료 | `adminAPI` re-export (선택 import 경로)                                                                |
 | 관리자 공통 UX              | ✅ 완료 | `AdminErrorBanner`, `AdminLoadingSkeleton`, `AdminAsyncContent`, `AdminDeepLink`                       |
-| 관리자 RBAC·감사 로그       | 🔲 예정 | 탭 숨김만 적용; API 권한·`AdminAuditLog`는 미구현                                                      |
+| 관리자 감사 로그            | ✅ 완료 | `AdminAuditLog` + `recordAdminAudit`, `GET /admin/audit-log`(Super/Operations), `AdminAuditLogPanel`   |
+| 관리자 RBAC (전체)          | 🔲 예정 | 매출·감사로그 등 일부 라우트만 `requireAdminRole` 적용; 전체 서브롤 권한 분리는 아직 아님                |
 
 ### Dashboard `page.tsx` (Before → After)
 

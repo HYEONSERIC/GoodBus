@@ -252,8 +252,8 @@ pm2 restart all
 |------|------|
 | 파일 | S3 + `STORAGE_PROVIDER=s3` 구현 |
 | DB | 관리형 PostgreSQL로 이전 (또는 카페24 네이티브 Postgres로 전환) |
-| 모니터링 | Sentry, UptimeRobot |
-| CI/CD | GitHub Actions → SSH deploy |
+| 모니터링 | ~~Sentry~~ 도입 완료(위 6번 환경변수 참고) — UptimeRobot 등 가동률 모니터링은 아직 |
+| CI/CD | CI(`lint`+`build`+`test`, `.github/workflows/ci.yml`)는 이미 있음 — 남은 건 CD(GitHub Actions → SSH deploy 자동화) |
 | 결제 | 사업자 등록 후 PG 연동 |
 | 무중단 | 인스턴스 2대 + 로드밸런서 |
 

@@ -63,11 +63,12 @@ export const authAPI = {
     signup: async (
         email: string,
         password: string,
-        role: 'Passenger' | 'Driver' | 'BusCompany'
+        role: 'Passenger' | 'Driver' | 'BusCompany',
+        displayName?: string
     ) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({ email, password, role }),
+            body: JSON.stringify({ email, password, role, displayName }),
         }),
     login: async (email: string, password: string) =>
         fetchAPI('/auth/login', {
@@ -227,14 +228,8 @@ export const adminAPI = {
         bidderId?: string;
         passengerId?: string;
         tripId?: string;
-    }) => {
-        const query = params
-            ? `?${new URLSearchParams(
-                  Object.entries(params).filter(([, value]) => value) as string[][]
-              ).toString()}`
-            : '';
-        return fetchAPI(`/admin/bids${query}`);
-    },
+        take?: number;
+    }) => fetchAPI(`/admin/bids${toQuery(params)}`),
     getNotificationHistory: async (params?: {
         page?: number;
         pageSize?: number;
@@ -295,6 +290,7 @@ export const adminAPI = {
         search?: string;
         status?: string;
         sort?: string;
+        take?: number;
     }) => fetchAPI(`/admin/support-inquiries${toQuery(params)}`),
     getSupportInquiry: async (id: string) =>
         fetchAPI(`/admin/support-inquiries/${id}`),
@@ -321,6 +317,8 @@ export const adminAPI = {
                 to: params.to,
             })}`,
         ) as Promise<{ from: string; to: string; awards: unknown[] }>,
+    getAuditLog: async (params?: { page?: number; pageSize?: number }) =>
+        fetchAPI(`/admin/audit-log${toQuery(params)}`),
 };
 
 export const supportAPI = {

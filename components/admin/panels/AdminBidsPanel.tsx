@@ -26,10 +26,13 @@ import {
 import { AdminStatusBadge } from '@/components/admin/AdminStatusBadge';
 import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
 import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
+import { AdminActivitySectionFooter } from '@/components/admin/AdminActivitySectionFooter';
 import {
     ADMIN_AMOUNT_HEADERS,
     formatManWon,
 } from '@/lib/adminRevenueDisplay';
+
+const BIDS_LIST_MAX = 200;
 
 export function AdminBidsPanel() {
   const {
@@ -47,6 +50,9 @@ export function AdminBidsPanel() {
     bidLoading,
     bidError,
     setBidError,
+    bidsTake,
+    bidsMeta,
+    handleBidLoadMore,
     highlightBidId,
     handleBidSearch,
     openUserProfile,
@@ -238,6 +244,14 @@ export function AdminBidsPanel() {
                             </tbody>
                         </table>
                     </div>
+                    <AdminActivitySectionFooter
+                        shownCount={bidResults.length}
+                        totalCount={bidsMeta?.totalMatching}
+                        activityTake={bidsTake}
+                        onLoadMore={handleBidLoadMore}
+                        max={BIDS_LIST_MAX}
+                        step={50}
+                    />
                     </AdminAsyncContent>
 </AdminPanelCard>
   );
