@@ -67,6 +67,11 @@ enum SupportInquiryCategory {
   other
 }
 
+enum PhoneVerificationPurpose {
+  signup
+  login
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -76,7 +81,8 @@ model User {
   adminRole   AdminRole?
   displayName String?
   companyName String?
-  phoneNumber String?
+  phoneNumber String? @unique
+  phoneVerifiedAt DateTime?
   garageAddress String?
   busNumber   String?
   busType     String?
@@ -105,6 +111,19 @@ model User {
   reviewsWritten       TripReview[] @relation("PassengerReviews")
   reviewsReceived      TripReview[] @relation("DriverReviews")
   adminAuditLogs       AdminAuditLog[] @relation("AdminAuditActor")
+}
+
+model PhoneVerification {
+  id          String                    @id @default(cuid())
+  phoneNumber String
+  purpose     PhoneVerificationPurpose
+  codeHash    String
+  attempts    Int                       @default(0)
+  consumedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime                  @default(now())
+
+  @@index([phoneNumber, purpose, createdAt])
 }
 
 model SupportPost {

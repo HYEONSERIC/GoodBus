@@ -124,44 +124,54 @@ router.patch(
                 ? Number(req.body.capacity)
                 : null;
 
-        const user = await prisma.user.update({
-            where: { id: req.user!.userId },
-            data: {
-                displayName: req.body.name || null,
-                companyName: req.body.company || null,
-                phoneNumber: req.body.phone || null,
-                garageAddress: req.body.garage || null,
-                busNumber: req.body.busNumber || null,
-                busType: req.body.busType || null,
-                busYear: req.body.busYear || null,
-                driverComment: req.body.driverComment || null,
-                capacity:
-                    capacityValue !== null && Number.isFinite(capacityValue)
-                        ? capacityValue
-                        : null,
-                ...(profileImageUrl ? { profileImageUrl } : {}),
-                ...(vehicleImageUrls
-                    ? { vehicleImageUrls }
-                    : { vehicleImageUrls: currentUser.vehicleImageUrls }),
-            },
-            select: {
-                id: true,
-                role: true,
-                displayName: true,
-                companyName: true,
-                phoneNumber: true,
-                garageAddress: true,
-                busNumber: true,
-                busType: true,
-                busYear: true,
-                capacity: true,
-                driverComment: true,
-                profileImageUrl: true,
-                vehicleImageUrls: true,
-            },
-        });
+        try {
+            const user = await prisma.user.update({
+                where: { id: req.user!.userId },
+                data: {
+                    displayName: req.body.name || null,
+                    companyName: req.body.company || null,
+                    phoneNumber: req.body.phone || null,
+                    garageAddress: req.body.garage || null,
+                    busNumber: req.body.busNumber || null,
+                    busType: req.body.busType || null,
+                    busYear: req.body.busYear || null,
+                    driverComment: req.body.driverComment || null,
+                    capacity:
+                        capacityValue !== null && Number.isFinite(capacityValue)
+                            ? capacityValue
+                            : null,
+                    ...(profileImageUrl ? { profileImageUrl } : {}),
+                    ...(vehicleImageUrls
+                        ? { vehicleImageUrls }
+                        : { vehicleImageUrls: currentUser.vehicleImageUrls }),
+                },
+                select: {
+                    id: true,
+                    role: true,
+                    displayName: true,
+                    companyName: true,
+                    phoneNumber: true,
+                    garageAddress: true,
+                    busNumber: true,
+                    busType: true,
+                    busYear: true,
+                    capacity: true,
+                    driverComment: true,
+                    profileImageUrl: true,
+                    vehicleImageUrls: true,
+                },
+            });
 
-        res.json({ profile: user });
+            res.json({ profile: user });
+        } catch (error) {
+            if ((error as { code?: string })?.code === 'P2002') {
+                return res
+                    .status(400)
+                    .json({ error: '이미 사용 중인 휴대전화번호입니다' });
+            }
+            console.error('Profile update error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     }
 );
 

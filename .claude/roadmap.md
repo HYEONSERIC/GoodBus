@@ -1,6 +1,40 @@
-# 로드맵: 휴대전화(알리고 OTP) 로그인/회원가입 (2026-08-07 논의)
+# 로드맵: 휴대전화(알리고 OTP) 로그인/회원가입
 
-브랜치: `aligo`. 다음 세션에서 바로 이어서 작업할 수 있도록 설계 논의 결과를 정리해둠. **아래 계획은 여전히 착수 전 — OTP 관련 코드는 한 줄도 작성되지 않았음.** 다음 세션은 바로 "제안하는 작업 순서 1번(Prisma 스키마 변경)"부터 시작하면 됨.
+브랜치: `aligo`.
+
+## 다음 세션 시작 가이드 (2026-08-11 기준 — 여기서부터 읽으면 됨)
+
+**코드는 100% 완성·테스트 완료.** 남은 건 알리고 계정 가입 + 카카오 비즈니스 채널/템플릿 심사(외부 절차, 코드 아님)뿐. 이 세션을 다시 시작할 때 알리고 계정이나 카카오 채널이 준비돼 있다면, 아래 순서대로 바로 진행하면 됨.
+
+### 지금 상태 (env 변수 없음 → dev 모드)
+`server/.env`에 `ALIGO_*` 관련 값이 전혀 없어서 `server/src/utils/aligo.ts`가 실제 발송 대신 서버 콘솔에 `[Aligo:DEV] {전화번호} 인증번호: {4자리코드}`를 출력함. `npm run dev:all`로 지금 바로 회원가입/로그인 UI를 눌러봐도 실제 문자는 안 오고 서버 터미널에 코드가 찍힘 — 이 상태로도 플로우 자체는 완전히 동작함(QA 가능).
+
+### Step 1 — SMS 단독 발송부터 켜기 (알리고 가입만 됐으면 바로 가능)
+1. 알리고에서 API 키(`ALIGO_API_KEY`, `ALIGO_USER_ID`)와 승인된 발신번호(`ALIGO_SENDER`) 확보
+2. `server/.env`(`.env.example`이 아니라 실제 `.env`)에 3개 값 채우기
+3. 서버 재시작 후, 본인 실제 휴대폰 번호로 회원가입 또는 로그인 시도 → 진짜 문자가 오는지 확인
+4. 만약 실패하면 서버 로그의 `Aligo SMS error` / `Aligo SMS rejected` 메시지를 보고 알리고가 뭐라고 응답했는지 확인 → 필요시 `server/src/utils/aligo.ts`의 `sendViaSms` 함수만 수정 (다른 곳은 안 건드려도 됨)
+
+### Step 2 — 카카오 알림톡까지 켜기 (채널+템플릿 승인 후)
+1. 승인된 발신 프로필키(`ALIGO_KAKAO_SENDERKEY`), 템플릿 코드(`ALIGO_ALIMTALK_TPL_CODE`)를 알리고에서 확보
+2. 카카오가 승인한 템플릿 문구를 그대로 `ALIGO_ALIMTALK_TEMPLATE`에 넣기, 인증번호 자리만 `{{CODE}}`로 표시 (예: `[GoodBus] 인증번호는 {{CODE}} 입니다. 5분 이내에 입력해주세요.`)
+3. `server/.env`에 이 3개 추가 (Step 1의 3개는 그대로 유지 — SMS 폴백용으로 계속 씀)
+4. 서버 재시작 후 다시 실제 번호로 테스트 → 카카오톡 메시지로 오는지 확인
+5. **가장 중요**: 알림톡 API 응답 파라미터명(`result_code` 등)은 2026-08-07 리서치 기록을 그대로 코드에 반영한 것이라 실제 응답과 다를 수 있음. 처음 실발송 테스트할 때 서버 로그의 `Aligo AlimTalk rejected`/`error` 내용을 꼭 확인하고, 다르면 `server/src/utils/aligo.ts`의 `sendViaAlimtalk` 함수만 수정하면 됨(OTP 발급/검증/DB 로직은 전혀 안 건드려도 됨)
+
+### 관련 코드 위치
+| 역할 | 파일 |
+|---|---|
+| OTP 발급/검증, 쿨다운·횟수 제한 | `server/src/utils/otp.ts` |
+| 알리고 발송 클라이언트 (dev/SMS/알림톡 자동 전환) | `server/src/utils/aligo.ts` |
+| API 라우트 (`/auth/phone/request-otp`, `/auth/phone/login`, `/auth/signup` 확장) | `server/src/routes/auth.ts` |
+| DB 스키마 (`PhoneVerification`, `User.phoneNumber @unique`) | `server/prisma/schema.prisma` |
+| 로그인/가입 화면 | `app/login/page.tsx`, `app/signup/page.tsx` |
+| 프론트 API 클라이언트 | `lib/api.ts`의 `authAPI.requestPhoneOtp`/`loginWithPhone`, `authAPI.signup` |
+| env 변수 문서 | `server/.env.example` |
+
+### 참고: 이 문서 vs `PROJECT_STATUS.md` 설계 차이 (해결됨)
+이 문서의 원래(2026-08-07) 설계는 "전화번호만으로 가입(이메일 없음)"이었는데, `PROJECT_STATUS.md`(2026-08-06 결정)는 "이메일+비밀번호 유지, 전화번호는 추가 필수"였음 — 서로 상충. **`PROJECT_STATUS.md` 쪽으로 확정하고 구현함.** 아래 "확정된 설계 결정"부터 "제안하는 작업 순서"까지는 **당시 논의 기록으로만 보존**(email/passwordHash nullable 관련 내용은 무효), 알리고 API 파라미터 리서치는 여전히 유효해서 그대로 반영함.
 
 ## 진행 상황 업데이트 (2026-08-08)
 

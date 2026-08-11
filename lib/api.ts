@@ -64,11 +64,20 @@ export const authAPI = {
         email: string,
         password: string,
         role: 'Passenger' | 'Driver' | 'BusCompany',
-        displayName?: string
+        displayName?: string,
+        phoneNumber?: string,
+        phoneOtpCode?: string
     ) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({ email, password, role, displayName }),
+            body: JSON.stringify({
+                email,
+                password,
+                role,
+                displayName,
+                phoneNumber,
+                phoneOtpCode,
+            }),
         }),
     login: async (email: string, password: string) =>
         fetchAPI('/auth/login', {
@@ -80,6 +89,19 @@ export const authAPI = {
             method: 'POST',
         }),
     getMe: async () => fetchAPI('/auth/me'),
+    requestPhoneOtp: async (
+        phoneNumber: string,
+        purpose: 'signup' | 'login'
+    ) =>
+        fetchAPI('/auth/phone/request-otp', {
+            method: 'POST',
+            body: JSON.stringify({ phoneNumber, purpose }),
+        }),
+    loginWithPhone: async (phoneNumber: string, code: string) =>
+        fetchAPI('/auth/phone/login', {
+            method: 'POST',
+            body: JSON.stringify({ phoneNumber, code }),
+        }),
 };
 
 export const tripsAPI = {
