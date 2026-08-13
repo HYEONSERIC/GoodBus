@@ -17,6 +17,8 @@ import verificationRoutes from './routes/verification';
 import profileRoutes from './routes/profile';
 import supportRoutes from './routes/support';
 import reviewsRoutes from './routes/reviews';
+import paymentsRoutes from './routes/payments';
+import { handleTossWebhook } from './routes/paymentsWebhook';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -29,6 +31,15 @@ app.use(
 );
 
 app.use(cookieParser());
+
+// HMAC 서명 검증을 위해 원본 바이트가 필요하므로, 이 라우트만 전역
+// express.json()보다 먼저 express.raw()로 등록한다 (Stripe 웹훅과 동일 패턴).
+app.post(
+    '/payments/webhook',
+    express.raw({ type: '*/*' }),
+    handleTossWebhook
+);
+
 app.use(express.json());
 app.use(
     '/uploads',
@@ -55,6 +66,7 @@ app.use('/verification', verificationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/support', supportRoutes);
 app.use('/reviews', reviewsRoutes);
+app.use('/payments', paymentsRoutes);
 
 Sentry.setupExpressErrorHandler(app);
 

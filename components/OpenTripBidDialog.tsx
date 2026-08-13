@@ -11,6 +11,7 @@ import {
 import { OpenTripBidFeeStep } from '@/components/openTripBid/OpenTripBidFeeStep';
 import { OpenTripBidFormBody } from '@/components/openTripBid/OpenTripBidFormBody';
 import { OpenTripBidTripSummarySection } from '@/components/openTripBid/OpenTripBidTripSummarySection';
+import { OpenTripBidMinPricePanel } from '@/components/openTripBid/OpenTripBidMinPricePanel';
 import { Button } from '@/components/ui/button';
 import {
     assembleBidNote,
@@ -137,6 +138,9 @@ export function OpenTripBidDialog({
                                     distanceKm={distanceKm}
                                     membershipLabel={membershipLabel}
                                 />
+                                <div className="mt-3">
+                                    <OpenTripBidMinPricePanel />
+                                </div>
                                 <OpenTripBidFormBody
                                     extendedBid={extendedBid}
                                     setExtendedBid={setExtendedBid}

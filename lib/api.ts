@@ -142,6 +142,53 @@ export const bidsAPI = {
         fetchAPI(`/bids/${id}/withdraw`, {
             method: 'PATCH',
         }),
+    getMinByVehicleType: async () => fetchAPI('/bids/min-by-vehicle-type'),
+};
+
+export const paymentsAPI = {
+    getBillingKeyStatus: async () => fetchAPI('/payments/billing-key'),
+    deleteBillingKey: async () =>
+        fetchAPI('/payments/billing-key', { method: 'DELETE' }),
+    confirmBillingKey: async (authKey: string) =>
+        fetchAPI('/payments/billing-key/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ authKey }),
+        }),
+    subscribe: async (
+        plan: 'Plus' | 'Premium' | 'Business',
+        acknowledgedPlanChange?: boolean,
+    ) =>
+        fetchAPI('/payments/subscribe', {
+            method: 'POST',
+            body: JSON.stringify({ plan, acknowledgedPlanChange }),
+        }),
+    cancelSubscription: async () =>
+        fetchAPI('/payments/subscribe/cancel', {
+            method: 'POST',
+        }),
+    getSubscriptionStatus: async () => fetchAPI('/payments/subscribe/status'),
+    reactivateSubscription: async () =>
+        fetchAPI('/payments/subscribe/reactivate', {
+            method: 'POST',
+        }),
+    cancelPendingDowngrade: async () =>
+        fetchAPI('/payments/subscribe/downgrade/cancel', {
+            method: 'POST',
+        }),
+    subscribeMinBidAddon: async () =>
+        fetchAPI('/payments/addon/min-bid/subscribe', {
+            method: 'POST',
+        }),
+    cancelMinBidAddonSubscription: async () =>
+        fetchAPI('/payments/addon/min-bid/cancel', {
+            method: 'POST',
+        }),
+    getMinBidAddonSubscriptionStatus: async () =>
+        fetchAPI('/payments/addon/min-bid/status'),
+    reactivateMinBidAddonSubscription: async () =>
+        fetchAPI('/payments/addon/min-bid/reactivate', {
+            method: 'POST',
+        }),
 };
 
 export const chatsAPI = {

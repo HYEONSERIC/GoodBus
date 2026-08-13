@@ -2,8 +2,9 @@ import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole, NotificationType } from '@prisma/client';
+import { UserRole, NotificationType, BusSize } from '@prisma/client';
 import { sendBidReceivedEmail } from '../utils/email';
+import { CONCURRENT_BID_LIMITS } from '../utils/membershipLimits';
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.post(
                     role: true,
                     driverLicenseStatus: true,
                     companyRegistrationStatus: true,
+                    membershipPlan: true,
                 },
             });
 
@@ -66,6 +68,19 @@ router.post(
                 return res
                     .status(400)
                     .json({ error: 'Trip is not open for bidding' });
+            }
+
+            const activeBidCount = await prisma.bid.count({
+                where: { bidderId: req.user!.userId, status: 'open' },
+            });
+            const bidLimit = CONCURRENT_BID_LIMITS[bidder.membershipPlan];
+
+            if (activeBidCount >= bidLimit) {
+                return res.status(400).json({
+                    error: 'Concurrent active bid limit reached for your membership plan',
+                    limit: bidLimit,
+                    current: activeBidCount,
+                });
             }
 
             const bid = await prisma.bid.create({
@@ -127,6 +142,47 @@ router.post(
             console.error('Create bid error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
+    }
+);
+
+router.get(
+    '/min-by-vehicle-type',
+    requireAuth,
+    requireRole(UserRole.Driver, UserRole.BusCompany),
+    async (req, res) => {
+        const bidder = await prisma.user.findUnique({
+            where: { id: req.user!.userId },
+            select: { minBidAddonPurchased: true },
+        });
+
+        if (!bidder) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        if (!bidder.minBidAddonPurchased) {
+            return res.json({ purchased: false });
+        }
+
+        const busSizes: BusSize[] = ['small', 'medium', 'large'];
+        const results = await Promise.all(
+            busSizes.map((busSize) =>
+                prisma.bid.aggregate({
+                    where: { status: 'awarded', trip: { busSize } },
+                    _min: { price: true },
+                })
+            )
+        );
+
+        const minByVehicleType = Object.fromEntries(
+            busSizes.map((busSize, i) => [
+                busSize,
+                results[i]._min.price !== null
+                    ? Number(results[i]._min.price)
+                    : null,
+            ])
+        );
+
+        res.json({ purchased: true, minByVehicleType });
     }
 );
 

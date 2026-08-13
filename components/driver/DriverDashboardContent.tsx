@@ -275,6 +275,7 @@ export function DriverDashboardContent() {
                         vehicleYearLabel={d.profile.vehicleYearLabel}
                         insuranceLabel={d.insuranceLabel}
                         companyLabel={d.profile.companyLabel}
+                        membershipLabel={d.currentMembershipLabel}
                         vehiclePhotos={d.profile.vehiclePhotos}
                         driverComment={d.profile.profileForm.driverComment}
                         ratingLine={formatBidderRatingLine(
@@ -336,7 +337,12 @@ export function DriverDashboardContent() {
                     <PaymentCardsPanel userId={d.user?.id} />
                 )}
 
-                {d.activeTab === 'membership' && <MembershipPlansPanel />}
+                {d.activeTab === 'membership' && (
+                    <MembershipPlansPanel
+                        userId={d.user?.id}
+                        currentPlanName={d.membershipPlan?.name}
+                    />
+                )}
             </DashboardMobileShell>
             {d.menuOpen && (
                 <div className="fixed inset-0 z-40 bg-black/30">

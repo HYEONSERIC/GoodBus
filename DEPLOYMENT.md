@@ -147,6 +147,7 @@ NODE_ENV=production
 API_URL=http://127.0.0.1:4000
 NEXT_PUBLIC_API_URL=https://your-domain.com
 NEXT_PUBLIC_KAKAO_JS_KEY=your_kakao_js_key
+NEXT_PUBLIC_TOSS_CLIENT_KEY=your_toss_client_key
 
 # 선택: 에러 트래킹 (Sentry) — DSN 없으면 비활성 상태로 빌드/실행됨
 NEXT_PUBLIC_SENTRY_DSN=
@@ -154,6 +155,7 @@ NEXT_PUBLIC_SENTRY_DSN=
 
 - `API_URL`: **서버 내부** Express 주소 (프록시용, 외부 노출 X)
 - `NEXT_PUBLIC_API_URL`: 브라우저가 `/uploads` 이미지를 불러올 **공개 URL**
+- `NEXT_PUBLIC_TOSS_CLIENT_KEY`: 토스페이먼츠 클라이언트 키(공개 키, `test_ck_`/`live_ck_`) — 가맹심사 통과 전까지는 테스트 키 유지
 - `NEXT_PUBLIC_SENTRY_DSN`: Sentry 프로젝트 DSN. 비워두면 Sentry가 비활성화되며 빌드·실행에 영향 없음
 
 ### `server/.env` (Express)
@@ -167,10 +169,14 @@ CORS_ORIGIN=https://your-domain.com
 KAKAO_REST_API_KEY=your_rest_key
 KAKAO_MOBILITY_API_KEY=your_mobility_key
 STORAGE_PROVIDER=local
+TOSS_SECRET_KEY=your_toss_secret_key
+TOSS_WEBHOOK_SECRET=your_toss_webhook_secret
 
 # 선택: 에러 트래킹 (Sentry) — DSN 없으면 비활성 상태로 실행됨
 SENTRY_DSN=
 ```
+
+`TOSS_SECRET_KEY`/`TOSS_WEBHOOK_SECRET`: https://developers.tosspayments.com/my/api-keys 에서 발급(무료 가입, 사업자등록 불필요) — 가맹심사 통과 전까지는 테스트(`test_`) 키 유지, 통과 후 값만 실 키로 교체(코드 변경 없음).
 
 `JWT_SECRET` 생성 예:
 
@@ -209,6 +215,16 @@ pm2 startup   # 출력되는 sudo 명령 실행
 ```
 
 `deploy/ecosystem.config.cjs`는 호스팅사와 무관하게 그대로 재사용합니다.
+
+### 8-1. 정기결제(멤버십 + 최저입찰금액 애드온) 크론 등록
+
+`npm run db:purge-*`류와 동일하게 pm2 상시 프로세스가 아니라 독립 스크립트 + 시스템 crontab 방식입니다. 멤버십 구독과 최저입찰금액 애드온 구독을 한 스크립트에서 함께 처리합니다. 매일 1회 실행하면 충분합니다 (`nextBillingAt`이 지난 구독만 골라 처리하므로 몇 시간 늦어져도 안전).
+
+```bash
+crontab -e
+# 매일 04:00 (KST) 실행 예시
+0 4 * * * cd /var/www/goodbus/server && /usr/bin/npm run db:run-recurring-billing >> /var/log/goodbus-billing.log 2>&1
+```
 
 ---
 

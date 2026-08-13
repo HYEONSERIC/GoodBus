@@ -365,6 +365,8 @@ router.get('/me', requireAuth, async (req, res) => {
             driverComment: true,
             profileImageUrl: true,
             vehicleImageUrls: true,
+            membershipPlan: true,
+            minBidAddonPurchased: true,
         },
     });
 
@@ -372,7 +374,12 @@ router.get('/me', requireAuth, async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user });
+    res.json({
+        user: {
+            ...user,
+            membershipPlan: { name: user.membershipPlan },
+        },
+    });
 });
 
 export default router;

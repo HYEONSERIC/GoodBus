@@ -274,6 +274,7 @@ export function CompanyDashboardContent() {
                         vehicleYearLabel={c.profile.vehicleYearLabel}
                         insuranceLabel={c.insuranceLabel}
                         companyLabel={c.profile.companyLabel}
+                        membershipLabel={c.currentMembershipLabel}
                         vehiclePhotos={c.profile.vehiclePhotos}
                         driverComment={c.profile.profileForm.driverComment}
                         ratingLine={formatBidderRatingLine(
@@ -335,7 +336,12 @@ export function CompanyDashboardContent() {
                     <PaymentCardsPanel userId={c.user?.id} />
                 )}
 
-                {c.activeTab === 'membership' && <MembershipPlansPanel />}
+                {c.activeTab === 'membership' && (
+                    <MembershipPlansPanel
+                        userId={c.user?.id}
+                        currentPlanName={c.membershipPlan?.name}
+                    />
+                )}
             </DashboardMobileShell>
             {c.menuOpen && (
                 <div className="fixed inset-0 z-40 bg-black/30">

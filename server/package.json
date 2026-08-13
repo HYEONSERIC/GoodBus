@@ -14,7 +14,8 @@
         "db:clear": "tsx src/prisma/clear.ts",
         "db:reset": "tsx src/prisma/clear.ts && tsx src/prisma/seed.ts",
         "db:purge-cancelled-trips": "tsx src/prisma/purge-cancelled-trips.ts",
-        "db:purge-expired-open-trips": "tsx src/prisma/purge-expired-open-trips.ts"
+        "db:purge-expired-open-trips": "tsx src/prisma/purge-expired-open-trips.ts",
+        "db:run-recurring-billing": "tsx src/prisma/run-recurring-billing.ts"
     },
     "dependencies": {
         "@prisma/client": "^5.19.1",

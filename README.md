@@ -46,8 +46,8 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Bid withdraw**: Withdraw own open bids
 - **Contracts / awarded trips**: Shared `AwardedTripCard` + `BidderAwardedTripsList`; my-bid detail overlay
 - **Profile**: View/edit profile, vehicle gallery, verification status (`BidderProfileTabPanel`, `useBidderProfile`)
-- **Membership plans**: Plan list UI for bidders (`MembershipPlansPanel`)
-- **Payment cards (client UI)**: Add/list cards stored in browser `localStorage` per user (`PaymentCardsPanel`) — not a live payment gateway
+- **Membership plans**: 4-tier subscriptions (Basic/Plus/Premium/Business) with server-enforced concurrent-bid limits, plus a standalone min-bid-amount add-on subscription — upgrade charges immediately, downgrade is scheduled for the next billing date (`MembershipPlansPanel`)
+- **Payment cards**: Toss Payments billing-key registration via their hosted card-entry widget — raw card numbers never touch our server, only the billing-key token is stored (`PaymentCardsPanel`, `lib/toss.ts`). Test keys as of 2026-08-13
 - **Reviews received**: Driver/company “my reviews” with average rating (`GET /reviews/driver/me`)
 - **Chat**: Same list → room flow as passengers; room titles show route + optional “손님” suffix for bidders
 
