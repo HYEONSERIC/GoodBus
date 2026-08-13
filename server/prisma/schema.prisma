@@ -71,6 +71,7 @@ enum SubscriptionStatus {
 enum PaymentTransactionKind {
   membership_subscription
   min_bid_addon
+  platform_commission
 }
 
 enum PaymentTransactionStatus {
@@ -300,6 +301,8 @@ model PaymentTransaction {
   amount         Int
   tossOrderId    String                   @unique
   tossPaymentKey String?                  @unique
+  tripId         String?
+  bidId          String?
   failReason     String?
   metadata       Json?
   createdAt      DateTime                 @default(now())
@@ -313,6 +316,7 @@ enum NotificationType {
   BID_AWARDED
   VERIFICATION_APPROVED
   VERIFICATION_REJECTED
+  AWARD_PAYMENT_FAILED
 }
 
 model Notification {

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
@@ -5,6 +6,12 @@ import { requireAuth, requireRole, canViewRevenue } from '../middleware/auth';
 import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
 import { sendBidAwardedEmail } from '../utils/email';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
+import { chargeBillingKey, cancelPayment } from '../utils/toss';
+import { DEFAULT_PLATFORM_COMMISSION_RATE } from '../utils/adminRevenue';
+
+// 프론트 components/passenger/dialogs/PassengerCancelTripDialog.tsx의
+// PASSENGER_CANCEL_REASONS 문구와 동기화 유지 — 이 사유만 수수료 미환불.
+const DRIVER_FAULT_CANCEL_REASON = '기사님 사유로 취소';
 
 const router = express.Router();
 
@@ -569,6 +576,78 @@ router.post(
                 },
             });
 
+            if (!awardedBid || !tripWithDetails) {
+                return res
+                    .status(404)
+                    .json({ error: 'Trip or bid not found' });
+            }
+
+            // 낙찰 확정에 실패했을 때(카드 미등록/결제 실패) 승객·기사 양쪽에 알린다.
+            const notifyAwardPaymentFailed = () =>
+                prisma.notification.createMany({
+                    data: [
+                        {
+                            userId: tripWithDetails.passenger.id,
+                            type: NotificationType.AWARD_PAYMENT_FAILED,
+                            title: '낙찰 처리 실패',
+                            message: `선택하신 입찰(${awardedBid.price}만원)의 수수료 결제가 실패하여 낙찰이 확정되지 않았습니다. 다른 입찰을 선택해주세요.`,
+                            tripId: trip.id,
+                            bidId: awardedBid.id,
+                        },
+                        {
+                            userId: awardedBid.bidder.id,
+                            type: NotificationType.AWARD_PAYMENT_FAILED,
+                            title: '낙찰 처리 실패',
+                            message: `낙찰 확정 중 수수료 결제에 실패하여 낙찰이 취소되었습니다. 등록된 카드 정보를 확인해주세요.`,
+                            tripId: trip.id,
+                            bidId: awardedBid.id,
+                        },
+                    ],
+                });
+
+            // 낙찰 수수료(10%) 선결제 — 결제가 성공해야 낙찰을 확정한다.
+            const commissionWon = Math.round(
+                Number(awardedBid.price) * 10000 * DEFAULT_PLATFORM_COMMISSION_RATE,
+            );
+            const billingKey = await prisma.billingKey.findUnique({
+                where: { userId: awardedBid.bidder.id },
+            });
+
+            if (!billingKey) {
+                await notifyAwardPaymentFailed();
+                return res.status(400).json({
+                    error: '낙찰자의 결제 카드가 등록되어 있지 않아 낙찰할 수 없습니다',
+                });
+            }
+
+            const commissionOrderId = crypto.randomUUID();
+            const commissionResult = await chargeBillingKey(
+                billingKey.tossBillingKey,
+                billingKey.customerKey,
+                commissionWon,
+                commissionOrderId,
+                'GoodBus 낙찰 수수료 (10%)',
+            );
+
+            if (!commissionResult.ok) {
+                await prisma.paymentTransaction.create({
+                    data: {
+                        userId: awardedBid.bidder.id,
+                        kind: 'platform_commission',
+                        status: 'failed',
+                        amount: commissionWon,
+                        tossOrderId: commissionOrderId,
+                        tripId: trip.id,
+                        bidId: awardedBid.id,
+                        failReason: commissionResult.errorText,
+                    },
+                });
+                await notifyAwardPaymentFailed();
+                return res.status(400).json({
+                    error: '수수료 결제에 실패하여 낙찰할 수 없습니다',
+                });
+            }
+
             // Use a transaction to ensure atomicity
             await prisma.$transaction([
                 // Award the winning bid
@@ -590,45 +669,56 @@ router.post(
                     where: { id: trip.id },
                     data: { status: 'awarded', awardedAt: new Date() },
                 }),
+                // Record the commission charge
+                prisma.paymentTransaction.create({
+                    data: {
+                        userId: awardedBid.bidder.id,
+                        kind: 'platform_commission',
+                        status: 'succeeded',
+                        amount: commissionWon,
+                        tossOrderId: commissionOrderId,
+                        tossPaymentKey: commissionResult.data.paymentKey,
+                        tripId: trip.id,
+                        bidId: awardedBid.id,
+                    },
+                }),
             ]);
 
             // Create notification for the bidder
-            if (awardedBid && tripWithDetails) {
-                await prisma.chatRoom.upsert({
-                    where: {
-                        tripId_bidderId: {
-                            tripId: trip.id,
-                            bidderId: awardedBid.bidder.id,
-                        },
-                    },
-                    update: {},
-                    create: {
+            await prisma.chatRoom.upsert({
+                where: {
+                    tripId_bidderId: {
                         tripId: trip.id,
-                        passengerId: tripWithDetails.passenger.id,
                         bidderId: awardedBid.bidder.id,
                     },
-                });
+                },
+                update: {},
+                create: {
+                    tripId: trip.id,
+                    passengerId: tripWithDetails.passenger.id,
+                    bidderId: awardedBid.bidder.id,
+                },
+            });
 
-                await prisma.notification.create({
-                    data: {
-                        userId: awardedBid.bidder.id,
-                        type: NotificationType.BID_AWARDED,
-                        title: 'Bid Awarded',
-                        message: `Congratulations! Your bid of ${awardedBid.price}만원 has been awarded for the trip from ${tripWithDetails.origin} to ${tripWithDetails.destination}`,
-                        tripId: trip.id,
-                        bidId: bidId,
-                    },
-                });
+            await prisma.notification.create({
+                data: {
+                    userId: awardedBid.bidder.id,
+                    type: NotificationType.BID_AWARDED,
+                    title: 'Bid Awarded',
+                    message: `Congratulations! Your bid of ${awardedBid.price}만원 has been awarded for the trip from ${tripWithDetails.origin} to ${tripWithDetails.destination}`,
+                    tripId: trip.id,
+                    bidId: bidId,
+                },
+            });
 
-                // Send email to bidder
-                sendBidAwardedEmail(
-                    awardedBid.bidder.email,
-                    tripWithDetails.origin,
-                    tripWithDetails.destination,
-                    Number(awardedBid.price),
-                    tripWithDetails.passenger.email
-                );
-            }
+            // Send email to bidder
+            sendBidAwardedEmail(
+                awardedBid.bidder.email,
+                tripWithDetails.origin,
+                tripWithDetails.destination,
+                Number(awardedBid.price),
+                tripWithDetails.passenger.email
+            );
 
             res.json({ message: 'Trip awarded successfully' });
         } catch (error) {
@@ -662,6 +752,36 @@ router.patch(
                 return res
                     .status(400)
                     .json({ error: 'Only open or awarded trips can be cancelled' });
+            }
+
+            // 낙찰된 여정이 취소되면 이미 청구한 수수료를 환불한다 — 단,
+            // "기사님 사유로 취소"는 미환불(프론트 PASSENGER_CANCEL_REASONS와 문구 동기화 유지).
+            if (trip.status === 'awarded' && reason !== DRIVER_FAULT_CANCEL_REASON) {
+                const commissionCharge = await prisma.paymentTransaction.findFirst({
+                    where: {
+                        tripId: trip.id,
+                        kind: 'platform_commission',
+                        status: 'succeeded',
+                    },
+                });
+
+                if (commissionCharge?.tossPaymentKey) {
+                    const refundResult = await cancelPayment(
+                        commissionCharge.tossPaymentKey,
+                        `여정 취소 (${reason})`,
+                    );
+                    if (refundResult.ok) {
+                        await prisma.paymentTransaction.update({
+                            where: { id: commissionCharge.id },
+                            data: { status: 'cancelled' },
+                        });
+                    } else {
+                        console.error(
+                            'Commission refund failed:',
+                            refundResult.errorText,
+                        );
+                    }
+                }
             }
 
             // Soft-cancel: keep the trip row (and its bids/chats/review) so the

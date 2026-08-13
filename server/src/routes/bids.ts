@@ -56,6 +56,16 @@ router.post(
                 });
             }
 
+            const billingKey = await prisma.billingKey.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            if (!billingKey) {
+                return res.status(400).json({
+                    error: '결제 카드 등록 후 입찰할 수 있습니다',
+                    requiresBillingKey: true,
+                });
+            }
+
             const trip = await prisma.trip.findUnique({
                 where: { id: tripId },
             });

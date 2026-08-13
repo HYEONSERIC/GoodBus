@@ -273,6 +273,19 @@ function useDriverDashboardState() {
             await loadData();
         } catch (error: unknown) {
             await loadData();
+            const message = error instanceof Error ? error.message : '';
+            if (message.includes('결제 카드 등록')) {
+                setBidDialogTrip(null);
+                setBidTripPartner(undefined);
+                if (
+                    confirm(
+                        '입찰하려면 결제 카드 등록이 필요합니다. 지금 등록하시겠습니까?',
+                    )
+                ) {
+                    setActiveTab('paymentCards');
+                }
+                return;
+            }
             throw error instanceof Error
                 ? error
                 : new Error('입찰 생성에 실패했습니다');

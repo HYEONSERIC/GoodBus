@@ -72,3 +72,10 @@ export function chargeBillingKey(
     });
 }
 
+/** 결제 전액 취소(환불) — 빌링 과금도 결제이므로 paymentKey로 그대로 적용 가능 */
+export function cancelPayment(paymentKey: string, cancelReason: string) {
+    return tossPost<TossPaymentResult>(`/payments/${paymentKey}/cancel`, {
+        cancelReason,
+    });
+}
+

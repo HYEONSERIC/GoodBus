@@ -122,6 +122,7 @@ export function PassengerDashboardContent() {
                     onCancelReasonChange={p.setCancelReason}
                     onClose={p.closeCancelDialog}
                     onConfirm={p.confirmCancelTrip}
+                    isAwarded={p.cancelDialogTrip?.status === 'awarded'}
                 />
 
                 <PassengerEditTripDialog
