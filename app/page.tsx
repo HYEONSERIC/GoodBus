@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import {
     ArrowRight,
@@ -57,8 +58,14 @@ export default function Home() {
             <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/80 backdrop-blur-md">
                 <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
                     <Link href="/" className="flex items-center gap-2">
-                        <span className="flex size-8 items-center justify-center rounded-lg bg-[#2563eb] text-white">
-                            <Bus className="size-4.5" strokeWidth={2.25} />
+                        <span className="flex size-8 items-center justify-center overflow-hidden rounded-lg">
+                            <Image
+                                src="/pic/로고.png"
+                                alt="버스대절 로고"
+                                width={32}
+                                height={32}
+                                className="h-full w-full object-cover"
+                            />
                         </span>
                         <span className="text-lg font-bold tracking-tight text-stone-900">
                             버스대절

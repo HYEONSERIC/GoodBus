@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 
@@ -13,7 +14,19 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
         <div className="min-h-screen bg-[#f3f3f5] flex flex-col">
             <header className="h-16 border-b bg-white">
                 <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
-                    <Link href="/" className="text-xl font-bold text-[#2563eb]">
+                    <Link
+                        href="/"
+                        className="flex items-center gap-2 text-xl font-bold text-[#2563eb]"
+                    >
+                        <span className="flex size-8 items-center justify-center overflow-hidden rounded-lg">
+                            <Image
+                                src="/pic/로고.png"
+                                alt="버스대절 로고"
+                                width={32}
+                                height={32}
+                                className="h-full w-full object-cover"
+                            />
+                        </span>
                         버스대절
                     </Link>
                     <nav className="flex items-center gap-6 text-sm font-semibold text-gray-800">
