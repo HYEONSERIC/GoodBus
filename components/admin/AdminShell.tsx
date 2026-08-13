@@ -94,7 +94,7 @@ export function AdminShell({
                     </Button>
                 </div>
 
-                <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
+                <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto px-3 py-4">
                     {ADMIN_NAV_GROUPS.map((group) => {
                         const items = visibleNavItems.filter(
                             (item) => item.group === group,
@@ -199,7 +199,7 @@ export function AdminShell({
                     </span>
                 </div>
 
-                <main className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6 md:p-8">
+                <main className="min-h-0 min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">
                     <header className="hidden flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4 lg:flex">
                         <div>
                             <h2 className="text-xl font-semibold tracking-tight text-slate-900">

@@ -282,7 +282,7 @@ export function AdminFaqInquiriesPanel() {
                     }
                 }}
             >
-                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
                     {supportInquiryDetailLoading && !supportInquiryDetail ? (
                         <>
                             <DialogHeader>

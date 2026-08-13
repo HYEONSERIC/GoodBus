@@ -75,7 +75,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                             <span className="min-w-[4rem]" />
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <div className="scrollbar-none min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-24 pt-4">
+                            <div className="scrollbar-none min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-5 pb-24 pt-4">
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>출발지</Label>
                                 <Input

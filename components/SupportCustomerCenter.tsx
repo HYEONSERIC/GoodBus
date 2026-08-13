@@ -258,7 +258,7 @@ export function SupportCustomerCenter({
                             {myInquiriesError}
                         </p>
                     ) : null}
-                    <ul className="max-h-[min(40vh,280px)] divide-y divide-gray-100 overflow-y-auto sm:max-h-[min(45vh,360px)]">
+                    <ul className="max-h-[min(40vh,280px)] divide-y divide-gray-100 overflow-x-hidden overflow-y-auto sm:max-h-[min(45vh,360px)]">
                         {myInquiriesLoading && myInquiries.length === 0 ? (
                             <li className="px-3 py-8 text-center text-sm text-gray-500">
                                 불러오는 중…

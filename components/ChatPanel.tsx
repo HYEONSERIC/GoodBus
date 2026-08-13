@@ -745,7 +745,7 @@ export function ChatPanel({
                     {error}
                 </p>
             )}
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#f3f3f5] p-4">
+            <div className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto bg-[#f3f3f5] p-4">
                 {messages.length === 0 ? (
                     <p className="py-12 text-center text-sm text-gray-500">
                         아직 메시지가 없습니다.

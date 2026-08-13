@@ -129,7 +129,7 @@ export function OpenTripBidDialog({
                         </div>
 
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
+                            <div className="scrollbar-none min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-3 pb-4">
                                 <OpenTripBidTripSummarySection
                                     trip={trip}
                                     partner={partner}

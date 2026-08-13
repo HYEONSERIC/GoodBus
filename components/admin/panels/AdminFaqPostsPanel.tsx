@@ -204,7 +204,7 @@ export function AdminFaqPostsPanel() {
                                     setNewPostDialogOpen(open);
                                 }}
                             >
-                                <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                                <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
                                     <DialogHeader>
                                         <DialogTitle>
                                             공지 / FAQ 등록
@@ -354,7 +354,7 @@ export function AdminFaqPostsPanel() {
                             if (!open) setEditPost(null);
                         }}
                     >
-                        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
+                        <DialogContent className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-lg md:translate-x-[7rem]">
                             <DialogHeader>
                                 <DialogTitle>게시글 수정</DialogTitle>
                                 <DialogDescription>

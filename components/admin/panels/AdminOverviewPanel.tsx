@@ -145,7 +145,7 @@ export function AdminOverviewPanel() {
                             최근 여정
                         </h3>
                     </div>
-                    <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+                    <div className="max-h-96 divide-y divide-slate-100 overflow-x-hidden overflow-y-auto">
                         {overview.recentTrips.length === 0 ? (
                             <p className="px-4 py-6 text-center text-sm text-slate-400">
                                 최근 여정이 없습니다
@@ -231,7 +231,7 @@ export function AdminOverviewPanel() {
                             최근 입찰
                         </h3>
                     </div>
-                    <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+                    <div className="max-h-96 divide-y divide-slate-100 overflow-x-hidden overflow-y-auto">
                         {overview.recentBids.length === 0 ? (
                             <p className="px-4 py-6 text-center text-sm text-slate-400">
                                 최근 입찰이 없습니다
