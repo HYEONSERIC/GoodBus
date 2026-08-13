@@ -21,6 +21,7 @@ A full-stack charter bus bidding platform with role-based access control, passen
     -   `/admin` - overview, users, activity, bids, verifications, support posts/inquiries, **revenue-stats**, notification history, admin creation
     -   `/kakao` - places search + directions proxy
     -   `/payments` - Toss Payments billing-key registration, membership tier subscribe/cancel/reactivate (upgrade=immediate, downgrade=scheduled), min-bid-amount add-on subscription, webhook (test keys as of 2026-08-13)
+    -   `/bids`, `/trips` - now also enforce billing-key-required-to-bid and pre-charge the 10% platform commission on award (see below)
 -   **Admin utilities**: `adminRevenue.ts`, `adminOverview.ts`, `adminUserStats.ts`, `adminSupportInquiryList.ts`
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
@@ -52,6 +53,7 @@ A full-stack charter bus bidding platform with role-based access control, passen
 ✅ JWT cookies, RBAC on routes, Prisma schema, idempotent seed (sample trip if missing)  
 ✅ `npm run dev:all` — frontend + backend concurrently  
 ✅ **Toss Payments integration** (test keys): billing-key card registration, 4-tier membership subscriptions with server-enforced bid limits, upgrade/downgrade flow (upgrade=immediate charge, downgrade=scheduled at next billing date), standalone min-bid-amount add-on subscription, recurring billing cron (`run-recurring-billing.ts`), webhook signature verification
+✅ **Platform commission (10%) auto-charge/refund** (test keys): bidding requires a registered card; awarding a trip pre-charges the winning bidder 10% of the bid price *before* the award is finalized (failure blocks the award, notifies passenger + bidder); trip cancellation auto-refunds the commission unless cancelled for the driver's own fault. No admin UI yet to view these records — DB (`PaymentTransaction`) only
 
 ## File Structure (condensed)
 

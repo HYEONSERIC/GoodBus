@@ -48,6 +48,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Profile**: View/edit profile, vehicle gallery, verification status (`BidderProfileTabPanel`, `useBidderProfile`)
 - **Membership plans**: 4-tier subscriptions (Basic/Plus/Premium/Business) with server-enforced concurrent-bid limits, plus a standalone min-bid-amount add-on subscription — upgrade charges immediately, downgrade is scheduled for the next billing date (`MembershipPlansPanel`)
 - **Payment cards**: Toss Payments billing-key registration via their hosted card-entry widget — raw card numbers never touch our server, only the billing-key token is stored (`PaymentCardsPanel`, `lib/toss.ts`). Test keys as of 2026-08-13
+- **Platform commission (10%)**: Bidding is blocked without a registered card; on award, the commission (bid price × 10%) is charged to the winning bidder's card *before* the award is finalized — failure blocks the award and notifies both parties. Trip cancellation auto-refunds the commission unless the reason is "기사님 사유로 취소" (driver's fault, non-refundable) (`server/src/routes/trips.ts`, `server/src/routes/bids.ts`)
 - **Reviews received**: Driver/company “my reviews” with average rating (`GET /reviews/driver/me`)
 - **Chat**: Same list → room flow as passengers; room titles show route + optional “손님” suffix for bidders
 
@@ -76,7 +77,7 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Notification history**: Admin-wide log with filters; price column in 만원
 - **Verification**: Approve/reject with reason; **Korean status labels** (승인 대기/완료/반려)
 - **FAQ / support**: Notice & FAQ CRUD; inquiries with **search, status filter, 미답변 우선 sort**, reply dialog
-- **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer
+- **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer. Note: this is still an independent GMV-based estimate, not yet reconciled against the real `PaymentTransaction` commission charges (see Payments below) — no admin UI exists yet to view actual payment/subscription records
 - **Admin creation**: Super-only
 - **Audit log**: `AdminAuditLog` model + `recordAdminAudit` util records user block/unblock, verification review, admin creation, support post CRUD, and inquiry reply; `AdminAuditLogPanel` (Super/Operations only) shows a paginated, read-only table (time/admin/action/target/metadata)
 - **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`); **`AdminActivitySectionFooter`** ("더보기" load-more, configurable `max`/`step`) used for user activity, bids, and support inquiries lists
