@@ -27,7 +27,7 @@ export function OpenTripBidFeeStep({ onConfirm }: { onConfirm: () => void }) {
             </p>
             <Button
                 type="button"
-                className="h-11 w-full rounded-md bg-[#e08030] font-semibold text-white hover:bg-[#d07526]"
+                className="h-11 w-full rounded-md bg-[#2563eb] font-semibold text-white hover:bg-[#1d4ed8]"
                 onClick={onConfirm}
             >
                 확인

@@ -159,7 +159,7 @@ export default function SignupPage() {
                             />
                             <Button
                                 type="button"
-                                className="whitespace-nowrap bg-[#e08030] hover:bg-[#d07526]"
+                                className="whitespace-nowrap bg-[#2563eb] hover:bg-[#1d4ed8]"
                                 onClick={handlePhoneOtpRequest}
                                 disabled={
                                     !phoneNumber ||
@@ -197,7 +197,7 @@ export default function SignupPage() {
 
                     <Button
                         type="submit"
-                        className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                        className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                         disabled={loading}
                     >
                         {loading ? '계정 생성 중...' : '회원가입'}

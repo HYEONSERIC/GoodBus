@@ -697,7 +697,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                                 <Button
                                     type="button"
                                     onClick={createTrip}
-                                    className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
+                                    className="h-11 w-full rounded-md bg-[#2563eb] text-sm font-semibold text-white hover:bg-[#1d4ed8]"
                                 >
                                     견적 등록하기
                                 </Button>
@@ -730,7 +730,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         </div>
 
                         <Button
-                            className="mt-4 h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            className="mt-4 h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                             onClick={() => {
                                 setCompanionInfoOpen(false);
                                 setCompanionInfoConfirmed(true);

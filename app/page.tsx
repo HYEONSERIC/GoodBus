@@ -57,7 +57,7 @@ export default function Home() {
             <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/80 backdrop-blur-md">
                 <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
                     <Link href="/" className="flex items-center gap-2">
-                        <span className="flex size-8 items-center justify-center rounded-lg bg-[#e08030] text-white">
+                        <span className="flex size-8 items-center justify-center rounded-lg bg-[#2563eb] text-white">
                             <Bus className="size-4.5" strokeWidth={2.25} />
                         </span>
                         <span className="text-lg font-bold tracking-tight text-stone-900">
@@ -79,7 +79,7 @@ export default function Home() {
                         </Link>
                         <Button
                             asChild
-                            className="rounded-full bg-[#e08030] px-5 text-white shadow-sm hover:bg-[#d07526]"
+                            className="rounded-full bg-[#2563eb] px-5 text-white shadow-sm hover:bg-[#1d4ed8]"
                         >
                             <Link href="/login">로그인</Link>
                         </Button>
@@ -121,7 +121,7 @@ export default function Home() {
                             <h1 className="mt-6 text-3xl leading-[1.2] font-extrabold tracking-tight text-balance text-white sm:text-4xl sm:leading-[1.15] md:text-5xl">
                                 버스 대절, 비교가 아니라
                                 <br />
-                                <span className="text-[#e08030]">입찰</span>로 결정하세요
+                                <span className="text-[#2563eb]">입찰</span>로 결정하세요
                             </h1>
                             <p className="mt-5 max-w-md text-base leading-relaxed text-white/75 sm:mt-6 md:text-lg">
                                 여정 정보를 등록하면 여러 기사와 버스회사가 직접 가격을
@@ -131,7 +131,7 @@ export default function Home() {
                                 <Button
                                     asChild
                                     size="lg"
-                                    className="h-12 w-full rounded-full bg-[#e08030] px-7 text-base text-white shadow-sm shadow-[#e08030]/25 hover:bg-[#d07526] sm:w-auto"
+                                    className="h-12 w-full rounded-full bg-[#2563eb] px-7 text-base text-white shadow-sm shadow-[#2563eb]/25 hover:bg-[#1d4ed8] sm:w-auto"
                                 >
                                     <Link href="/signup">
                                         무료로 여정 등록하기
@@ -158,7 +158,7 @@ export default function Home() {
                                 key={vehicle.name}
                                 className="group rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
                             >
-                                <span className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#a35a1a]">
+                                <span className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#1e40af]">
                                     <vehicle.icon className="size-5.5" strokeWidth={2} />
                                 </span>
                                 <p className="mt-4 text-xl font-bold text-stone-900">
@@ -170,7 +170,7 @@ export default function Home() {
                                 <Button
                                     asChild
                                     variant="outline"
-                                    className="mt-5 h-9 w-full rounded-xl border-stone-200 text-sm font-medium text-stone-700 group-hover:border-[#e08030]/40 group-hover:text-[#a35a1a]"
+                                    className="mt-5 h-9 w-full rounded-xl border-stone-200 text-sm font-medium text-stone-700 group-hover:border-[#2563eb]/40 group-hover:text-[#1e40af]"
                                 >
                                     <Link href="/signup">
                                         가격비교
@@ -185,7 +185,7 @@ export default function Home() {
                 <section className="border-y border-stone-200 bg-white">
                     <div className="mx-auto w-full max-w-6xl px-6 py-16">
                         <div className="text-center">
-                            <p className="text-sm font-semibold text-[#a35a1a]">
+                            <p className="text-sm font-semibold text-[#1e40af]">
                                 이용 방법
                             </p>
                             <h2 className="mt-2 text-2xl font-bold tracking-tight text-stone-900 md:text-3xl">
@@ -202,7 +202,7 @@ export default function Home() {
                                     key={step.title}
                                     className="relative flex flex-col items-center text-center md:items-start md:text-left"
                                 >
-                                    <span className="relative z-10 flex size-12 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-[#e08030] shadow-sm">
+                                    <span className="relative z-10 flex size-12 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-[#2563eb] shadow-sm">
                                         <step.icon className="size-5.5" strokeWidth={2} />
                                     </span>
                                     <p className="mt-4 text-xs font-semibold text-stone-400">
@@ -233,7 +233,7 @@ export default function Home() {
 
                     <div className="mt-8 grid gap-4 md:grid-cols-3">
                         <div className="flex flex-col justify-between rounded-2xl bg-gradient-to-br from-[#1b2130] to-[#0e1119] p-7 text-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg md:col-span-2 md:row-span-2">
-                            <span className="flex size-11 items-center justify-center rounded-xl bg-white/10 text-[#e08030]">
+                            <span className="flex size-11 items-center justify-center rounded-xl bg-white/10 text-[#2563eb]">
                                 <BadgeCheck className="size-5.5" strokeWidth={2} />
                             </span>
                             <div className="mt-6">
@@ -249,7 +249,7 @@ export default function Home() {
                         </div>
 
                         <div className="rounded-2xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-md">
-                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#a35a1a]">
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#1e40af]">
                                 <Timer className="size-5" strokeWidth={2} />
                             </span>
                             <p className="mt-4 font-semibold text-stone-900">빠른 비교</p>
@@ -260,7 +260,7 @@ export default function Home() {
                         </div>
 
                         <div className="rounded-2xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-md">
-                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#a35a1a]">
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#1e40af]">
                                 <Users className="size-5" strokeWidth={2} />
                             </span>
                             <p className="mt-4 font-semibold text-stone-900">
@@ -273,7 +273,7 @@ export default function Home() {
                         </div>
 
                         <div className="rounded-2xl border border-stone-200 bg-white p-6 transition-all hover:-translate-y-1 hover:shadow-md md:col-start-3">
-                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#a35a1a]">
+                            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#fff1e6] to-[#ffe0c2] text-[#1e40af]">
                                 <Route className="size-5" strokeWidth={2} />
                             </span>
                             <p className="mt-4 font-semibold text-stone-900">
@@ -295,7 +295,7 @@ export default function Home() {
                         />
                         <div className="relative">
                             <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">
-                                다음 여정, <span className="text-[#e08030]">입찰</span>로
+                                다음 여정, <span className="text-[#2563eb]">입찰</span>로
                                 시작하세요
                             </h2>
                             <p className="mt-2 text-white/70">
@@ -306,7 +306,7 @@ export default function Home() {
                         <Button
                             asChild
                             size="lg"
-                            className="relative h-12 w-full shrink-0 rounded-full bg-[#e08030] px-7 text-base text-white shadow-sm shadow-[#e08030]/30 hover:bg-[#d07526] sm:w-auto"
+                            className="relative h-12 w-full shrink-0 rounded-full bg-[#2563eb] px-7 text-base text-white shadow-sm shadow-[#2563eb]/30 hover:bg-[#1d4ed8] sm:w-auto"
                         >
                             <Link href="/signup">
                                 무료로 시작하기
@@ -321,8 +321,8 @@ export default function Home() {
                 <div className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-12 text-sm text-stone-500 md:grid-cols-3">
                     <div className="space-y-1.5">
                         <p className="font-semibold text-stone-900">고객센터</p>
-                        <p className="text-xl font-bold text-stone-900">1599-6162</p>
-                        <p>B2B문의 bizonly@allbus.kr</p>
+                        <p className="text-xl font-bold text-stone-900">123-1234</p>
+                        <p>B2B문의 choiuoz@naver.com</p>
                     </div>
                     <div className="space-y-1.5">
                         <p>평일 오전 9시 - 오후 6시</p>

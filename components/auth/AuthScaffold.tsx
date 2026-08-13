@@ -13,7 +13,7 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
         <div className="min-h-screen bg-[#f3f3f5] flex flex-col">
             <header className="h-16 border-b bg-white">
                 <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
-                    <Link href="/" className="text-xl font-bold text-[#e08030]">
+                    <Link href="/" className="text-xl font-bold text-[#2563eb]">
                         GoodBus
                     </Link>
                     <nav className="flex items-center gap-6 text-sm font-semibold text-gray-800">
@@ -25,7 +25,7 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
                         </Link>
                         <Link
                             href="/login"
-                            className="rounded-full bg-[#e08030] px-4 py-2 text-white"
+                            className="rounded-full bg-[#2563eb] px-4 py-2 text-white"
                         >
                             로그인
                         </Link>
@@ -46,8 +46,8 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
                 <div className="mx-auto grid w-full max-w-6xl gap-4 px-6 py-8 text-sm text-gray-600 md:grid-cols-3">
                     <div className="space-y-1">
                         <p className="font-semibold text-gray-900">고객센터</p>
-                        <p className="text-xl font-bold text-gray-900">1599-6162</p>
-                        <p>B2B문의 bizonly@allbus.kr</p>
+                        <p className="text-xl font-bold text-gray-900">123-1234</p>
+                        <p>B2B문의 choiuoz@naver.com</p>
                     </div>
                     <div className="space-y-1">
                         <p>평일 오전 9시 - 오후 6시</p>

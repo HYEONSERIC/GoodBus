@@ -98,7 +98,7 @@ export default function SignupBusinessPage() {
 
                     <Button
                         type="submit"
-                        className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                        className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                         disabled={loading}
                     >
                         {loading ? '가입 중...' : '가입하기'}

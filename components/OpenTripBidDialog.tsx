@@ -147,7 +147,7 @@ export function OpenTripBidDialog({
                             <div className="flex shrink-0 border-t border-gray-200 bg-white px-4 py-3">
                                 <Button
                                     type="button"
-                                    className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
+                                    className="h-11 w-full rounded-md bg-[#2563eb] text-sm font-semibold text-white hover:bg-[#1d4ed8]"
                                     disabled={submitting}
                                     onClick={() => void handleSubmit()}
                                 >

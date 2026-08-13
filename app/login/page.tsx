@@ -96,7 +96,7 @@ export default function LoginPage() {
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
                             loginMethod === 'email'
-                                ? 'bg-[#e08030] text-white'
+                                ? 'bg-[#2563eb] text-white'
                                 : 'text-gray-700'
                         }`}
                         onClick={() => setLoginMethod('email')}
@@ -107,7 +107,7 @@ export default function LoginPage() {
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
                             loginMethod === 'phone'
-                                ? 'bg-[#e08030] text-white'
+                                ? 'bg-[#2563eb] text-white'
                                 : 'text-gray-700'
                         }`}
                         onClick={() => setLoginMethod('phone')}
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
                         <Button
                             type="submit"
-                            className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                             disabled={loading}
                         >
                             {loading ? '로그인 중...' : '로그인'}
@@ -169,7 +169,7 @@ export default function LoginPage() {
                                 />
                                 <Button
                                     type="button"
-                                    className="whitespace-nowrap bg-[#e08030] hover:bg-[#d07526]"
+                                    className="whitespace-nowrap bg-[#2563eb] hover:bg-[#1d4ed8]"
                                     onClick={handlePhoneRequest}
                                     disabled={
                                         !phoneNumber ||
@@ -206,7 +206,7 @@ export default function LoginPage() {
 
                         <Button
                             type="button"
-                            className="h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                             onClick={handlePhoneVerify}
                             disabled={
                                 phoneStep !== 'enter-code' ||
