@@ -76,7 +76,7 @@ export function AdminShell({
                         </div>
                         <div className="min-w-0">
                             <p className="truncate text-sm font-semibold tracking-tight text-slate-900">
-                                GoodBus
+                                버스대절
                             </p>
                             <p className="truncate text-xs text-slate-500">
                                 관리자 콘솔

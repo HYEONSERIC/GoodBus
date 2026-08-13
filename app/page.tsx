@@ -61,7 +61,7 @@ export default function Home() {
                             <Bus className="size-4.5" strokeWidth={2.25} />
                         </span>
                         <span className="text-lg font-bold tracking-tight text-stone-900">
-                            GoodBus
+                            버스대절
                         </span>
                     </Link>
                     <nav className="flex items-center gap-7 text-sm font-medium text-stone-600">
@@ -223,7 +223,7 @@ export default function Home() {
                 <section className="mx-auto w-full max-w-6xl px-6 py-20">
                     <div className="max-w-xl">
                         <h2 className="text-2xl font-bold tracking-tight text-stone-900 md:text-3xl">
-                            GoodBus를 선택하는 이유
+                            버스대절을 선택하는 이유
                         </h2>
                         <p className="mt-3 text-stone-500">
                             가격만 비교하지 않습니다. 검증된 파트너와 투명한 절차까지
@@ -333,7 +333,7 @@ export default function Home() {
                         <p>자주 묻는 질문 · 제휴문의 · 이용약관</p>
                         <p>개인정보처리방침</p>
                         <p className="pt-2 text-xs text-stone-400">
-                            © 2026 GoodBus. All rights reserved.
+                            © 2026 버스대절 주식회사. All rights reserved.
                         </p>
                     </div>
                 </div>

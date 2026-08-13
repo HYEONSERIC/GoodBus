@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GoodBus | 전세버스 비교 플랫폼",
+  title: "버스대절 | 전세버스 비교 플랫폼",
   description: "원하는 일정에 맞는 전세버스를 쉽고 빠르게 비교하고 견적을 받아보세요.",
 };
 

@@ -14,7 +14,7 @@ export function AuthScaffold({ title, children }: AuthScaffoldProps) {
             <header className="h-16 border-b bg-white">
                 <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-6">
                     <Link href="/" className="text-xl font-bold text-[#2563eb]">
-                        GoodBus
+                        버스대절
                     </Link>
                     <nav className="flex items-center gap-6 text-sm font-semibold text-gray-800">
                         <Link href="/signup" className="hover:text-black">
