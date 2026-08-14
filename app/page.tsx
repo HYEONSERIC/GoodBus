@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import {
     ArrowRight,
@@ -15,6 +14,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SiteHeader } from '@/components/marketing/SiteHeader';
+import { SiteFooter } from '@/components/marketing/SiteFooter';
 
 const vehicleTypes = [
     {
@@ -55,44 +56,7 @@ const steps = [
 export default function Home() {
     return (
         <div className="min-h-screen bg-stone-50 text-stone-900">
-            <header className="sticky top-0 z-50 border-b border-stone-200/80 bg-white/80 backdrop-blur-md">
-                <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
-                    <Link href="/" className="flex items-center gap-2">
-                        <span className="flex size-8 items-center justify-center overflow-hidden rounded-lg">
-                            <Image
-                                src="/pic/로고.png"
-                                alt="버스대절 로고"
-                                width={32}
-                                height={32}
-                                className="h-full w-full object-cover"
-                            />
-                        </span>
-                        <span className="text-lg font-bold tracking-tight text-stone-900">
-                            버스대절
-                        </span>
-                    </Link>
-                    <nav className="flex items-center gap-7 text-sm font-medium text-stone-600">
-                        <Link
-                            href="/signup"
-                            className="hidden transition-colors hover:text-stone-900 sm:inline"
-                        >
-                            회원가입
-                        </Link>
-                        <Link
-                            href="/signup-business"
-                            className="hidden transition-colors hover:text-stone-900 sm:inline"
-                        >
-                            버스/회사 가입
-                        </Link>
-                        <Button
-                            asChild
-                            className="rounded-full bg-[#2563eb] px-5 text-white shadow-sm hover:bg-[#1d4ed8]"
-                        >
-                            <Link href="/login">로그인</Link>
-                        </Button>
-                    </nav>
-                </div>
-            </header>
+            <SiteHeader />
 
             <main>
                 <section className="relative overflow-hidden bg-[#0e1119]">
@@ -324,27 +288,7 @@ export default function Home() {
                 </section>
             </main>
 
-            <footer className="border-t border-stone-200 bg-white">
-                <div className="mx-auto grid w-full max-w-6xl gap-8 px-6 py-12 text-sm text-stone-500 md:grid-cols-3">
-                    <div className="space-y-1.5">
-                        <p className="font-semibold text-stone-900">고객센터</p>
-                        <p className="text-xl font-bold text-stone-900">123-1234</p>
-                        <p>B2B문의 choiuoz@naver.com</p>
-                    </div>
-                    <div className="space-y-1.5">
-                        <p>평일 오전 9시 - 오후 6시</p>
-                        <p>점심시간 12시 - 1시</p>
-                        <p>주말/공휴일 휴무</p>
-                    </div>
-                    <div className="space-y-1.5">
-                        <p>자주 묻는 질문 · 제휴문의 · 이용약관</p>
-                        <p>개인정보처리방침</p>
-                        <p className="pt-2 text-xs text-stone-400">
-                            © 2026 버스대절 주식회사. All rights reserved.
-                        </p>
-                    </div>
-                </div>
-            </footer>
+            <SiteFooter />
         </div>
     );
 }
