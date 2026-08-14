@@ -3,7 +3,8 @@ import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 
 export const metadata: Metadata = {
-    title: '개인정보처리방침 | 버스대절',
+    title: '개인정보처리방침',
+    description: '버스대절 서비스의 개인정보처리방침입니다.',
 };
 
 const sections = [

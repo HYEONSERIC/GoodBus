@@ -4,7 +4,8 @@ import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 
 export const metadata: Metadata = {
-    title: '오시는길 | 버스대절',
+    title: '오시는길',
+    description: '버스대절 주식회사 본사 주소와 오시는 방법을 안내합니다.',
 };
 
 const ADDRESS =

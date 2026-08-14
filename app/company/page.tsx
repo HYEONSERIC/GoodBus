@@ -4,7 +4,9 @@ import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 
 export const metadata: Metadata = {
-    title: '회사소개 | 버스대절',
+    title: '회사소개',
+    description:
+        '실시간 입찰로 버스 대절을 비교하고 확정하는 버스대절 주식회사를 소개합니다.',
 };
 
 const values = [

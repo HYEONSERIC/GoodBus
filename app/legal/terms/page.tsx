@@ -3,7 +3,8 @@ import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 
 export const metadata: Metadata = {
-    title: '이용약관 | 버스대절',
+    title: '이용약관',
+    description: '버스대절 서비스 이용약관입니다.',
 };
 
 const articles = [

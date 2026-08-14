@@ -179,6 +179,12 @@
     - 회원가입/로그인/버스·회사 가입(`components/auth/AuthScaffold.tsx`)은 폼 전환에 집중하도록 푸터 제거, 헤더만 유지
     - **통신판매업 신고번호 미보유** — 사업자등록증과 별개로 전자상거래법상 신고 필요, 신고 완료 전까지 푸터/약관에서 항목 제외
     - 이용약관·개인정보처리방침은 표준 템플릿 초안 — 정식 공개 전 법률 검토 필요
+- **기본 SEO 세팅** (2026-08-14)
+    - `app/robots.ts`, `app/sitemap.ts` 추가 — 정적 라우팅으로 `/robots.txt`, `/sitemap.xml` 자동 생성 (`/admin`, `/dashboard`, `/api`, `/payments`는 크롤링 제외)
+    - `lib/siteConfig.ts`로 사이트 URL·설명·사업자 정보 중앙화 (`NEXT_PUBLIC_SITE_URL` 미설정 시 `https://goodbus0716.mycafe24.com`로 폴백 — **프로덕션 서버 `.env`에 `NEXT_PUBLIC_SITE_URL` 채워주면 더 안전**)
+    - `app/layout.tsx`에 `metadataBase`, keywords, Open Graph, Twitter 카드 메타데이터 추가; 하위 페이지 title은 템플릿(`%s | 버스대절`)을 쓰도록 정리
+    - 홈페이지에 Organization/WebSite JSON-LD 구조화 데이터 추가 (`app/page.tsx`)
+    - **참고**: "버스대절" 검색 시 경쟁사가 상단에 뜨는 건 대부분 구글 애즈 유료광고이고, 이번 작업은 무료 SEO 기초일 뿐 — 색인 반영까지 수 주~수개월 소요, Search Console 등록·소유권 확인은 별도로 필요
 
 ## 미완료 / 실서비스 갭
 
@@ -213,6 +219,7 @@
 - **대외 공개**
     - 랜딩 페이지 가공 통계·플레이스홀더 카피 정리 필요
     - ~~이용약관·개인정보처리방침·사업자 정보 페이지 필요~~ **2026-08-14에 페이지 추가 완료** — 다만 약관류는 표준 템플릿 초안이라 법률 검토 필요, 통신판매업 신고번호는 아직 없어 미노출
+    - **SEO**: robots.txt/sitemap.xml/메타데이터/구조화 데이터는 2026-08-14에 추가 완료(위 "기본 SEO 세팅" 참고). 아직 남은 것: Google Search Console 소유권 확인·sitemap 제출, 구글 비즈니스 프로필 등록, (선택) "버스대절" 키워드 구글 애즈 집행 — 전부 계정 소유자(사용자) 본인이 직접 해야 하는 절차
 - **관리자·운영 (추가 예정)**
     - `adminRole`별 **API** 권한 분리(Finance/Operations 등); 감사 로그 조회 등 일부 라우트에만 `requireAdminRole` 적용, 전체 RBAC는 아님
     - 감사 로그 조회 화면에 행위 종류·기간·관리자별 **필터** 없음(현재는 최근순 목록+페이지네이션만)

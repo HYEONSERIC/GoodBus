@@ -16,6 +16,31 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
+import { BUSINESS_INFO, SITE_NAME, SITE_URL } from '@/lib/siteConfig';
+
+const structuredData = [
+    {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: BUSINESS_INFO.legalName,
+        alternateName: SITE_NAME,
+        url: SITE_URL,
+        logo: `${SITE_URL}/pic/로고.png`,
+        telephone: BUSINESS_INFO.phone,
+        email: BUSINESS_INFO.email,
+        address: {
+            '@type': 'PostalAddress',
+            streetAddress: BUSINESS_INFO.address,
+            addressCountry: 'KR',
+        },
+    },
+    {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: `${SITE_NAME} | 전세버스 비교 플랫폼`,
+        url: SITE_URL,
+    },
+];
 
 const vehicleTypes = [
     {
@@ -56,6 +81,12 @@ const steps = [
 export default function Home() {
     return (
         <div className="min-h-screen bg-stone-50 text-stone-900">
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: JSON.stringify(structuredData),
+                }}
+            />
             <SiteHeader />
 
             <main>
