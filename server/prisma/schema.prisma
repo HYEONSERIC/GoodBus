@@ -405,8 +405,3 @@ model AdminAuditLog {
   @@index([targetType, targetId])
   @@index([createdAt])
 }
-
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./erd.svg" 
-}
