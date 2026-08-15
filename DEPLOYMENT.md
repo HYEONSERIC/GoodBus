@@ -260,6 +260,16 @@ pm2 restart all
 - [ ] `curl https://도메인/api/health` 또는 Express `/health` (내부)
 - [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인
 
+### 10-1. 보안 침해사고 이후 강화 항목 (2026-08-14 RCE 사고 대응, 미완료분)
+
+2026-08-14 Next.js 취약점을 통한 RCE로 서버가 침해돼 OS 재설치로 복구한 사고가 있었음(전체 경위는 `PROJECT_STATUS.md` 참고). 그때 드러난 운영 공백들 — 다음 정기 점검 때 하나씩 처리할 것:
+
+- [ ] **DB 자동 백업 없음** — 사고 당시 `pg_dump`가 하나도 없어서 침해 직전 데이터를 못 건짐. `pg_dump`를 매일 cron으로 돌려 서버 밖(로컬/오브젝트 스토리지)에 보관하는 구조 필요
+- [ ] **SSH 비밀번호 인증만 있음** — `authorized_keys`가 비어있어 브루트포스에 노출. 키 페어 등록 후 `PasswordAuthentication no`로 전환
+- [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. UptimeRobot 등 외부 핑 모니터링으로 다운타임 즉시 알림 설정
+- [ ] **GitHub Dependabot alerts 꺼져있을 가능성** — 저장소 설정에서 켜져 있는지 확인, 꺼져있으면 활성화
+- [ ] 침해 기간 `.env`가 노출됐을 수 있으므로 Kakao/Toss API 키는 각 콘솔에서 재발급 권장 (JWT_SECRET/DB 비밀번호/root SSH 비밀번호는 사고 당일 이미 로테이션 완료)
+
 ---
 
 ## 11. 나중에 확장 (비용 ↑)
@@ -286,6 +296,10 @@ pm2 restart all
 | `Missing backend URL` | 루트 `.env.local` 의 `API_URL` |
 | DB 접속 안 됨 | Docker Postgres와 카페24 네이티브 Postgres가 동시에 5432를 쓰려는 충돌인지 확인 |
 | 빌드는 되는데 배포 후 동작 이상 | 로컬 개발은 Node 20인데 서버가 Node 24로 실행 중인 건 아닌지 (`node -v`) |
+| 카페24 도메인 접속 시 "Server is running" 환영 페이지만 뜸 | `/var/www/cafe24-welcome/index.html`이 존재하면 Nginx `location = /`가 실제 앱보다 그 파일을 우선 서빙함 — `mv`로 치우고 `nginx -s reload` |
+| `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가) |
+| CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
+| SSH `Connection refused`가 갑자기 뜸 | 서버가 죽은 게 아니라 fail2ban이 실패한 로그인 시도를 감지해 접속 IP를 일시 차단했을 가능성 — 몇 분 기다리거나 Cafe24 웹 콘솔로 우회 접속해 `fail2ban-client status sshd`/`unban` 확인 |
 
 로그:
 
