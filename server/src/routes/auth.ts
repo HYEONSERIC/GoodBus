@@ -1,13 +1,41 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { generateToken } from '../utils/jwt';
 import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
-import { sendOtpSms } from '../utils/aligo';
+import { sendOtpSms, isAligoDevMode } from '../utils/aligo';
 
 const router = express.Router();
+
+// otp.ts already caps requests per *phone number* (cooldown + daily limit), but an
+// attacker rotating through numbers faces no limit at all — each triggers a real,
+// billable SMS/알림톡 send once Aligo is on a live key. This caps requests per IP.
+//
+// Express never sees the browser's connection directly: Nginx terminates it and
+// Next.js's catch-all proxy (app/api/[...path]/route.ts) makes its own same-host
+// fetch to Express, so req.ip here is always 127.0.0.1 — the default keyGenerator
+// would bucket every user on the site together. Nginx sets X-Real-IP to the real
+// client address (deploy/nginx/goodbus.conf) and the Next proxy forwards request
+// headers through unmodified, so it survives the hop; fall back to req.ip for
+// local dev, where there's no Nginx in front.
+const otpRequestRateLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+        const realIp = req.headers['x-real-ip'];
+        const ip = Array.isArray(realIp) ? realIp[0] : realIp;
+        // ipKeyGenerator collapses IPv6 addresses to a /56 subnet — without it, an
+        // attacker can cycle through effectively unlimited IPv6 addresses within
+        // their own subnet to bypass this limiter entirely.
+        return ip || ipKeyGenerator(req.ip ?? 'unknown');
+    },
+    message: { error: '잠시 후 다시 시도해주세요' },
+});
 
 const signupSchema = z.object({
     email: z.string().email(),
@@ -156,7 +184,7 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-router.post('/phone/request-otp', async (req, res) => {
+router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
     try {
         const { phoneNumber: rawPhoneNumber, purpose } =
             requestOtpSchema.parse(req.body);
@@ -168,27 +196,22 @@ router.post('/phone/request-otp', async (req, res) => {
                 .json({ error: '올바른 휴대전화번호를 입력해주세요' });
         }
 
-        if (purpose === 'login') {
-            const user = await prisma.user.findUnique({
-                where: { phoneNumber },
+        // 가입 여부를 응답으로 노출하면 무작위 번호 스캔으로 가입자 명단을
+        // 추출할 수 있어, 대상이 아닌 경우에도 겉보기엔 같은 성공 응답을
+        // 반환하되 실제 인증번호는 발송하지 않는다.
+        const user = await prisma.user.findUnique({ where: { phoneNumber } });
+        const eligible =
+            purpose === 'login'
+                ? !!user && user.role !== 'Admin' && user.status !== 'Blocked'
+                : !user;
+
+        if (!eligible) {
+            // devMode도 실제 발송 여부와 무관하게(서버 설정에만 의존) 동일한 값을
+            // 채워, 이 필드의 유무로 가입 여부를 구분할 수 없게 한다.
+            return res.json({
+                message: '인증번호가 발송되었습니다',
+                devMode: isAligoDevMode(),
             });
-            if (!user || user.role === 'Admin') {
-                return res
-                    .status(404)
-                    .json({ error: '가입되지 않은 휴대전화번호입니다' });
-            }
-            if (user.status === 'Blocked') {
-                return res.status(403).json({ error: '차단된 계정입니다' });
-            }
-        } else {
-            const existing = await prisma.user.findUnique({
-                where: { phoneNumber },
-            });
-            if (existing) {
-                return res
-                    .status(400)
-                    .json({ error: '이미 가입에 사용된 휴대전화번호입니다' });
-            }
         }
 
         const issued = await issueOtp(phoneNumber, purpose);

@@ -120,6 +120,17 @@ async function sendViaAlimtalk(
 //   - otherwise -> plain SMS
 // So going from dev mode -> SMS-only -> AlimTalk+SMS-failover is just adding
 // env vars, no code changes.
+// Whether sendOtpSms would run in dev mode (console-log instead of a real send),
+// without actually sending anything — used to keep the request-otp response shape
+// identical regardless of a given phone number's eligibility (see auth.ts).
+export function isAligoDevMode(): boolean {
+    return !(
+        process.env.ALIGO_API_KEY &&
+        process.env.ALIGO_USER_ID &&
+        process.env.ALIGO_SENDER
+    );
+}
+
 export async function sendOtpSms(
     phoneNumber: string,
     code: string

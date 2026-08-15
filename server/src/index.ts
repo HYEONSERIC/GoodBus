@@ -81,6 +81,15 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     return res.status(500).json({ error: 'Internal server error' });
 });
 
+// Defense-in-depth: Express 4 doesn't auto-catch rejected promises from async route
+// handlers, and Node's default behavior since v15 is to crash the process on an
+// unhandled rejection. Route-level validation is the real fix, but this keeps one
+// missed case from taking down the whole server for every user.
+process.on('unhandledRejection', (reason) => {
+    Sentry.captureException(reason);
+    console.error('Unhandled promise rejection:', reason);
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -4,6 +4,9 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole, requireAdminRole, canViewRevenue } from '../middleware/auth';
 import {
     UserRole,
+    UserStatus,
+    VerificationStatus,
+    BidStatus,
     AdminRole,
     SupportPostKind,
     TripStatus,
@@ -46,6 +49,22 @@ import {
 import { recordAdminAudit } from '../utils/adminAuditLog';
 
 const router = express.Router();
+
+/**
+ * Query-string values are attacker-controlled. Prisma throws PrismaClientValidationError
+ * for enum values outside the schema, which — with no try/catch on these routes and no
+ * unhandledRejection handler — crashes the whole process (Express 4 doesn't auto-catch
+ * async rejections). Always parse untrusted enum input through this instead of `as any`.
+ */
+function parseEnumQuery<T extends Record<string, string>>(
+    enumObj: T,
+    value: unknown,
+): T[keyof T] | undefined {
+    if (typeof value !== 'string') return undefined;
+    return (Object.values(enumObj) as string[]).includes(value)
+        ? (value as T[keyof T])
+        : undefined;
+}
 
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
     const activeTripWhere = { status: { not: TripStatus.cancelled } };
@@ -120,8 +139,8 @@ router.get('/users', requireAuth, requireRole(UserRole.Admin), async (req, res) 
 
     const users = await prisma.user.findMany({
         where: {
-            role: role ? (role as UserRole) : undefined,
-            status: status ? (status as any) : undefined,
+            role: role ? parseEnumQuery(UserRole, role) : undefined,
+            status: status ? parseEnumQuery(UserStatus, status) : undefined,
             email: search
                 ? {
                       contains: String(search),
@@ -552,14 +571,21 @@ router.get(
     requireRole(UserRole.Admin),
     async (req, res) => {
         const type = String(req.query.type || 'all');
-        const status = String(req.query.status || 'pending');
+        const status =
+            req.query.status === undefined
+                ? VerificationStatus.pending
+                : parseEnumQuery(VerificationStatus, req.query.status);
+
+        if (!status) {
+            return res.status(400).json({ error: 'Invalid status filter' });
+        }
 
         if (type === 'all') {
             const [drivers, companies] = await Promise.all([
                 prisma.user.findMany({
                     where: {
                         role: UserRole.Driver,
-                        driverLicenseStatus: status as any,
+                        driverLicenseStatus: status,
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
@@ -567,7 +593,7 @@ router.get(
                 prisma.user.findMany({
                     where: {
                         role: UserRole.BusCompany,
-                        companyRegistrationStatus: status as any,
+                        companyRegistrationStatus: status,
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
@@ -588,8 +614,8 @@ router.get(
             where: {
                 role: roleFilter,
                 ...(isDriver
-                    ? { driverLicenseStatus: status as any }
-                    : { companyRegistrationStatus: status as any }),
+                    ? { driverLicenseStatus: status }
+                    : { companyRegistrationStatus: status }),
             },
             select: verificationUserSelect,
             orderBy: { createdAt: 'desc' },
@@ -740,11 +766,14 @@ router.get(
         } = {};
         if (tripId) tripWhere.id = tripId;
         if (passengerId) tripWhere.passengerId = passengerId;
-        if (tripStatus) tripWhere.status = tripStatus as TripStatus;
+        if (tripStatus) {
+            const parsedTripStatus = parseEnumQuery(TripStatus, tripStatus);
+            if (parsedTripStatus) tripWhere.status = parsedTripStatus;
+        }
 
         const where: Prisma.BidWhereInput = {
             bidderId: bidderId || undefined,
-            status: bidStatus ? (bidStatus as any) : undefined,
+            status: bidStatus ? parseEnumQuery(BidStatus, bidStatus) : undefined,
             createdAt: Object.keys(createdAt).length ? createdAt : undefined,
             ...(Object.keys(tripWhere).length ? { trip: tripWhere } : {}),
             ...(search

@@ -12,20 +12,41 @@ declare global {
     }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) {
     const token = req.cookies?.token;
 
     if (!token) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    let payload: JWTPayload;
     try {
-        const payload = verifyToken(token);
-        req.user = payload;
-        next();
+        payload = verifyToken(token);
     } catch (error) {
         return res.status(401).json({ error: 'Invalid token' });
     }
+
+    // JWT 서명만으로는 로그인 이후의 차단을 반영하지 못한다 — 토큰 만료가
+    // 7일이라 관리자가 계정을 차단해도 기존 세션이 최대 7일간 그대로
+    // 유효했다. requireAdminRole과 동일하게 매 요청마다 최신 상태를 조회한다.
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: payload.userId },
+            select: { status: true },
+        });
+        if (!user || user.status === 'Blocked') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+    } catch (error) {
+        console.error('requireAuth status lookup failed:', error);
+    }
+
+    req.user = payload;
+    next();
 }
 
 export function requireRole(...roles: UserRole[]) {
