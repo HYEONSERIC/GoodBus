@@ -6,7 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { authAPI } from '@/lib/api';
+
+const TURNSTILE_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
 
 export default function SignupBusinessPage() {
     const router = useRouter();
@@ -16,19 +19,29 @@ export default function SignupBusinessPage() {
     const [accountType, setAccountType] = useState<'Driver' | 'BusCompany'>(
         'Driver'
     );
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (TURNSTILE_ENABLED && !turnstileToken) {
+            setError('보안 확인을 완료해주세요.');
+            return;
+        }
+
         setLoading(true);
         try {
             await authAPI.signup(
                 email,
                 password,
                 accountType,
-                name.trim() || undefined
+                name.trim() || undefined,
+                undefined,
+                undefined,
+                turnstileToken || undefined
             );
             router.push('/dashboard');
         } catch (err: unknown) {
@@ -94,12 +107,16 @@ export default function SignupBusinessPage() {
                         </select>
                     </div>
 
+                    <TurnstileWidget onVerify={setTurnstileToken} />
+
                     {error && <p className="text-sm text-red-500">{error}</p>}
 
                     <Button
                         type="submit"
                         className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
-                        disabled={loading}
+                        disabled={
+                            loading || (TURNSTILE_ENABLED && !turnstileToken)
+                        }
                     >
                         {loading ? '가입 중...' : '가입하기'}
                     </Button>

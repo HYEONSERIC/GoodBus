@@ -1,0 +1,50 @@
+name: Dependency audit (report only)
+
+# Non-blocking by design: this never fails the build. It exists to make sure
+# someone actually looks at `npm audit` output on a regular cadence instead of
+# only when it happens to come up — see CLAUDE.md's "Security & dependency
+# hygiene" for why that mattered here. Once server/'s vulnerability count is
+# consistently near zero, promote root/backend audit checks into ci.yml as a
+# blocking step instead of running this separately.
+on:
+    schedule:
+        - cron: "0 0 * * 1" # every Monday
+    workflow_dispatch:
+
+jobs:
+    audit:
+        name: npm audit (root + server)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Root audit
+              run: npm audit --json > root-audit.json || true
+
+            - name: Server audit
+              working-directory: server
+              run: npm audit --json > ../server-audit.json || true
+
+            - name: Summarize
+              run: |
+                  echo "## Root" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```json' >> "$GITHUB_STEP_SUMMARY"
+                  node -e "const r=require('./root-audit.json'); console.log(JSON.stringify(r.metadata?.vulnerabilities ?? {}, null, 2))" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+                  echo "## Server" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```json' >> "$GITHUB_STEP_SUMMARY"
+                  node -e "const r=require('./server-audit.json'); console.log(JSON.stringify(r.metadata?.vulnerabilities ?? {}, null, 2))" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Upload full reports
+              uses: actions/upload-artifact@v4
+              with:
+                  name: npm-audit-reports
+                  path: |
+                      root-audit.json
+                      server-audit.json
+                  retention-days: 90

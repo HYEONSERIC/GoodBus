@@ -1,40 +1,38 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { generateToken } from '../utils/jwt';
 import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
 import { sendOtpSms, isAligoDevMode } from '../utils/aligo';
+import { createIpRateLimiter, getClientIp } from '../utils/ipRateLimit';
+import { verifyTurnstileToken } from '../utils/turnstile';
 
 const router = express.Router();
 
 // otp.ts already caps requests per *phone number* (cooldown + daily limit), but an
 // attacker rotating through numbers faces no limit at all — each triggers a real,
 // billable SMS/알림톡 send once Aligo is on a live key. This caps requests per IP.
-//
-// Express never sees the browser's connection directly: Nginx terminates it and
-// Next.js's catch-all proxy (app/api/[...path]/route.ts) makes its own same-host
-// fetch to Express, so req.ip here is always 127.0.0.1 — the default keyGenerator
-// would bucket every user on the site together. Nginx sets X-Real-IP to the real
-// client address (deploy/nginx/goodbus.conf) and the Next proxy forwards request
-// headers through unmodified, so it survives the hop; fall back to req.ip for
-// local dev, where there's no Nginx in front.
-const otpRequestRateLimiter = rateLimit({
+const otpRequestRateLimiter = createIpRateLimiter({
     windowMs: 10 * 60 * 1000,
     limit: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req) => {
-        const realIp = req.headers['x-real-ip'];
-        const ip = Array.isArray(realIp) ? realIp[0] : realIp;
-        // ipKeyGenerator collapses IPv6 addresses to a /56 subnet — without it, an
-        // attacker can cycle through effectively unlimited IPv6 addresses within
-        // their own subnet to bypass this limiter entirely.
-        return ip || ipKeyGenerator(req.ip ?? 'unknown');
-    },
-    message: { error: '잠시 후 다시 시도해주세요' },
+    message: '잠시 후 다시 시도해주세요',
+});
+
+// Generous per-IP ceiling (shared office/NAT IPs are common) that still stops
+// scripted credential-stuffing/brute-force — the real per-account defense is
+// bcrypt's cost factor plus the [SECURITY] log below feeding a fail2ban jail.
+const loginRateLimiter = createIpRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    limit: 20,
+    message: '너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요',
+});
+
+const signupRateLimiter = createIpRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    message: '너무 많은 요청이 있었습니다. 잠시 후 다시 시도해주세요',
 });
 
 const signupSchema = z.object({
@@ -46,6 +44,9 @@ const signupSchema = z.object({
     // number later via their profile screen instead (see PROJECT_STATUS.md).
     phoneNumber: z.string().trim().optional(),
     phoneOtpCode: z.string().trim().optional(),
+    // Driver/BusCompany only (see the Turnstile check below) — Passenger already
+    // has a phone-OTP cost barrier this path doesn't.
+    turnstileToken: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -78,7 +79,7 @@ function otpErrorMessage(
     }
 }
 
-router.post('/signup', async (req, res) => {
+router.post('/signup', signupRateLimiter, async (req, res) => {
     try {
         const {
             email,
@@ -87,7 +88,23 @@ router.post('/signup', async (req, res) => {
             displayName,
             phoneNumber: rawPhoneNumber,
             phoneOtpCode,
+            turnstileToken,
         } = signupSchema.parse(req.body);
+
+        // Driver/BusCompany has no phone-OTP cost barrier (added below the fold
+        // instead, via the profile screen) — Turnstile is the substitute check
+        // against scripted mass signups on this specific path.
+        if (role !== 'Passenger') {
+            const humanVerified = await verifyTurnstileToken(
+                turnstileToken,
+                getClientIp(req)
+            );
+            if (!humanVerified) {
+                return res
+                    .status(400)
+                    .json({ error: '보안 확인에 실패했습니다. 다시 시도해주세요.' });
+            }
+        }
 
         let phoneNumber: string | null = null;
         if (role === 'Passenger') {
@@ -245,7 +262,7 @@ router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
     }
 });
 
-router.post('/phone/login', async (req, res) => {
+router.post('/phone/login', loginRateLimiter, async (req, res) => {
     try {
         const { phoneNumber: rawPhoneNumber, code } = phoneLoginSchema.parse(
             req.body
@@ -310,7 +327,7 @@ router.post('/phone/login', async (req, res) => {
     }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginRateLimiter, async (req, res) => {
     try {
         const { email, password } = loginSchema.parse(req.body);
 
@@ -319,6 +336,9 @@ router.post('/login', async (req, res) => {
         });
 
         if (!user) {
+            console.warn(
+                `[SECURITY] failed login ip=${getClientIp(req)} email=${email}`
+            );
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -332,6 +352,9 @@ router.post('/login', async (req, res) => {
         );
 
         if (!isValidPassword) {
+            console.warn(
+                `[SECURITY] failed login ip=${getClientIp(req)} email=${email}`
+            );
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 

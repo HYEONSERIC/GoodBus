@@ -5,7 +5,7 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole } from '@prisma/client';
 import { getStorageService } from '../services/storage';
-import { imageFileFilter } from '../utils/uploadFileFilter';
+import { imageFileFilter, InvalidImageError } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const storage = getStorageService();
@@ -271,6 +271,9 @@ router.post(
         } catch (e) {
             if (e instanceof z.ZodError) {
                 return res.status(400).json({ error: e.errors[0]?.message || 'Invalid input' });
+            }
+            if (e instanceof InvalidImageError) {
+                return res.status(400).json({ error: e.message });
             }
             console.error('Create review error:', e);
             res.status(500).json({ error: 'Internal server error' });

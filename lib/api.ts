@@ -66,7 +66,8 @@ export const authAPI = {
         role: 'Passenger' | 'Driver' | 'BusCompany',
         displayName?: string,
         phoneNumber?: string,
-        phoneOtpCode?: string
+        phoneOtpCode?: string,
+        turnstileToken?: string
     ) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
@@ -77,6 +78,7 @@ export const authAPI = {
                 displayName,
                 phoneNumber,
                 phoneOtpCode,
+                turnstileToken,
             }),
         }),
     login: async (email: string, password: string) =>

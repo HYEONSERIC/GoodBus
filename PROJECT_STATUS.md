@@ -195,6 +195,22 @@
 - **왕복 여정 낙찰 오류 수정** (2026-08-15)
     - 왕복 여정은 가는 편/오는 편이 별개의 Trip으로 생성되는데, 기사가 왕복 총액으로 입찰해도 실제 입찰(Bid)은 가는 편에만 걸려 있었음 — 승객이 낙찰하면 가는 편만 예약 확정되고, 오는 편은 입찰이 하나도 없는 채로 영원히 견적 탭에 "아직 견적 받는 중"으로 남는 버그(사용자 리포트로 발견, 실제 API 재현으로 확인)
     - 가는 편 낙찰 확정 시 오는 편을 같은 기사로 자동 낙찰하도록 수정(왕복 총액이 이미 낙찰가에 포함돼 있으므로 오는 편에 수수료 재청구 없음), 오는 편에 기사가 별도로 걸어둔 입찰이 있었다면 자동으로 낙찰 실패(lost) 처리
+- **인프라 사고 예방·탐지·복구 체계** (2026-08-15)
+    - **백업**: `server/scripts/backup-db.sh`(named volume이라 `docker exec pg_dump`) + `server/scripts/restore-db-rehearsal.sh`(별도 포트에 복원 검증 후 정리) 신규 추가, 로컬에서 실제 실행해 백업 생성→복구까지 검증 완료. **crontab 등록·서버 밖(로컬) 보관 설정은 사용자가 VPS에서 직접 해야 함** — 절차는 `DEPLOYMENT.md` "8-2" 참고
+    - **npm audit 정리**: 재조사 결과 `server/`의 27건 중 26건이 `npm audit fix`(non-breaking)로 해소됨 — `tar`(bcrypt 설치 의존성)는 `package.json` `overrides`로 별도 고정, 나머지는 body-parser/qs/path-to-regexp/brace-expansion 등 patch 버전 갱신. `nodemailer` 1건만 breaking major(9.0.5) 필요해 보류, 매주 월요일 `.github/workflows/dependency-audit.yml`(non-blocking 리포트)로 추적
+    - **Dependabot**: `gh api`로 확인해보니 실제로 꺼져 있었음(문서상 "미확인"이 아니라 확정) — `vulnerability-alerts`/`automated-security-fixes` 활성화 완료, `.github/dependabot.yml` 추가(root+server+github-actions 주간 스캔)
+    - **Nginx 방어심층**: `deploy/nginx/goodbus.conf`에 보안 헤더(X-Frame-Options 등) + 레이트리밋(`/api/auth/` 2r/s, 나머지 10r/s) 추가, 문법 검증 완료. HSTS는 certbot 적용 후 HTTPS 안정성 확인 전까지 의도적으로 보류
+    - **문서화**: `DEPLOYMENT.md`에 SSH 하드닝 절차(10-2), 다운타임 모니터링 절차(10-3), 보안 패치 롤백 금지 정책(13), 침해사고 대응 런북(14) 신설. `CLAUDE.md`에도 관련 아키텍처 패턴 반영
+    - **사용자가 VPS/제3자 서비스에서 직접 해야 하는 것** (이 세션은 로컬 리포 작업만 가능): SSH 키 인증 전환, 백업 cron 실제 등록, UptimeRobot 가입·연결, Sentry DSN 생존 확인(OS 재설치로 프로덕션 env가 새로 만들어져 재확인 필요), Kakao/Toss API 키 재발급 — 전부 `DEPLOYMENT.md` 10-1~10-3에 체크리스트로 정리됨
+    - **부수적으로 발견한 버그**: `.gitignore`의 `.env*`가 `.env.production.example`/`server/.env.example`까지 지워버려서 두 파일이 **한 번도 git에 커밋된 적이 없었음** — `DEPLOYMENT.md`가 시키는 `cp server/.env.example server/.env`가 신규 clone(재설치 시나리오 포함)에서 파일 자체가 없어 실패하는 상태였음. `!.env*.example` 예외 추가하고 두 파일을 커밋해 수정
+- **봇 차단·애플리케이션 보안 종합 정리** (2026-08-15, 인프라 계획의 Phase 1 — 로컬 레포 작업분 전부 완료·검증)
+    - `helmet` 도입(`server/src/index.ts`, HSTS는 HTTPS 안정성 확인 전까지 의도적으로 끔), `next.config.ts`에도 Nginx와 동일한 보안 헤더를 중복 정의(카페24가 재설치할 때마다 Nginx site config를 초기화하는 전례가 있어 git에 남는 이중 방어선)
+    - 로그인(`/auth/login`)·회원가입(`/auth/signup`)·전화로그인(`/auth/phone/login`)에도 IP 레이트리밋 확장(`server/src/utils/ipRateLimit.ts`로 공용화), 로그인 실패를 `[SECURITY] failed login ip=... email=...` 형식으로 로그 — VPS의 fail2ban 커스텀 jail이 이 포맷을 그대로 사용 예정. 실제 curl로 20회에서 429 걸리는 것, 실패 로그 찍히는 것 확인 완료
+    - 업로드 매직바이트 검증 추가(`server/src/utils/uploadFileFilter.ts`) — 지금까지 파일 확장자를 클라이언트가 신고한 `Content-Type`만으로 결정해서, 위조된 mimetype으로 임의 파일이 이미지인 척 저장될 수 있었음. 실제 첫 바이트 시그니처(JPEG/PNG/WEBP/GIF)를 재검증하도록 `services/storage.ts`에서 강제. 이 과정에서 `verification.ts`(신분증·사업자등록증 업로드)가 다른 라우트들과 다르게 `multer.diskStorage`를 직접 쓰고 있어 검증을 못 걸던 것도 발견해 `memoryStorage`+공용 `storage.saveFile`로 통일(부수적으로 누락돼 있던 try/catch도 같이 해결). 위조 파일 거부(400)·정상 파일 통과(200) 둘 다 실제 curl로 검증
+    - Nginx에 알려진 스캐너 UA(sqlmap/nikto/nmap 등)·빈 UA·흔한 취약점 스캔 경로(`/wp-admin`, `/.env`, `/.git` 등) 차단(`444`, 무응답 종료) 추가 — Docker로 실제 요청 보내 정상 트래픽은 통과, 스캐너 패턴은 연결 즉시 종료되는 것 확인. UA 위조는 쉬워서 진짜 방어선이 아니라 노이즈 감소용임을 명시
+    - `profile.ts`·`chats.ts`에 Zod 스키마 적용(admin.ts는 크래시 유발 패턴 재확인 결과 이미 없어서 보류, CSRF도 GET 기반 상태변경 라우트 없음 재확인)
+    - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키 발급(무료 Cloudflare 계정 가입)은 아직 안 됨** — 키 없으면 위젯 자체가 안 뜨고 서버 검증도 스킵되는 상태로 당분간 유지
+    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **Phase 3(안정화 후 별도)**: 도메인 구매→Cloudflare 전체 프록시(무료 DDoS 완화+WAF+Bot Fight Mode), Turnstile 키 실제 발급. 상세 계획은 이번 대화의 plan 파일 참고
 
 ## 미완료 / 실서비스 갭
 
@@ -209,7 +225,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속 (인프라 항목 미완료)**: `npm audit`에서 나온 Next.js 취약점 패치를 빌드 실패로 롤백해뒀다가 몇 시간 안에 실제로 악용당해 서버가 침해됨(크립토마이너/백도어 심어짐 → Postgres 크래시 루프 → OS 재설치로 복구). 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일 조치 완료, 코드 레벨 후속 조치(admin/trips 크래시, 결제 중복 청구, OTP 남용, 차단 세션 등)는 2026-08-15에 완료(위 참고)했지만 인프라 항목은 남음: ① DB 자동 백업(`pg_dump` cron) 전무 — 사고 때 백업을 못 떠서 데이터 유실, ② SSH가 비밀번호 인증만 지원(`authorized_keys` 비어있음), ③ 다운타임 자동 감지 없음(UptimeRobot 등), ④ GitHub Dependabot alerts 활성화 여부 미확인, ⑤ 침해 기간 노출됐을 수 있는 Kakao/Toss API 키 미재발급, ⑥ `server/` npm 패키지에 감사 미처리 취약점(마지막 확인 27건, 심각 2건 — `express-rate-limit` 추가 후 재점검 필요) 존재. 상세 체크리스트는 `DEPLOYMENT.md` "10-1. 보안 침해사고 이후 강화 항목" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속(admin/trips 크래시, 결제 중복 청구, OTP 남용, 차단 세션 등)과 백업/npm audit/Dependabot 등 리포지토리에서 처리 가능한 인프라 항목은 2026-08-15에 완료(위 "완료됨" 참고). **여전히 남은 것 — 전부 VPS 접속/제3자 서비스 가입이 필요해 사용자가 직접 해야 함**: ① SSH 키 인증 전환(`authorized_keys` 비어있음, 절차는 `DEPLOYMENT.md` "10-2") ② 백업 cron 실제 등록(스크립트는 준비됨, "8-2") ③ UptimeRobot 등 다운타임 모니터링 가입("10-3") ④ Kakao/Toss API 키 재발급(침해 기간 노출 가능성) ⑤ 프로덕션 `SENTRY_DSN` 생존 확인(OS 재설치로 env가 새로 만들어짐). 상세 체크리스트는 `DEPLOYMENT.md` "10-1" 참고
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
 - **결제** (2026-08-13에 토스페이먼츠 + 낙찰 수수료 자동화로 대부분 구현 — 위 "결제·멤버십" 섹션 참고)

@@ -1,11 +1,12 @@
 import express from 'express';
 import multer from 'multer';
+import { z } from 'zod';
 import { UserRole } from '@prisma/client';
 import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
 import { getStorageService } from '../services/storage';
-import { imageFileFilter } from '../utils/uploadFileFilter';
+import { imageFileFilter, InvalidImageError } from '../utils/uploadFileFilter';
 
 const router = express.Router();
 const upload = multer({
@@ -14,6 +15,19 @@ const upload = multer({
     fileFilter: imageFileFilter,
 });
 const storage = getStorageService();
+
+const forQuoteSchema = z.object({
+    tripId: z.string().trim().min(1),
+    bidderId: z.string().trim().min(1),
+});
+
+const createMessageSchema = z.object({
+    message: z.string().trim().min(1).max(1000),
+});
+
+const updateRoomSchema = z.object({
+    customTitle: z.string().trim().max(80).nullable(),
+});
 
 function roomInclude(userId: string) {
     return {
@@ -168,16 +182,9 @@ async function findParticipantRoom(roomId: string, userId: string) {
 /** 승객·입찰자가 견적 단계 또는 낙찰 후 해당 입찰 기준 채팅방을 준비합니다. */
 router.post('/rooms/for-quote', requireAuth, async (req, res) => {
     try {
-        const tripId = String(req.body?.tripId || '').trim();
-        const bidderId = String(req.body?.bidderId || '').trim();
+        const { tripId, bidderId } = forQuoteSchema.parse(req.body);
         const userId = req.user!.userId;
         const role = req.user!.role;
-
-        if (!tripId || !bidderId) {
-            return res
-                .status(400)
-                .json({ error: 'tripId and bidderId are required' });
-        }
 
         const trip = await prisma.trip.findUnique({
             where: { id: tripId },
@@ -248,6 +255,11 @@ router.post('/rooms/for-quote', requireAuth, async (req, res) => {
 
         res.status(200).json({ room: { id: room.id } });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res
+                .status(400)
+                .json({ error: 'Invalid input', details: error.errors });
+        }
         console.error('Ensure quote chat room error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -359,15 +371,7 @@ router.get('/rooms/:roomId/messages', requireAuth, async (req, res) => {
 
 router.post('/rooms/:roomId/messages', requireAuth, async (req, res) => {
     try {
-        const message = String(req.body?.message || '').trim();
-
-        if (!message) {
-            return res.status(400).json({ error: 'Message is required' });
-        }
-
-        if (message.length > 1000) {
-            return res.status(400).json({ error: 'Message is too long' });
-        }
+        const { message } = createMessageSchema.parse(req.body);
 
         const room = await findParticipantRoom(
             req.params.roomId,
@@ -410,6 +414,11 @@ router.post('/rooms/:roomId/messages', requireAuth, async (req, res) => {
             },
         });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res
+                .status(400)
+                .json({ error: 'Invalid input', details: error.errors });
+        }
         console.error('Create chat message error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -449,6 +458,9 @@ router.post(
 
             res.status(201).json({ imageUrl });
         } catch (error) {
+            if (error instanceof InvalidImageError) {
+                return res.status(400).json({ error: error.message });
+            }
             console.error('Upload chat image error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
@@ -457,37 +469,17 @@ router.post(
 
 router.patch('/rooms/:roomId', requireAuth, async (req, res) => {
     try {
+        const { customTitle } = updateRoomSchema.parse(req.body);
         const roomId = String(req.params.roomId || '').trim();
         const userId = req.user!.userId;
 
-        if (!Object.prototype.hasOwnProperty.call(req.body, 'customTitle')) {
-            return res
-                .status(400)
-                .json({ error: 'customTitle is required (string or null)' });
-        }
-
-        const raw = req.body?.customTitle;
         const room = await findParticipantRoom(roomId, userId);
 
         if (!room) {
             return res.status(404).json({ error: 'Chat room not found' });
         }
 
-        let titleValue: string | null;
-        if (raw === null || raw === '') {
-            titleValue = null;
-        } else {
-            const s = String(raw).trim();
-            if (!s) {
-                titleValue = null;
-            } else if (s.length > 80) {
-                return res
-                    .status(400)
-                    .json({ error: 'Title must be at most 80 characters' });
-            } else {
-                titleValue = s;
-            }
-        }
+        const titleValue = customTitle || null;
 
         const isPassenger = room.passengerId === userId;
         await prisma.chatRoom.update({
@@ -499,6 +491,11 @@ router.patch('/rooms/:roomId', requireAuth, async (req, res) => {
 
         res.status(200).json({ ok: true });
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res
+                .status(400)
+                .json({ error: 'Invalid input', details: error.errors });
+        }
         console.error('Update chat room error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }

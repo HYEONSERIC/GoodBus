@@ -3,6 +3,7 @@ import './instrument';
 import * as Sentry from '@sentry/node';
 import express, { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
+import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -22,6 +23,12 @@ import { handleTossWebhook } from './routes/paymentsWebhook';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+// HSTS off: this app is only reachable through Next.js's proxy today, and
+// certbot/HTTPS stability hasn't been confirmed yet in production — same
+// reasoning as deploy/nginx/goodbus.conf omitting it. Revisit once HTTPS is
+// verified always-on, alongside the Nginx-level HSTS rollout.
+app.use(helmet({ hsts: false }));
 
 app.use(
     cors({
