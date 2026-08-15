@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authAPI } from '@/lib/api';
+import type { DashboardSessionUser } from '@/types/dashboard';
 
 export default function DashboardPage() {
     const router = useRouter();
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<DashboardSessionUser | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

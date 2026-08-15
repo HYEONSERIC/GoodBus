@@ -55,6 +55,32 @@ enum BidStatus {
   lost
 }
 
+enum MembershipPlan {
+  Basic
+  Plus
+  Premium
+  Business
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  cancelled
+}
+
+enum PaymentTransactionKind {
+  membership_subscription
+  min_bid_addon
+  platform_commission
+}
+
+enum PaymentTransactionStatus {
+  pending
+  succeeded
+  failed
+  cancelled
+}
+
 enum SupportPostKind {
   notice
   faq
@@ -67,6 +93,11 @@ enum SupportInquiryCategory {
   other
 }
 
+enum PhoneVerificationPurpose {
+  signup
+  login
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -76,7 +107,8 @@ model User {
   adminRole   AdminRole?
   displayName String?
   companyName String?
-  phoneNumber String?
+  phoneNumber String? @unique
+  phoneVerifiedAt DateTime?
   garageAddress String?
   busNumber   String?
   busType     String?
@@ -91,8 +123,10 @@ model User {
   companyRegistrationUrl String?
   companyRegistrationStatus VerificationStatus @default(none)
   companyRegistrationNote String?
+  membershipPlan MembershipPlan @default(Basic)
+  minBidAddonPurchased Boolean @default(false)
   createdAt   DateTime @default(now())
-  
+
   tripsAsPassenger Trip[] @relation("PassengerTrips")
   bids            Bid[]
   notifications   Notification[] @relation("UserNotifications")
@@ -104,6 +138,24 @@ model User {
   supportInquiries     SupportInquiry[]
   reviewsWritten       TripReview[] @relation("PassengerReviews")
   reviewsReceived      TripReview[] @relation("DriverReviews")
+  adminAuditLogs       AdminAuditLog[] @relation("AdminAuditActor")
+  billingKey           BillingKey?
+  membershipSubscription MembershipSubscription?
+  minBidAddonSubscription MinBidAddonSubscription?
+  paymentTransactions  PaymentTransaction[]
+}
+
+model PhoneVerification {
+  id          String                    @id @default(cuid())
+  phoneNumber String
+  purpose     PhoneVerificationPurpose
+  codeHash    String
+  attempts    Int                       @default(0)
+  consumedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime                  @default(now())
+
+  @@index([phoneNumber, purpose, createdAt])
 }
 
 model SupportPost {
@@ -158,6 +210,8 @@ model Trip {
   additionalRequest String?
   status      TripStatus @default(open)
   awardedAt   DateTime?
+  cancelReason String?
+  cancelledAt DateTime?
   createdAt   DateTime   @default(now())
   
   bids Bid[]
@@ -199,11 +253,70 @@ model Bid {
   @@index([bidderId])
 }
 
+model BillingKey {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tossBillingKey String   @unique
+  customerKey    String   @unique
+  cardBrand      String?
+  cardLast4      String?
+  createdAt      DateTime @default(now())
+}
+
+model MembershipSubscription {
+  id            String             @id @default(cuid())
+  userId        String             @unique
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          MembershipPlan
+  pendingPlan   MembershipPlan?
+  status        SubscriptionStatus @default(active)
+  nextBillingAt DateTime
+  cancelledAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([status, nextBillingAt])
+}
+
+model MinBidAddonSubscription {
+  id            String             @id @default(cuid())
+  userId        String             @unique
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        SubscriptionStatus @default(active)
+  nextBillingAt DateTime
+  cancelledAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([status, nextBillingAt])
+}
+
+model PaymentTransaction {
+  id             String                   @id @default(cuid())
+  userId         String
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           PaymentTransactionKind
+  status         PaymentTransactionStatus @default(pending)
+  amount         Int
+  tossOrderId    String                   @unique
+  tossPaymentKey String?                  @unique
+  tripId         String?
+  bidId          String?
+  failReason     String?
+  metadata       Json?
+  createdAt      DateTime                 @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
 enum NotificationType {
   BID_RECEIVED
   BID_AWARDED
   VERIFICATION_APPROVED
   VERIFICATION_REJECTED
+  AWARD_PAYMENT_FAILED
 }
 
 model Notification {
@@ -278,7 +391,17 @@ model ChatMessage {
   @@index([readAt])
 }
 
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./erd.svg" 
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation("AdminAuditActor", fields: [actorId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

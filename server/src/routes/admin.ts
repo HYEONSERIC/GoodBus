@@ -2,7 +2,17 @@ import express from 'express';
 import path from 'path';
 import prisma from '../utils/db';
 import { requireAuth, requireRole, requireAdminRole, canViewRevenue } from '../middleware/auth';
-import { UserRole, AdminRole, SupportPostKind, TripStatus, NotificationType } from '@prisma/client';
+import {
+    UserRole,
+    UserStatus,
+    VerificationStatus,
+    BidStatus,
+    AdminRole,
+    SupportPostKind,
+    TripStatus,
+    NotificationType,
+    Prisma,
+} from '@prisma/client';
 import {
     formatSupportAuthorLabel,
     parseSupportPostKind,
@@ -36,8 +46,25 @@ import {
     parseSupportInquiryListSort,
     parseSupportInquiryListStatus,
 } from '../utils/adminSupportInquiryList';
+import { recordAdminAudit } from '../utils/adminAuditLog';
 
 const router = express.Router();
+
+/**
+ * Query-string values are attacker-controlled. Prisma throws PrismaClientValidationError
+ * for enum values outside the schema, which — with no try/catch on these routes and no
+ * unhandledRejection handler — crashes the whole process (Express 4 doesn't auto-catch
+ * async rejections). Always parse untrusted enum input through this instead of `as any`.
+ */
+function parseEnumQuery<T extends Record<string, string>>(
+    enumObj: T,
+    value: unknown,
+): T[keyof T] | undefined {
+    if (typeof value !== 'string') return undefined;
+    return (Object.values(enumObj) as string[]).includes(value)
+        ? (value as T[keyof T])
+        : undefined;
+}
 
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
     const activeTripWhere = { status: { not: TripStatus.cancelled } };
@@ -112,8 +139,8 @@ router.get('/users', requireAuth, requireRole(UserRole.Admin), async (req, res) 
 
     const users = await prisma.user.findMany({
         where: {
-            role: role ? (role as UserRole) : undefined,
-            status: status ? (status as any) : undefined,
+            role: role ? parseEnumQuery(UserRole, role) : undefined,
+            status: status ? parseEnumQuery(UserStatus, status) : undefined,
             email: search
                 ? {
                       contains: String(search),
@@ -254,7 +281,7 @@ router.patch(
 
         const target = await prisma.user.findUnique({
             where: { id: req.params.id },
-            select: { role: true, adminRole: true },
+            select: { role: true, adminRole: true, status: true },
         });
 
         if (!target) {
@@ -285,6 +312,14 @@ router.patch(
                 adminRole: true,
                 createdAt: true,
             },
+        });
+
+        void recordAdminAudit({
+            actorId: req.user!.userId,
+            action: 'user.status.update',
+            targetType: 'User',
+            targetId: user.id,
+            metadata: { from: target.status, to: status, email: user.email },
         });
 
         res.json({ user });
@@ -536,14 +571,21 @@ router.get(
     requireRole(UserRole.Admin),
     async (req, res) => {
         const type = String(req.query.type || 'all');
-        const status = String(req.query.status || 'pending');
+        const status =
+            req.query.status === undefined
+                ? VerificationStatus.pending
+                : parseEnumQuery(VerificationStatus, req.query.status);
+
+        if (!status) {
+            return res.status(400).json({ error: 'Invalid status filter' });
+        }
 
         if (type === 'all') {
             const [drivers, companies] = await Promise.all([
                 prisma.user.findMany({
                     where: {
                         role: UserRole.Driver,
-                        driverLicenseStatus: status as any,
+                        driverLicenseStatus: status,
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
@@ -551,7 +593,7 @@ router.get(
                 prisma.user.findMany({
                     where: {
                         role: UserRole.BusCompany,
-                        companyRegistrationStatus: status as any,
+                        companyRegistrationStatus: status,
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
@@ -572,8 +614,8 @@ router.get(
             where: {
                 role: roleFilter,
                 ...(isDriver
-                    ? { driverLicenseStatus: status as any }
-                    : { companyRegistrationStatus: status as any }),
+                    ? { driverLicenseStatus: status }
+                    : { companyRegistrationStatus: status }),
             },
             select: verificationUserSelect,
             orderBy: { createdAt: 'desc' },
@@ -681,6 +723,14 @@ router.patch(
             },
         });
 
+        void recordAdminAudit({
+            actorId: req.user!.userId,
+            action: 'verification.review',
+            targetType: 'User',
+            targetId: user.id,
+            metadata: { type, status, reason: reason || null, email: user.email },
+        });
+
         res.json({ user });
     }
 );
@@ -716,80 +766,91 @@ router.get(
         } = {};
         if (tripId) tripWhere.id = tripId;
         if (passengerId) tripWhere.passengerId = passengerId;
-        if (tripStatus) tripWhere.status = tripStatus as TripStatus;
+        if (tripStatus) {
+            const parsedTripStatus = parseEnumQuery(TripStatus, tripStatus);
+            if (parsedTripStatus) tripWhere.status = parsedTripStatus;
+        }
 
-        const bids = await prisma.bid.findMany({
-            where: {
-                bidderId: bidderId || undefined,
-                status: bidStatus ? (bidStatus as any) : undefined,
-                createdAt: Object.keys(createdAt).length ? createdAt : undefined,
-                ...(Object.keys(tripWhere).length ? { trip: tripWhere } : {}),
-                ...(search
-                    ? {
-                          OR: [
-                              {
-                                  bidder: {
+        const where: Prisma.BidWhereInput = {
+            bidderId: bidderId || undefined,
+            status: bidStatus ? parseEnumQuery(BidStatus, bidStatus) : undefined,
+            createdAt: Object.keys(createdAt).length ? createdAt : undefined,
+            ...(Object.keys(tripWhere).length ? { trip: tripWhere } : {}),
+            ...(search
+                ? {
+                      OR: [
+                          {
+                              bidder: {
+                                  email: {
+                                      contains: search,
+                                      mode: 'insensitive',
+                                  },
+                              },
+                          },
+                          {
+                              trip: {
+                                  passenger: {
                                       email: {
                                           contains: search,
                                           mode: 'insensitive',
                                       },
                                   },
                               },
-                              {
-                                  trip: {
-                                      passenger: {
-                                          email: {
-                                              contains: search,
-                                              mode: 'insensitive',
-                                          },
-                                      },
+                          },
+                          {
+                              trip: {
+                                  origin: {
+                                      contains: search,
+                                      mode: 'insensitive',
                                   },
                               },
-                              {
-                                  trip: {
-                                      origin: {
-                                          contains: search,
-                                          mode: 'insensitive',
-                                      },
+                          },
+                          {
+                              trip: {
+                                  destination: {
+                                      contains: search,
+                                      mode: 'insensitive',
                                   },
                               },
-                              {
-                                  trip: {
-                                      destination: {
-                                          contains: search,
-                                          mode: 'insensitive',
-                                      },
-                                  },
-                              },
-                          ],
-                      }
-                    : {}),
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 50,
-            include: {
-                bidder: {
-                    select: { id: true, email: true, role: true },
-                },
-                trip: {
-                    select: {
-                        id: true,
-                        origin: true,
-                        destination: true,
-                        status: true,
-                        passenger: {
-                            select: { id: true, email: true },
+                          },
+                      ],
+                  }
+                : {}),
+        };
+
+        const take = Math.min(Number(req.query.take) || 50, 200);
+
+        const [bids, totalMatching] = await Promise.all([
+            prisma.bid.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                take,
+                include: {
+                    bidder: {
+                        select: { id: true, email: true, role: true },
+                    },
+                    trip: {
+                        select: {
+                            id: true,
+                            origin: true,
+                            destination: true,
+                            status: true,
+                            passenger: {
+                                select: { id: true, email: true },
+                            },
                         },
                     },
                 },
-            },
-        });
+            }),
+            prisma.bid.count({ where }),
+        ]);
 
         const canSeeRevenue = await canViewRevenue(req.user!.userId);
         res.json({
             bids: canSeeRevenue
                 ? bids
                 : bids.map((bid) => ({ ...bid, price: 0 })),
+            meta: { totalMatching, returned: bids.length },
         });
     }
 );
@@ -840,6 +901,14 @@ router.post(
                 adminRole: true,
                 createdAt: true,
             },
+        });
+
+        void recordAdminAudit({
+            actorId: req.user!.userId,
+            action: 'admin.create',
+            targetType: 'User',
+            targetId: admin.id,
+            metadata: { email: admin.email, adminRole: admin.adminRole },
         });
 
         res.status(201).json({ admin });
@@ -963,6 +1032,14 @@ router.post(
                 },
             });
 
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'supportPost.create',
+                targetType: 'SupportPost',
+                targetId: post.id,
+                metadata: { kind: post.kind, title: post.title },
+            });
+
             res.status(201).json({
                 post: {
                     ...post,
@@ -1050,6 +1127,14 @@ router.patch(
                 },
             });
 
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'supportPost.update',
+                targetType: 'SupportPost',
+                targetId: post.id,
+                metadata: { changedFields: Object.keys(data) },
+            });
+
             res.json({
                 post: {
                     ...post,
@@ -1075,6 +1160,14 @@ router.delete(
             if (!id) return res.status(400).json({ error: 'Missing id' });
 
             await prisma.supportPost.deleteMany({ where: { id } });
+
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'supportPost.delete',
+                targetType: 'SupportPost',
+                targetId: id,
+            });
+
             res.json({ ok: true });
         } catch (e) {
             console.error('admin support delete', e);
@@ -1093,6 +1186,7 @@ router.get(
                 search: String(req.query.search || '').trim() || undefined,
                 status: parseSupportInquiryListStatus(req.query.status),
                 sort: parseSupportInquiryListSort(req.query.sort),
+                take: Number(req.query.take) || undefined,
             });
             res.json(result);
         } catch (e) {
@@ -1220,6 +1314,13 @@ router.patch(
                 },
             });
 
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'supportInquiry.reply',
+                targetType: 'SupportInquiry',
+                targetId: row.id,
+            });
+
             res.json({
                 inquiry: {
                     id: row.id,
@@ -1326,6 +1427,56 @@ router.get(
             });
         } catch (e) {
             console.error('admin revenue-stats awards', e);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+/** 관리자 행위 감사 로그 (차단/서류심사/서브관리자생성/공지-FAQ/문의답변). 다른 관리자 계정의
+ *  민감한 행위 기록이라 revenue-stats와 동일하게 CustomerSupport는 제외한다. */
+router.get(
+    '/audit-log',
+    requireAuth,
+    requireRole(UserRole.Admin),
+    requireAdminRole(AdminRole.Super, AdminRole.Operations),
+    async (req, res) => {
+        try {
+            const { skip, take, page, pageSize } = parsePagination({
+                page: req.query.page,
+                pageSize: req.query.pageSize,
+            });
+
+            const [rows, total] = await Promise.all([
+                prisma.adminAuditLog.findMany({
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take,
+                    include: {
+                        actor: {
+                            select: { email: true, adminRole: true },
+                        },
+                    },
+                }),
+                prisma.adminAuditLog.count(),
+            ]);
+
+            res.json({
+                logs: rows.map((row) => ({
+                    id: row.id,
+                    action: row.action,
+                    targetType: row.targetType,
+                    targetId: row.targetId,
+                    metadata: row.metadata,
+                    createdAt: row.createdAt.toISOString(),
+                    actor: {
+                        email: row.actor.email,
+                        adminRole: row.actor.adminRole,
+                    },
+                })),
+                meta: { page, pageSize, total },
+            });
+        } catch (e) {
+            console.error('admin audit-log list', e);
             res.status(500).json({ error: 'Internal server error' });
         }
     },

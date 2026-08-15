@@ -21,6 +21,7 @@ export function PassengerQuoteTripsList({
     onToggleQuotesTrip,
     onToggleCancelMenu,
     onOpenCancelDialog,
+    onOpenEditDialog,
     onSelectBid,
     formatDriverRating,
     resolveMediaUrl,
@@ -35,10 +36,15 @@ export function PassengerQuoteTripsList({
     onToggleQuotesTrip: (tripId: string) => void;
     onToggleCancelMenu: (tripId: string) => void;
     onOpenCancelDialog: (trip: PassengerTrip) => void;
+    onOpenEditDialog: (trip: PassengerTrip) => void;
     onSelectBid: (bid: PassengerBid, bidTrip: PassengerTrip) => void;
     formatDriverRating: (driverId: string) => string;
     resolveMediaUrl: (url?: string | null) => string | null;
 }) {
+    // 의도적: 매 렌더마다 "지금"을 새로 계산해야 대시보드를 오래 켜둬도
+    // 지난 여정이 계속 "예정"으로 남지 않는다. useMemo로 고정하면 회귀.
+    // (BUGFIXES_2026-08-09.md 참고)
+    // eslint-disable-next-line react-hooks/purity
     const nowMs = Date.now();
     const quoteTrips = trips.filter(
         (t) =>
@@ -96,10 +102,8 @@ export function PassengerQuoteTripsList({
                         onToggleCancelMenu={() =>
                             onToggleCancelMenu(trip.id)
                         }
-                        onOpenCancelDialog={() => {
-                            onOpenCancelDialog(trip);
-                            onToggleCancelMenu(trip.id);
-                        }}
+                        onOpenCancelDialog={() => onOpenCancelDialog(trip)}
+                        onOpenEditDialog={() => onOpenEditDialog(trip)}
                         onToggleQuotes={() => onToggleQuotesTrip(trip.id)}
                         onSelectBid={onSelectBid}
                         formatDriverRating={formatDriverRating}

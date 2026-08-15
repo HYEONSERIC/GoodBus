@@ -1,5 +1,7 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+
 export function AdminPanelCard({
     children,
     className = '',
@@ -8,7 +10,12 @@ export function AdminPanelCard({
     className?: string;
 }) {
     return (
-        <div className={`rounded-lg border p-4 space-y-4 ${className}`.trim()}>
+        <div
+            className={cn(
+                'space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm',
+                className,
+            )}
+        >
             {children}
         </div>
     );

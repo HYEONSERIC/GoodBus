@@ -14,6 +14,8 @@ import { getErrorMessage } from '@/lib/errors';
 import { verificationKindForUser } from '@/lib/adminVerification';
 import { buildAdminHref, parseAdminNavQuery } from '@/lib/adminNav';
 import type {
+    AdminAuditLogRow,
+    AdminAuditLogMeta,
     AdminBidRow,
     AdminBidderStats,
     AdminNotificationHistoryRow,
@@ -74,16 +76,7 @@ function useAdminDashboardState() {
     const [roleFilter, setRoleFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<
-        | 'overview'
-        | 'users'
-        | 'bids'
-        | 'notifications'
-        | 'verification'
-        | 'revenue'
-        | 'faq'
-        | 'adminCreate'
-    >('overview');
+    const [activeTab, setActiveTab] = useState<AdminTabId>('overview');
     const [adminRole, setAdminRole] = useState<string | null>(null);
     const [overviewTripLimit, setOverviewTripLimit] = useState(5);
     const [overviewBidLimit, setOverviewBidLimit] = useState(5);
@@ -96,6 +89,11 @@ function useAdminDashboardState() {
     const [bidResults, setBidResults] = useState<AdminBidRow[]>([]);
     const [bidLoading, setBidLoading] = useState(false);
     const [bidError, setBidError] = useState('');
+    const [bidsTake, setBidsTake] = useState(50);
+    const [bidsMeta, setBidsMeta] = useState<{
+        totalMatching: number;
+        returned: number;
+    } | null>(null);
     const [notificationHistory, setNotificationHistory] = useState<
         AdminNotificationHistoryRow[]
     >([]);
@@ -143,6 +141,7 @@ function useAdminDashboardState() {
     >([]);
     const [supportInquiryMeta, setSupportInquiryMeta] =
         useState<SupportInquiryListMeta | null>(null);
+    const [supportInquiryTake, setSupportInquiryTake] = useState(300);
     const [inquirySearch, setInquirySearch] = useState('');
     const [inquiryStatusFilter, setInquiryStatusFilter] =
         useState<SupportInquiryListStatus>('all');
@@ -174,6 +173,14 @@ function useAdminDashboardState() {
         useState<AdminRevenueStatsResponse | null>(null);
     const [revenueLoading, setRevenueLoading] = useState(false);
     const [revenueError, setRevenueError] = useState('');
+
+    const [auditLogs, setAuditLogs] = useState<AdminAuditLogRow[]>([]);
+    const [auditLogMeta, setAuditLogMeta] = useState<AdminAuditLogMeta | null>(
+        null,
+    );
+    const [auditLogPage, setAuditLogPage] = useState(1);
+    const [auditLogLoading, setAuditLogLoading] = useState(false);
+    const [auditLogError, setAuditLogError] = useState('');
 
     async function refreshOverview() {
         try {
@@ -264,6 +271,13 @@ function useAdminDashboardState() {
         if (activeTab === 'revenue' && !revenueStats && !revenueLoading) {
             void loadRevenueStats();
         }
+        if (
+            activeTab === 'auditLog' &&
+            auditLogs.length === 0 &&
+            !auditLogLoading
+        ) {
+            void loadAuditLog(1);
+        }
     }, [activeTab]);
 
     useEffect(() => {
@@ -306,16 +320,20 @@ function useAdminDashboardState() {
         search?: string;
         status?: SupportInquiryListStatus;
         sort?: SupportInquiryListSort;
+        take?: number;
     }) => {
         setSupportInquiriesLoading(true);
+        const take = overrides?.take ?? supportInquiryTake;
         try {
             const data = await adminAPI.getSupportInquiries({
                 search: (overrides?.search ?? inquirySearch).trim() || undefined,
                 status: overrides?.status ?? inquiryStatusFilter,
                 sort: overrides?.sort ?? inquirySort,
+                take,
             });
             setSupportInquiries(data.inquiries || []);
             setSupportInquiryMeta(data.meta ?? null);
+            setSupportInquiryTake(take);
         } catch (err: unknown) {
             setError(
                 getErrorMessage(err, '문의 목록을 불러오지 못했습니다.'),
@@ -325,9 +343,14 @@ function useAdminDashboardState() {
         }
     };
 
+    const handleSupportInquiryLoadMore = () => {
+        const nextTake = Math.min(supportInquiryTake + 100, 500);
+        void loadSupportInquiries({ take: nextTake });
+    };
+
     useEffect(() => {
         if (activeTab !== 'faq' || faqSectionTab !== 'inquiries') return;
-        void loadSupportInquiries();
+        void loadSupportInquiries({ take: 300 });
     }, [activeTab, faqSectionTab, inquiryStatusFilter, inquirySort]);
 
     useEffect(() => {
@@ -413,12 +436,14 @@ function useAdminDashboardState() {
         passengerId?: string;
         tripId?: string;
         highlightBidId?: string | null;
+        take?: number;
     }) => {
         setBidLoading(true);
         setBidError('');
         if (overrides?.highlightBidId !== undefined) {
             setHighlightBidId(overrides.highlightBidId);
         }
+        const take = overrides?.take ?? bidsTake;
         try {
             const data = await adminAPI.getBids({
                 search: (overrides?.search ?? bidSearch).trim() || undefined,
@@ -431,8 +456,11 @@ function useAdminDashboardState() {
                 bidderId: overrides?.bidderId,
                 passengerId: overrides?.passengerId,
                 tripId: overrides?.tripId,
+                take,
             });
             setBidResults(data.bids || []);
+            setBidsMeta(data.meta ?? null);
+            setBidsTake(take);
             syncAdminUrl({
                 tab: 'bids',
                 bidSearch: (overrides?.search ?? bidSearch).trim() || undefined,
@@ -447,6 +475,11 @@ function useAdminDashboardState() {
         } finally {
             setBidLoading(false);
         }
+    };
+
+    const handleBidLoadMore = () => {
+        const nextTake = Math.min(bidsTake + 50, 200);
+        void runBidSearch({ take: nextTake, highlightBidId: null });
     };
 
     const openBidsForBidder = async (opts: {
@@ -465,6 +498,7 @@ function useAdminDashboardState() {
             bidderId: opts.bidderId,
             bidStatus: opts.bidStatus,
             highlightBidId: opts.highlightBidId ?? null,
+            take: 50,
         });
     };
 
@@ -478,6 +512,7 @@ function useAdminDashboardState() {
             search: opts.email,
             passengerId: opts.passengerId,
             highlightBidId: null,
+            take: 50,
         });
     };
 
@@ -488,6 +523,7 @@ function useAdminDashboardState() {
             tripId,
             search: '',
             highlightBidId: null,
+            take: 50,
         });
     };
 
@@ -533,7 +569,7 @@ function useAdminDashboardState() {
     };
 
     const handleBidSearch = async () => {
-        await runBidSearch({ highlightBidId: null });
+        await runBidSearch({ highlightBidId: null, take: 50 });
     };
 
     const handleNotificationHistorySearch = async (page = notificationPage) => {
@@ -597,6 +633,23 @@ function useAdminDashboardState() {
         await refreshOverview();
     };
 
+    const loadAuditLog = async (page = auditLogPage) => {
+        setAuditLogLoading(true);
+        setAuditLogError('');
+        try {
+            const data = await adminAPI.getAuditLog({ page, pageSize: 30 });
+            setAuditLogs(data.logs || []);
+            setAuditLogMeta(data.meta ?? null);
+            setAuditLogPage(page);
+        } catch (err: unknown) {
+            setAuditLogError(
+                getErrorMessage(err, '감사 로그를 불러오지 못했습니다.'),
+            );
+        } finally {
+            setAuditLogLoading(false);
+        }
+    };
+
     return {
         router,
         loading,
@@ -654,6 +707,9 @@ function useAdminDashboardState() {
         setBidLoading,
         bidError,
         setBidError,
+        bidsTake,
+        bidsMeta,
+        handleBidLoadMore,
         notificationHistory,
         setNotificationHistory,
         notificationSearch,
@@ -717,6 +773,8 @@ function useAdminDashboardState() {
         supportInquiries,
         setSupportInquiries,
         supportInquiryMeta,
+        supportInquiryTake,
+        handleSupportInquiryLoadMore,
         inquirySearch,
         setInquirySearch,
         inquiryStatusFilter,
@@ -770,6 +828,12 @@ function useAdminDashboardState() {
         loadRevenueStats,
         revenueYearOptions: buildYearOptions(),
         revenueMonthOptions: buildMonthOptions(),
+        auditLogs,
+        auditLogMeta,
+        auditLogPage,
+        auditLogLoading,
+        auditLogError,
+        loadAuditLog,
     };
 
 }

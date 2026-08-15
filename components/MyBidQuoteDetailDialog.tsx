@@ -44,7 +44,7 @@ function parseBracketSection(note: string | null | undefined, title: string) {
     const tag = `[${title}]`;
     const idx = note.indexOf(tag);
     if (idx === -1) return '';
-    let rest = note.slice(idx + tag.length).replace(/^\s*\n?/, '');
+    const rest = note.slice(idx + tag.length).replace(/^\s*\n?/, '');
     const nextIdx = rest.search(/\n\n\[/);
     if (nextIdx === -1) return rest.trim();
     return rest.slice(0, nextIdx).trim();

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ChangeEvent } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -12,6 +11,7 @@ import {
 import { OpenTripBidFeeStep } from '@/components/openTripBid/OpenTripBidFeeStep';
 import { OpenTripBidFormBody } from '@/components/openTripBid/OpenTripBidFormBody';
 import { OpenTripBidTripSummarySection } from '@/components/openTripBid/OpenTripBidTripSummarySection';
+import { OpenTripBidMinPricePanel } from '@/components/openTripBid/OpenTripBidMinPricePanel';
 import { Button } from '@/components/ui/button';
 import {
     assembleBidNote,
@@ -51,8 +51,6 @@ export function OpenTripBidDialog({
     const [extendedBid, setExtendedBid] = useState<ExtendedBidForm>(() =>
         defaultExtendedBidForm(profileForm),
     );
-    const [bidPhotoFiles, setBidPhotoFiles] = useState<File[]>([]);
-    const [bidPhotoUrls, setBidPhotoUrls] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
 
     const tripRound = Boolean(partner);
@@ -61,33 +59,14 @@ export function OpenTripBidDialog({
         if (open && trip) {
             setUiStep('fee');
             setExtendedBid(defaultExtendedBidForm(profileForm));
-            setBidPhotoFiles([]);
         }
     }, [open, trip?.id, profileForm.busType, profileForm.capacity, profileForm.busYear]);
-
-    useEffect(() => {
-        const urls = bidPhotoFiles.map((f) => URL.createObjectURL(f));
-        setBidPhotoUrls(urls);
-        return () => urls.forEach((url) => URL.revokeObjectURL(url));
-    }, [bidPhotoFiles]);
 
     function handleOpenChange(next: boolean) {
         if (!next) {
             setUiStep('fee');
-            setBidPhotoFiles([]);
         }
         onOpenChange(next);
-    }
-
-    function onBidPhotosPicked(e: ChangeEvent<HTMLInputElement>) {
-        const incoming = Array.from(e.target.files || []);
-        if (incoming.length === 0) return;
-        setBidPhotoFiles((prev) => [...prev, ...incoming].slice(0, 3));
-        e.target.value = '';
-    }
-
-    function removeBidPhoto(slot: number) {
-        setBidPhotoFiles((prev) => prev.filter((_, i) => i !== slot));
     }
 
     async function handleSubmit() {
@@ -106,12 +85,7 @@ export function OpenTripBidDialog({
         }
         setSubmitting(true);
         try {
-            const note = assembleBidNote(
-                extendedBid,
-                per,
-                vehicleCount,
-                bidPhotoFiles.length,
-            );
+            const note = assembleBidNote(extendedBid, per, vehicleCount);
             await onSubmit({ tripId: trip.id, totalManwon, note });
             handleOpenChange(false);
         } catch (e) {
@@ -156,7 +130,7 @@ export function OpenTripBidDialog({
                         </div>
 
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
+                            <div className="scrollbar-none min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-3 pb-4">
                                 <OpenTripBidTripSummarySection
                                     trip={trip}
                                     partner={partner}
@@ -164,20 +138,20 @@ export function OpenTripBidDialog({
                                     distanceKm={distanceKm}
                                     membershipLabel={membershipLabel}
                                 />
+                                <div className="mt-3">
+                                    <OpenTripBidMinPricePanel />
+                                </div>
                                 <OpenTripBidFormBody
                                     extendedBid={extendedBid}
                                     setExtendedBid={setExtendedBid}
                                     profileForm={profileForm}
-                                    bidPhotoUrls={bidPhotoUrls}
-                                    onBidPhotosPicked={onBidPhotosPicked}
-                                    removeBidPhoto={removeBidPhoto}
                                 />
                             </div>
 
                             <div className="flex shrink-0 border-t border-gray-200 bg-white px-4 py-3">
                                 <Button
                                     type="button"
-                                    className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
+                                    className="h-11 w-full rounded-md bg-[#2563eb] text-sm font-semibold text-white hover:bg-[#1d4ed8]"
                                     disabled={submitting}
                                     onClick={() => void handleSubmit()}
                                 >

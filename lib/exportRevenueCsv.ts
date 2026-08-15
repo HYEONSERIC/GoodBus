@@ -60,11 +60,11 @@ function buildSummaryRows(
     return rows;
 }
 
-export function downloadRevenueAwardsCsv(
+/** 순수 CSV 문자열 생성 — DOM 없이 테스트 가능하도록 다운로드 로직과 분리 */
+export function buildRevenueAwardsCsv(
     awards: AdminRevenueAwardRow[],
-    filename: string,
     options?: RevenueCsvExportOptions,
-) {
+): string {
     const headers = [
         '집계시각',
         '낙찰시각',
@@ -94,11 +94,20 @@ export function downloadRevenueAwardsCsv(
     const summaryRows = buildSummaryRows(awards, options);
 
     const bom = '\uFEFF';
-    const csv =
+    return (
         bom +
         [headers, ...rows, ...summaryRows]
             .map((line) => line.map(escapeCsvCell).join(','))
-            .join('\n');
+            .join('\n')
+    );
+}
+
+export function downloadRevenueAwardsCsv(
+    awards: AdminRevenueAwardRow[],
+    filename: string,
+    options?: RevenueCsvExportOptions,
+) {
+    const csv = buildRevenueAwardsCsv(awards, options);
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

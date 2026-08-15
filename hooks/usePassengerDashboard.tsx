@@ -5,6 +5,7 @@ import {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
     type ReactNode,
 } from 'react';
@@ -30,6 +31,8 @@ import type {
     PassengerBid,
     PassengerTrip,
 } from '@/types/passenger';
+import type { PassengerEditTripValues } from '@/components/passenger/dialogs';
+import type { DashboardSessionUser } from '@/types/dashboard';
 
 const PASSENGER_ROUND_OPTS = { matchStatus: true } as const;
 
@@ -44,7 +47,7 @@ const PassengerDashboardContext =
     createContext<PassengerDashboardContextValue | null>(null);
 
 function usePassengerDashboardState() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<DashboardSessionUser | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [menuOpen, setMenuOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<
@@ -67,6 +70,10 @@ function usePassengerDashboardState() {
     );
     const [cancelDialogTrip, setCancelDialogTrip] = useState<Trip | null>(null);
     const [cancelReason, setCancelReason] = useState('');
+    const [editTripDialogTrip, setEditTripDialogTrip] = useState<Trip | null>(
+        null,
+    );
+    const [editTripSubmitting, setEditTripSubmitting] = useState(false);
     const [quotesExpandedTripIds, setQuotesExpandedTripIds] = useState<
         string[]
     >([]);
@@ -74,6 +81,7 @@ function usePassengerDashboardState() {
         bid: Bid;
         bidTrip: Trip;
     } | null>(null);
+    const bidDetailRequestRef = useRef(0);
     const [bidGalleryIndex, setBidGalleryIndex] = useState(0);
     const [driverStatsById, setDriverStatsById] = useState<
         Record<string, DriverReviewStats>
@@ -106,7 +114,11 @@ function usePassengerDashboardState() {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             const tripData = await tripsAPI.getAll();
-            const myTrips = (tripData.trips || []).filter((trip: any) => {
+            const myTrips = (tripData.trips || []).filter((trip: {
+                passenger?: { id?: string } | null;
+                passengerId?: string;
+                status: string;
+            }) => {
                 const tripPassengerId = trip?.passenger?.id ?? trip?.passengerId;
                 return (
                     tripPassengerId === userData.user.id &&
@@ -146,10 +158,12 @@ function usePassengerDashboardState() {
     }
 
     async function openBidDetail(bid: Bid, bidTrip: Trip) {
+        const requestId = ++bidDetailRequestRef.current;
         setBidDetail({ bid, bidTrip });
         setBidDetailReviewsLoading(true);
         try {
             const data = await reviewsAPI.getDriverById(bid.bidder.id);
+            if (bidDetailRequestRef.current !== requestId) return;
             const reviews = (data.reviews || []) as TripReviewRecord[];
             const stats: DriverReviewStats = {
                 avgRating: data.avgRating ?? null,
@@ -162,10 +176,13 @@ function usePassengerDashboardState() {
                 [bid.bidder.id]: stats,
             }));
         } catch {
+            if (bidDetailRequestRef.current !== requestId) return;
             setBidDetailReviews([]);
             setBidDetailReviewStats({ avgRating: null, count: 0 });
         } finally {
-            setBidDetailReviewsLoading(false);
+            if (bidDetailRequestRef.current === requestId) {
+                setBidDetailReviewsLoading(false);
+            }
         }
     }
 
@@ -228,7 +245,9 @@ function usePassengerDashboardState() {
         }
         try {
             await Promise.all(
-                cancellableTripIds.map((tripId) => tripsAPI.cancel(tripId)),
+                cancellableTripIds.map((tripId) =>
+                    tripsAPI.cancel(tripId, reason),
+                ),
             );
             setCancelDialogTrip(null);
             setCancelReason('');
@@ -244,6 +263,36 @@ function usePassengerDashboardState() {
         const partner = getRoundPartnerTrip(trip, trips, PASSENGER_ROUND_OPTS);
         if (!partner) return [trip.id];
         return [trip.id, partner.id];
+    }
+
+    function closeEditTripDialog() {
+        setEditTripDialogTrip(null);
+    }
+
+    async function submitEditTrip(values: PassengerEditTripValues) {
+        if (!editTripDialogTrip) return;
+        setEditTripSubmitting(true);
+        try {
+            await tripsAPI.update(editTripDialogTrip.id, {
+                dateTime: new Date(values.dateTime).toISOString(),
+                paxCount: values.paxCount,
+                busSize: values.busSize,
+                stopoverDetail: values.stopoverDetail,
+                additionalRequest: values.additionalRequest,
+                paymentMethod: values.paymentMethod,
+            });
+            setEditTripDialogTrip(null);
+            setCancelMenuTripId(null);
+            await loadData();
+        } catch (error) {
+            alert(
+                error instanceof Error
+                    ? error.message
+                    : '여정 수정에 실패했습니다',
+            );
+        } finally {
+            setEditTripSubmitting(false);
+        }
     }
 
     function toggleTripDetail(tripId: string) {
@@ -447,6 +496,11 @@ function usePassengerDashboardState() {
         tripForm,
         closeCancelDialog,
         confirmCancelTrip,
+        editTripDialogTrip,
+        setEditTripDialogTrip,
+        editTripSubmitting,
+        closeEditTripDialog,
+        submitEditTrip,
     };
 }
 

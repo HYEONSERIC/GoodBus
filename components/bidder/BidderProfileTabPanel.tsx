@@ -20,6 +20,7 @@ export function BidderProfileTabPanel({
     vehicleYearLabel,
     insuranceLabel,
     companyLabel,
+    membershipLabel,
     vehiclePhotos,
     driverComment,
     ratingLine,
@@ -46,6 +47,7 @@ export function BidderProfileTabPanel({
     vehicleYearLabel: string | null;
     insuranceLabel: string;
     companyLabel: string;
+    membershipLabel: string;
     vehiclePhotos: string[];
     driverComment?: string;
     ratingLine?: string;
@@ -71,7 +73,7 @@ export function BidderProfileTabPanel({
     onHome: () => void;
     onEdit: () => void;
 }) {
-    const showReviews = role === 'driver' && onProfileSectionChange != null;
+    const showReviews = onProfileSectionChange != null;
     const bannerHeight = role === 'driver' ? 'h-48' : 'h-40';
 
     return (
@@ -118,7 +120,7 @@ export function BidderProfileTabPanel({
                             <p className="text-sm text-gray-500">
                                 {ratingLine ?? '★★★★☆'}
                             </p>
-                            <div className="mt-4 grid grid-cols-3 gap-4 text-xs text-gray-600">
+                            <div className="mt-4 grid grid-cols-4 gap-4 text-xs text-gray-600">
                                 <div>
                                     <p className="font-semibold text-gray-900">
                                         차종
@@ -142,6 +144,12 @@ export function BidderProfileTabPanel({
                                         소속
                                     </p>
                                     <p>{companyLabel}</p>
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-gray-900">
+                                        멤버십
+                                    </p>
+                                    <p>{membershipLabel}</p>
                                 </div>
                             </div>
                         </div>

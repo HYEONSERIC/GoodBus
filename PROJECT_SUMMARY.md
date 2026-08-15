@@ -20,6 +20,8 @@ A full-stack charter bus bidding platform with role-based access control, passen
     -   `/support` - passenger FAQ, notices, inquiries
     -   `/admin` - overview, users, activity, bids, verifications, support posts/inquiries, **revenue-stats**, notification history, admin creation
     -   `/kakao` - places search + directions proxy
+    -   `/payments` - Toss Payments billing-key registration, membership tier subscribe/cancel/reactivate (upgrade=immediate, downgrade=scheduled), min-bid-amount add-on subscription, webhook (test keys as of 2026-08-13)
+    -   `/bids`, `/trips` - now also enforce billing-key-required-to-bid and pre-charge the 10% platform commission on award (see below)
 -   **Admin utilities**: `adminRevenue.ts`, `adminOverview.ts`, `adminUserStats.ts`, `adminSupportInquiryList.ts`
 -   **Security**: Role-based middleware, CORS configuration
 -   **Docker**: PostgreSQL container with docker-compose
@@ -50,6 +52,8 @@ A full-stack charter bus bidding platform with role-based access control, passen
 ✅ Shared admin loading/error UX components  
 ✅ JWT cookies, RBAC on routes, Prisma schema, idempotent seed (sample trip if missing)  
 ✅ `npm run dev:all` — frontend + backend concurrently  
+✅ **Toss Payments integration** (test keys): billing-key card registration, 4-tier membership subscriptions with server-enforced bid limits, upgrade/downgrade flow (upgrade=immediate charge, downgrade=scheduled at next billing date), standalone min-bid-amount add-on subscription, recurring billing cron (`run-recurring-billing.ts`), webhook signature verification
+✅ **Platform commission (10%) auto-charge/refund** (test keys): bidding requires a registered card; awarding a trip pre-charges the winning bidder 10% of the bid price *before* the award is finalized (failure blocks the award, notifies passenger + bidder); trip cancellation auto-refunds the commission unless cancelled for the driver's own fault. No admin UI yet to view these records — DB (`PaymentTransaction`) only
 
 ## File Structure (condensed)
 
@@ -137,6 +141,7 @@ goodbus/
 -   `GET /admin/support-inquiries` — `search`, `status`, `sort`
 -   `GET /admin/revenue-stats` — monthly GMV (`from`/`to` YYYY-MM)
 -   `GET /admin/revenue-stats/awards` — award rows for CSV
+-   `GET /admin/audit-log` — admin action history (Super/Operations only)
 
 See **README.md** for the full endpoint list.
 
@@ -159,13 +164,21 @@ See **README.md** for the full endpoint list.
 -   CORS restricted to frontend origin
 -   Prisma ORM + Zod validation
 
+## Automated Testing, CI & Observability
+
+-   Vitest unit tests (pure-logic focus, ~48 tests total): `npm test` (frontend), `cd server && npm test` (backend)
+-   GitHub Actions CI (`.github/workflows/ci.yml`) — lint + build + test on push/PR to `main`/`aligo`; no CD (deploy is still manual)
+-   Sentry error tracking (`@sentry/nextjs` frontend, `@sentry/node` backend) — enabled only when `NODE_ENV=production` and a DSN is set
+-   Admin audit log (`AdminAuditLog` + `recordAdminAudit`) covers 5 admin write routes; viewable at `GET /admin/audit-log` / `AdminAuditLogPanel`
+
 ## Not Yet Built (production gaps)
 
--   Deployment / CI/CD
+-   Deployment automation (CD) — CI exists, but deploys are manual
 -   Payment gateway, refunds, settlement
 -   OAuth (Google/Kakao)
--   Rate limiting, audit log, full **adminRole API RBAC**
--   Central logging/metrics (e.g. Sentry)
+-   Rate limiting; full **adminRole API RBAC** (only a few routes use `requireAdminRole` today)
+-   Central logging/metrics beyond Sentry error tracking (no request metrics/dashboards)
+-   Route-level integration tests (current tests are pure-logic unit tests only)
 
 ## Getting Started
 

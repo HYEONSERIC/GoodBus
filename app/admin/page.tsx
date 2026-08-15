@@ -12,6 +12,7 @@ import { AdminVerificationPanel } from '@/components/admin/panels/AdminVerificat
 import { AdminRevenuePanel } from '@/components/admin/panels/AdminRevenuePanel';
 import { AdminFaqPanel } from '@/components/admin/panels/AdminFaqPanel';
 import { AdminCreatePanel } from '@/components/admin/panels/AdminCreatePanel';
+import { AdminAuditLogPanel } from '@/components/admin/panels/AdminAuditLogPanel';
 import { AdminErrorBanner } from '@/components/admin/AdminErrorBanner';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -75,6 +76,10 @@ function AdminPageContent() {
             {activeTab === 'adminCreate' && adminRole === 'Super' && (
                 <AdminCreatePanel />
             )}
+            {activeTab === 'auditLog' &&
+                (adminRole === 'Super' || adminRole === 'Operations') && (
+                    <AdminAuditLogPanel />
+                )}
             <AdminImagePreviewDialog
                 previewUrl={previewUrl}
                 onClose={() => setPreviewUrl(null)}

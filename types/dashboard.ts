@@ -70,6 +70,27 @@ export type MyBidDetailState<
     bidStatus: 'open' | 'awarded';
 };
 
+/** 로그인한 사용자(승객/기사/회사) 세션 정보 — /auth/me 응답 중 실제로 쓰는 필드만 */
+export type DashboardSessionUser = DashboardBidderRef & {
+    companyRegistrationUrl?: string | null;
+    driverLicenseUrl?: string | null;
+};
+
+/** 기사·회사 인증 서류 상태 — /verification/me 응답 중 실제로 쓰는 필드만 */
+export type DashboardVerification = {
+    driverLicenseStatus?: string | null;
+    driverLicenseUrl?: string | null;
+    driverLicenseNote?: string | null;
+    companyRegistrationStatus?: string | null;
+    companyRegistrationUrl?: string | null;
+    companyRegistrationNote?: string | null;
+};
+
+/** 멤버십 플랜 — /auth/me 응답의 user.membershipPlan */
+export type DashboardMembershipPlan = {
+    name?: string | null;
+};
+
 export type KakaoPlace = {
     id: string;
     place_name: string;

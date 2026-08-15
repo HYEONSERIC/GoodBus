@@ -1,6 +1,9 @@
 import './loadEnv';
+import './instrument';
+import * as Sentry from '@sentry/node';
 import express, { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
+import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -15,9 +18,17 @@ import verificationRoutes from './routes/verification';
 import profileRoutes from './routes/profile';
 import supportRoutes from './routes/support';
 import reviewsRoutes from './routes/reviews';
+import paymentsRoutes from './routes/payments';
+import { handleTossWebhook } from './routes/paymentsWebhook';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+
+// HSTS off: this app is only reachable through Next.js's proxy today, and
+// certbot/HTTPS stability hasn't been confirmed yet in production — same
+// reasoning as deploy/nginx/goodbus.conf omitting it. Revisit once HTTPS is
+// verified always-on, alongside the Nginx-level HSTS rollout.
+app.use(helmet({ hsts: false }));
 
 app.use(
     cors({
@@ -27,6 +38,15 @@ app.use(
 );
 
 app.use(cookieParser());
+
+// HMAC 서명 검증을 위해 원본 바이트가 필요하므로, 이 라우트만 전역
+// express.json()보다 먼저 express.raw()로 등록한다 (Stripe 웹훅과 동일 패턴).
+app.post(
+    '/payments/webhook',
+    express.raw({ type: '*/*' }),
+    handleTossWebhook
+);
+
 app.use(express.json());
 app.use(
     '/uploads',
@@ -53,6 +73,9 @@ app.use('/verification', verificationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/support', supportRoutes);
 app.use('/reviews', reviewsRoutes);
+app.use('/payments', paymentsRoutes);
+
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) {
@@ -63,6 +86,15 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
     }
     console.error('Unhandled error:', req.method, req.path, err);
     return res.status(500).json({ error: 'Internal server error' });
+});
+
+// Defense-in-depth: Express 4 doesn't auto-catch rejected promises from async route
+// handlers, and Node's default behavior since v15 is to crash the process on an
+// unhandled rejection. Route-level validation is the real fix, but this keeps one
+// missed case from taking down the whole server for every user.
+process.on('unhandledRejection', (reason) => {
+    Sentry.captureException(reason);
+    console.error('Unhandled promise rejection:', reason);
 });
 
 app.listen(PORT, () => {

@@ -63,11 +63,23 @@ export const authAPI = {
     signup: async (
         email: string,
         password: string,
-        role: 'Passenger' | 'Driver' | 'BusCompany'
+        role: 'Passenger' | 'Driver' | 'BusCompany',
+        displayName?: string,
+        phoneNumber?: string,
+        phoneOtpCode?: string,
+        turnstileToken?: string
     ) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({ email, password, role }),
+            body: JSON.stringify({
+                email,
+                password,
+                role,
+                displayName,
+                phoneNumber,
+                phoneOtpCode,
+                turnstileToken,
+            }),
         }),
     login: async (email: string, password: string) =>
         fetchAPI('/auth/login', {
@@ -79,6 +91,19 @@ export const authAPI = {
             method: 'POST',
         }),
     getMe: async () => fetchAPI('/auth/me'),
+    requestPhoneOtp: async (
+        phoneNumber: string,
+        purpose: 'signup' | 'login'
+    ) =>
+        fetchAPI('/auth/phone/request-otp', {
+            method: 'POST',
+            body: JSON.stringify({ phoneNumber, purpose }),
+        }),
+    loginWithPhone: async (phoneNumber: string, code: string) =>
+        fetchAPI('/auth/phone/login', {
+            method: 'POST',
+            body: JSON.stringify({ phoneNumber, code }),
+        }),
 };
 
 export const tripsAPI = {
@@ -97,9 +122,10 @@ export const tripsAPI = {
             method: 'POST',
             body: JSON.stringify({ bidId }),
         }),
-    cancel: async (tripId: string) =>
+    cancel: async (tripId: string, reason: string) =>
         fetchAPI(`/trips/${tripId}/cancel`, {
             method: 'PATCH',
+            body: JSON.stringify({ reason }),
         }),
     update: async (tripId: string, data: Record<string, unknown>) =>
         fetchAPI(`/trips/${tripId}`, {
@@ -117,6 +143,53 @@ export const bidsAPI = {
     withdraw: async (id: string) =>
         fetchAPI(`/bids/${id}/withdraw`, {
             method: 'PATCH',
+        }),
+    getMinByVehicleType: async () => fetchAPI('/bids/min-by-vehicle-type'),
+};
+
+export const paymentsAPI = {
+    getBillingKeyStatus: async () => fetchAPI('/payments/billing-key'),
+    deleteBillingKey: async () =>
+        fetchAPI('/payments/billing-key', { method: 'DELETE' }),
+    confirmBillingKey: async (authKey: string) =>
+        fetchAPI('/payments/billing-key/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ authKey }),
+        }),
+    subscribe: async (
+        plan: 'Plus' | 'Premium' | 'Business',
+        acknowledgedPlanChange?: boolean,
+    ) =>
+        fetchAPI('/payments/subscribe', {
+            method: 'POST',
+            body: JSON.stringify({ plan, acknowledgedPlanChange }),
+        }),
+    cancelSubscription: async () =>
+        fetchAPI('/payments/subscribe/cancel', {
+            method: 'POST',
+        }),
+    getSubscriptionStatus: async () => fetchAPI('/payments/subscribe/status'),
+    reactivateSubscription: async () =>
+        fetchAPI('/payments/subscribe/reactivate', {
+            method: 'POST',
+        }),
+    cancelPendingDowngrade: async () =>
+        fetchAPI('/payments/subscribe/downgrade/cancel', {
+            method: 'POST',
+        }),
+    subscribeMinBidAddon: async () =>
+        fetchAPI('/payments/addon/min-bid/subscribe', {
+            method: 'POST',
+        }),
+    cancelMinBidAddonSubscription: async () =>
+        fetchAPI('/payments/addon/min-bid/cancel', {
+            method: 'POST',
+        }),
+    getMinBidAddonSubscriptionStatus: async () =>
+        fetchAPI('/payments/addon/min-bid/status'),
+    reactivateMinBidAddonSubscription: async () =>
+        fetchAPI('/payments/addon/min-bid/reactivate', {
+            method: 'POST',
         }),
 };
 
@@ -226,14 +299,8 @@ export const adminAPI = {
         bidderId?: string;
         passengerId?: string;
         tripId?: string;
-    }) => {
-        const query = params
-            ? `?${new URLSearchParams(
-                  Object.entries(params).filter(([, value]) => value) as string[][]
-              ).toString()}`
-            : '';
-        return fetchAPI(`/admin/bids${query}`);
-    },
+        take?: number;
+    }) => fetchAPI(`/admin/bids${toQuery(params)}`),
     getNotificationHistory: async (params?: {
         page?: number;
         pageSize?: number;
@@ -294,6 +361,7 @@ export const adminAPI = {
         search?: string;
         status?: string;
         sort?: string;
+        take?: number;
     }) => fetchAPI(`/admin/support-inquiries${toQuery(params)}`),
     getSupportInquiry: async (id: string) =>
         fetchAPI(`/admin/support-inquiries/${id}`),
@@ -320,6 +388,8 @@ export const adminAPI = {
                 to: params.to,
             })}`,
         ) as Promise<{ from: string; to: string; awards: unknown[] }>,
+    getAuditLog: async (params?: { page?: number; pageSize?: number }) =>
+        fetchAPI(`/admin/audit-log${toQuery(params)}`),
 };
 
 export const supportAPI = {

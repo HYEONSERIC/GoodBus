@@ -30,7 +30,7 @@ import type { PassengerTripFormApi } from '@/hooks/usePassengerTripForm';
 export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripFormApi }) {
   const {
     openDialog,
-    setOpenDialog,
+    closeDialog,
     newTrip,
     setNewTrip,
     stopoverOpen,
@@ -53,7 +53,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
   } = tripForm;
   return (
 <>
-<Dialog open={openDialog} onOpenChange={setOpenDialog}>
+<Dialog open={openDialog} onOpenChange={closeDialog}>
                     <DialogContent className="flex max-h-[min(92vh,760px)] w-[calc(100vw-1.5rem)] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border border-gray-300 bg-white p-0 sm:max-w-lg [&>button]:top-3 [&>button]:right-4">
                         <DialogHeader className="sr-only">
                             <DialogTitle>여정 만들기</DialogTitle>
@@ -64,7 +64,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-3 py-3">
                             <button
                                 type="button"
-                                onClick={() => setOpenDialog(false)}
+                                onClick={() => closeDialog(false)}
                                 className="min-w-[4rem] text-left text-sm text-gray-700 hover:text-black"
                             >
                                 &lt; 이전
@@ -75,7 +75,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                             <span className="min-w-[4rem]" />
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                            <div className="scrollbar-none min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-24 pt-4">
+                            <div className="scrollbar-none min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-5 pb-24 pt-4">
                             <div className="space-y-3 border-b border-gray-100 pb-4">
                                 <Label>출발지</Label>
                                 <Input
@@ -697,7 +697,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                                 <Button
                                     type="button"
                                     onClick={createTrip}
-                                    className="h-11 w-full rounded-md bg-[#e08030] text-sm font-semibold text-white hover:bg-[#d07526]"
+                                    className="h-11 w-full rounded-md bg-[#2563eb] text-sm font-semibold text-white hover:bg-[#1d4ed8]"
                                 >
                                     견적 등록하기
                                 </Button>
@@ -715,8 +715,8 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         <DialogHeader>
                             <DialogTitle>기사님 동행 여부?</DialogTitle>
                             <DialogDescription className="text-sm">
-                                '출발, 귀환만 운송'은 목적지까지 왕복
-                                수송만 하는 운행이고, '일정 동행'은 수학여행
+                                &apos;출발, 귀환만 운송&apos;은 목적지까지 왕복
+                                수송만 하는 운행이고, &apos;일정 동행&apos;은 수학여행
                                 처럼 승객님의 일정에 따라 기사님이 계속
                                 동행해서 함께하는 운행입니다.
                             </DialogDescription>
@@ -730,7 +730,7 @@ export function PassengerTripCreateFlow({ tripForm }: { tripForm: PassengerTripF
                         </div>
 
                         <Button
-                            className="mt-4 h-11 w-full bg-[#e08030] hover:bg-[#d07526]"
+                            className="mt-4 h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
                             onClick={() => {
                                 setCompanionInfoOpen(false);
                                 setCompanionInfoConfirmed(true);

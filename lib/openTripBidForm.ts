@@ -55,7 +55,6 @@ export function assembleBidNote(
     extendedBid: ExtendedBidForm,
     pricePerVehicle: number,
     vehicleCount: number,
-    photoCount: number,
 ) {
     const lines: string[] = [];
     lines.push(
@@ -86,11 +85,6 @@ export function assembleBidNote(
         if (addonNames.length) {
             lines.push(`[부가 서비스] ${addonNames.join(', ')}`);
         }
-    }
-    if (photoCount > 0) {
-        lines.push(
-            `[추가 사진] ${photoCount}장 (채팅으로 상세 전달 예정)`,
-        );
     }
     return lines.join('\n\n');
 }

@@ -29,6 +29,9 @@ import type { DashboardHeaderVariant } from '@/components/layout/DashboardMobile
 import type {
     DashboardBid,
     DashboardBidderTrip,
+    DashboardMembershipPlan,
+    DashboardSessionUser,
+    DashboardVerification,
     MyBidDetailState,
 } from '@/types/dashboard';
 
@@ -44,8 +47,9 @@ const DriverDashboardContext = createContext<DriverDashboardContextValue | null>
 );
 
 function useDriverDashboardState() {
-    const [user, setUser] = useState<any>(null);
-    const [membershipPlan, setMembershipPlan] = useState<any>(null);
+    const [user, setUser] = useState<DashboardSessionUser | null>(null);
+    const [membershipPlan, setMembershipPlan] =
+        useState<DashboardMembershipPlan | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
     const [myBids, setMyBids] = useState<Trip[]>([]);
     const [awardedTrips, setAwardedTrips] = useState<Trip[]>([]);
@@ -53,7 +57,8 @@ function useDriverDashboardState() {
     const [bidTripPartner, setBidTripPartner] = useState<Trip | undefined>(
         undefined,
     );
-    const [verification, setVerification] = useState<any>(null);
+    const [verification, setVerification] =
+        useState<DashboardVerification | null>(null);
     const [verificationDialogOpen, setVerificationDialogOpen] = useState(false);
     const [pendingDialogOpen, setPendingDialogOpen] = useState(false);
     const [verificationFile, setVerificationFile] = useState<File | null>(null);
@@ -207,21 +212,31 @@ function useDriverDashboardState() {
             setTrips(tripsWithoutMyBids);
             setMyBids(tripsWithMyBids);
 
-            const awardedTripData = await tripsAPI.getAll('awarded');
+            const [awardedTripData, cancelledTripData] = await Promise.all([
+                tripsAPI.getAll('awarded'),
+                tripsAPI.getAll('cancelled'),
+            ]);
 
-            const awardedTripsFiltered = (awardedTripData.trips || []).filter(
-                (trip: Trip) => {
-                    const hasMyAwardedBid = trip.bids?.some(
-                        (bid: Bid) =>
-                            bid.bidder.id === userData.user.id &&
-                            bid.status === 'awarded',
-                    );
+            const hasMyAwardedBid = (trip: Trip) =>
+                trip.bids?.some(
+                    (bid: Bid) =>
+                        bid.bidder.id === userData.user.id &&
+                        bid.status === 'awarded',
+                );
 
-                    return hasMyAwardedBid;
-                },
-            );
+            const awardedTripsFiltered = (
+                awardedTripData.trips || []
+            ).filter(hasMyAwardedBid);
+            // Trips the passenger cancelled after this bidder was awarded —
+            // shown with a "취소됨" badge instead of silently disappearing.
+            const cancelledTripsFiltered = (
+                cancelledTripData.trips || []
+            ).filter(hasMyAwardedBid);
 
-            setAwardedTrips(awardedTripsFiltered);
+            setAwardedTrips([
+                ...awardedTripsFiltered,
+                ...cancelledTripsFiltered,
+            ]);
         } catch (error) {
             console.error('Error loading data:', error);
             window.location.href = '/login';
@@ -258,6 +273,19 @@ function useDriverDashboardState() {
             await loadData();
         } catch (error: unknown) {
             await loadData();
+            const message = error instanceof Error ? error.message : '';
+            if (message.includes('결제 카드 등록')) {
+                setBidDialogTrip(null);
+                setBidTripPartner(undefined);
+                if (
+                    confirm(
+                        '입찰하려면 결제 카드 등록이 필요합니다. 지금 등록하시겠습니까?',
+                    )
+                ) {
+                    setActiveTab('paymentCards');
+                }
+                return;
+            }
             throw error instanceof Error
                 ? error
                 : new Error('입찰 생성에 실패했습니다');

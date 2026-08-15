@@ -7,20 +7,26 @@
         "dev": "tsx watch src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
+        "test": "vitest run",
+        "test:watch": "vitest",
         "db:push": "prisma db push",
         "db:seed": "tsx src/prisma/seed.ts",
         "db:clear": "tsx src/prisma/clear.ts",
         "db:reset": "tsx src/prisma/clear.ts && tsx src/prisma/seed.ts",
         "db:purge-cancelled-trips": "tsx src/prisma/purge-cancelled-trips.ts",
-        "db:purge-expired-open-trips": "tsx src/prisma/purge-expired-open-trips.ts"
+        "db:purge-expired-open-trips": "tsx src/prisma/purge-expired-open-trips.ts",
+        "db:run-recurring-billing": "tsx src/prisma/run-recurring-billing.ts"
     },
     "dependencies": {
         "@prisma/client": "^5.19.1",
+        "@sentry/node": "^10.69.0",
         "bcrypt": "^5.1.1",
         "cookie-parser": "^1.4.6",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.21.0",
+        "express-rate-limit": "^8.6.2",
+        "helmet": "^8.3.0",
         "jsonwebtoken": "^9.0.2",
         "multer": "^2.1.1",
         "nodemailer": "^6.9.8",
@@ -36,8 +42,11 @@
         "@types/node": "^20.14.15",
         "@types/nodemailer": "^6.4.14",
         "prisma": "^5.19.1",
-        "prisma-erd-generator": "^2.1.0",
         "tsx": "^4.16.2",
-        "typescript": "^5.5.4"
+        "typescript": "^5.5.4",
+        "vitest": "^4.1.10"
+    },
+    "overrides": {
+        "tar": "^7.5.21"
     }
 }

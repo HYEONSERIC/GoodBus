@@ -8,9 +8,9 @@ const JWT_SECRET =
     })();
 
 export function generateToken(payload: JWTPayload): string {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d', algorithm: 'HS256' });
 }
 
 export function verifyToken(token: string): JWTPayload {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+    return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as JWTPayload;
 }

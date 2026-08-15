@@ -46,8 +46,9 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Bid withdraw**: Withdraw own open bids
 - **Contracts / awarded trips**: Shared `AwardedTripCard` + `BidderAwardedTripsList`; my-bid detail overlay
 - **Profile**: View/edit profile, vehicle gallery, verification status (`BidderProfileTabPanel`, `useBidderProfile`)
-- **Membership plans**: Plan list UI for bidders (`MembershipPlansPanel`)
-- **Payment cards (client UI)**: Add/list cards stored in browser `localStorage` per user (`PaymentCardsPanel`) — not a live payment gateway
+- **Membership plans**: 4-tier subscriptions (Basic/Plus/Premium/Business) with server-enforced concurrent-bid limits, plus a standalone min-bid-amount add-on subscription — upgrade charges immediately, downgrade is scheduled for the next billing date (`MembershipPlansPanel`)
+- **Payment cards**: Toss Payments billing-key registration via their hosted card-entry widget — raw card numbers never touch our server, only the billing-key token is stored (`PaymentCardsPanel`, `lib/toss.ts`). Test keys as of 2026-08-13
+- **Platform commission (10%)**: Bidding is blocked without a registered card; on award, the commission (bid price × 10%) is charged to the winning bidder's card *before* the award is finalized — failure blocks the award and notifies both parties. Trip cancellation auto-refunds the commission unless the reason is "기사님 사유로 취소" (driver's fault, non-refundable) (`server/src/routes/trips.ts`, `server/src/routes/bids.ts`)
 - **Reviews received**: Driver/company “my reviews” with average rating (`GET /reviews/driver/me`)
 - **Chat**: Same list → room flow as passengers; room titles show route + optional “손님” suffix for bidders
 
@@ -76,9 +77,10 @@ A full-stack web application connecting passengers with drivers and bus companie
 - **Notification history**: Admin-wide log with filters; price column in 만원
 - **Verification**: Approve/reject with reason; **Korean status labels** (승인 대기/완료/반려)
 - **FAQ / support**: Notice & FAQ CRUD; inquiries with **search, status filter, 미답변 우선 sort**, reply dialog
-- **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer
+- **Revenue (매출·거래)**: GMV & estimated platform fee (10%) by month; `awardedAt` fallback notice; monthly chart/table; per-month award list; **period/month CSV** with summary footer. Note: this is still an independent GMV-based estimate, not yet reconciled against the real `PaymentTransaction` commission charges (see Payments below) — no admin UI exists yet to view actual payment/subscription records
 - **Admin creation**: Super-only
-- **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`)
+- **Audit log**: `AdminAuditLog` model + `recordAdminAudit` util records user block/unblock, verification review, admin creation, support post CRUD, and inquiry reply; `AdminAuditLogPanel` (Super/Operations only) shows a paginated, read-only table (time/admin/action/target/metadata)
+- **UX**: Shared **`AdminErrorBanner`**, **`AdminLoadingSkeleton`**, **`AdminAsyncContent`** across tabs; URL query `?tab=&userId=&bidderId=` for bookmarking (`lib/adminNav.ts`, `components/admin/adminNav.ts`); **`AdminActivitySectionFooter`** ("더보기" load-more, configurable `max`/`step`) used for user activity, bids, and support inquiries lists
 
 ### Maps & data
 
@@ -157,6 +159,10 @@ npm run db:seed
 ```
 
 If you get an error, wait a few more seconds and try again to let Docker fully start the database.
+
+### Production deployment (Cafe24 VPS)
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the Cafe24-based architecture (~66,000원/mo), env templates, Nginx/certbot, and pm2 setup.
 
 ### Running the Application
 
@@ -285,7 +291,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `GET /admin/users/:id` - User detail, `bidderStats`, `reviewSummary`, passenger `tripSummary`
 - `PATCH /admin/users/:id/status` - Block/unblock
 - `GET /admin/users/:id/activity` - Trips, bids, reviews (`?take=`, max 50)
-- `GET /admin/bids` - Bid search (`search`, `bidStatus`, `tripStatus`, dates, `bidderId`, `passengerId`, `tripId`)
+- `GET /admin/bids` - Bid search (`search`, `bidStatus`, `tripStatus`, dates, `bidderId`, `passengerId`, `tripId`, `take` max 200)
 - `GET /admin/notification-history` - Notification log (filters)
 - `GET /admin/verifications` - Verification queue (`type`, `status`)
 - `GET /admin/verifications/:id/download` - Download submitted document
@@ -294,12 +300,13 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `POST /admin/support-posts` - Create post
 - `PATCH /admin/support-posts/:id` - Update post
 - `DELETE /admin/support-posts/:id` - Delete post
-- `GET /admin/support-inquiries` - List inquiries (`search`, `status`, `sort`)
+- `GET /admin/support-inquiries` - List inquiries (`search`, `status`, `sort`, `take` max 500)
 - `GET /admin/support-inquiries/:id` - Inquiry detail
 - `PATCH /admin/support-inquiries/:id` - Reply to inquiry
 - `GET /admin/revenue-stats` - GMV stats (`from`, `to` as `YYYY-MM`)
 - `GET /admin/revenue-stats/awards` - Award rows for month or range (CSV source)
 - `POST /admin/admins` - Create admin (Super)
+- `GET /admin/audit-log` - Admin action history (Super/Operations only, `page`/`pageSize`)
 
 ## Scripts
 
@@ -311,6 +318,8 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run linter
+- `npm test` - Run Vitest unit tests (frontend only)
+- `npm run test:all` - Run frontend + backend unit tests in parallel
 
 ### Backend
 
@@ -319,32 +328,34 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 - `npm run start` - Start production server
 - `npm run db:push` - Push Prisma schema to database
 - `npm run db:seed` - Seed test users; sample NY→Boston trip only if missing (idempotent)
+- `npm test` - Run Vitest unit tests (backend only)
 
 ## Project Status
 
 대시보드·입찰 UI를 **역할별 훅 + 얇은 `page.tsx` + 공통 컴포넌트** 구조로 단계적으로 분리 중입니다. 동작은 유지한 채 파일만 이동·추출(Strangler)한 상태이며, `npx tsc --noEmit`으로 타입 검증을 맞춰 두었습니다.
 
-| 영역 | 상태 | 비고 |
-|------|------|------|
-| 관리자 대시보드 | ✅ 완료 | `useAdminDashboard` + `app/admin/page.tsx` + `components/admin/panels/*`, `adminNav.ts`, revenue/CS UX |
-| 기사 / 회사 / 승객 대시보드 | ✅ 완료 | 역할별 Provider 훅 + `*DashboardContent`, `page.tsx` 각 **~12줄** |
-| 입찰자 프로필 (기사·회사) | ✅ 완료 | `useBidderProfile`, `BidderProfileTabPanel` / `BidderProfileEditPanel` |
-| 낙찰·예약 카드·모바일 셸 | ✅ 완료 | `AwardedTripCard`, `BidderAwardedTripsList`, `DashboardMobileShell` |
-| 승객 Dialog 묶음 | ✅ 완료 | `components/passenger/dialogs/*` (취소·입찰 상세) |
-| `OpenTripBidDialog` 분리 | ✅ 완료 | 오케스트레이터 ~193줄 + `components/openTripBid/*`, `lib/openTripBidForm.ts` |
-| `tripGroups` | ✅ 완료 | 프론트·서버 공통 `server/src/utils/tripGroupsCore.ts` re-export |
-| `lib/adminApi.ts` | ✅ 완료 | `adminAPI` re-export (선택 import 경로) |
-| 관리자 공통 UX | ✅ 완료 | `AdminErrorBanner`, `AdminLoadingSkeleton`, `AdminAsyncContent`, `AdminDeepLink` |
-| 관리자 RBAC·감사 로그 | 🔲 예정 | 탭 숨김만 적용; API 권한·`AdminAuditLog`는 미구현 |
+| 영역                        | 상태    | 비고                                                                                                   |
+| --------------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| 관리자 대시보드             | ✅ 완료 | `useAdminDashboard` + `app/admin/page.tsx` + `components/admin/panels/*`, `adminNav.ts`, revenue/CS UX |
+| 기사 / 회사 / 승객 대시보드 | ✅ 완료 | 역할별 Provider 훅 + `*DashboardContent`, `page.tsx` 각 **~12줄**                                      |
+| 입찰자 프로필 (기사·회사)   | ✅ 완료 | `useBidderProfile`, `BidderProfileTabPanel` / `BidderProfileEditPanel`                                 |
+| 낙찰·예약 카드·모바일 셸    | ✅ 완료 | `AwardedTripCard`, `BidderAwardedTripsList`, `DashboardMobileShell`                                    |
+| 승객 Dialog 묶음            | ✅ 완료 | `components/passenger/dialogs/*` (취소·수정·입찰 상세)                                                 |
+| `OpenTripBidDialog` 분리    | ✅ 완료 | 오케스트레이터 ~193줄 + `components/openTripBid/*`, `lib/openTripBidForm.ts`                           |
+| `tripGroups`                | ✅ 완료 | 프론트·서버 공통 `server/src/utils/tripGroupsCore.ts` re-export                                        |
+| `lib/adminApi.ts`           | ✅ 완료 | `adminAPI` re-export (선택 import 경로)                                                                |
+| 관리자 공통 UX              | ✅ 완료 | `AdminErrorBanner`, `AdminLoadingSkeleton`, `AdminAsyncContent`, `AdminDeepLink`                       |
+| 관리자 감사 로그            | ✅ 완료 | `AdminAuditLog` + `recordAdminAudit`, `GET /admin/audit-log`(Super/Operations), `AdminAuditLogPanel`   |
+| 관리자 RBAC (전체)          | 🔲 예정 | 매출·감사로그 등 일부 라우트만 `requireAdminRole` 적용; 전체 서브롤 권한 분리는 아직 아님                |
 
 ### Dashboard `page.tsx` (Before → After)
 
-| 역할 | 경로 | 이전 (대략) | 현재 |
-|------|------|------------|------|
-| Driver | `app/dashboard/driver/page.tsx` | ~1,500+ 줄 | **12줄** (Provider 래퍼만) |
-| Company | `app/dashboard/company/page.tsx` | ~1,300+ 줄 | **12줄** |
-| Passenger | `app/dashboard/passenger/page.tsx` | ~670+ 줄 | **12줄** |
-| Admin | `app/admin/page.tsx` | — | 탭·패널 조립 + 초기 스켈레톤·`globalError` |
+| 역할      | 경로                               | 이전 (대략) | 현재                                       |
+| --------- | ---------------------------------- | ----------- | ------------------------------------------ |
+| Driver    | `app/dashboard/driver/page.tsx`    | ~1,500+ 줄  | **12줄** (Provider 래퍼만)                 |
+| Company   | `app/dashboard/company/page.tsx`   | ~1,300+ 줄  | **12줄**                                   |
+| Passenger | `app/dashboard/passenger/page.tsx` | ~670+ 줄    | **12줄**                                   |
+| Admin     | `app/admin/page.tsx`               | —           | 탭·패널 조립 + 초기 스켈레톤·`globalError` |
 
 로직·상태는 각 `hooks/use*Dashboard.tsx`와 `components/*/*DashboardContent.tsx`로 이동했습니다.
 
@@ -355,7 +366,7 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 ```tsx
 // app/dashboard/driver/page.tsx (기사·회사·승객 동일 패턴)
 <DriverDashboardProvider>
-  <DriverDashboardContent />
+    <DriverDashboardContent />
 </DriverDashboardProvider>
 ```
 
@@ -365,34 +376,34 @@ Base URL: `http://localhost:4000` (or same-origin `/api` proxy from Next.js). Al
 
 ### 공통 프론트 레이어
 
-| 분류 | 경로 | 용도 |
-|------|------|------|
-| 타입 | `types/dashboard.ts`, `trip.ts`, `passenger.ts`, `bidderProfile.ts`, `openTripBid.ts`, `admin.ts` | 대시보드·입찰·프로필 타입 통합 |
-| 유틸 | `lib/errors.ts` (`getErrorMessage`), `lib/bidderProfile.ts`, `lib/openTripBidForm.ts` | 에러 메시지·프로필·입찰 폼 조립 |
-| API | `lib/api.ts`, `lib/adminApi.ts` | 클라이언트 API (`adminAPI` re-export) |
-| 여정 그룹 | `lib/tripGroups.ts` → `tripGroupsCore` | 왕복·표시 그룹핑 (서버와 공유) |
-| 입찰자 UI | `components/bidder/*`, `components/contracts/BidderAwardedTripsList.tsx`, `components/trips/AwardedTripCard.tsx` | 프로필·낙찰 목록·카드 |
-| 레이아웃 | `components/layout/DashboardMobileShell.tsx` | 모바일 하단 탭·헤더 셸 |
-| 승객 Dialog | `components/passenger/dialogs/` | `PassengerCancelTripDialog`, `PassengerBidDetailDialog` |
-| 입찰 Dialog | `components/OpenTripBidDialog.tsx` + `components/openTripBid/*` | 수수료 단계·여정 요약·폼 본문 분리 |
+| 분류        | 경로                                                                                                             | 용도                                                    |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| 타입        | `types/dashboard.ts`, `trip.ts`, `passenger.ts`, `bidderProfile.ts`, `openTripBid.ts`, `admin.ts`                | 대시보드·입찰·프로필 타입 통합                          |
+| 유틸        | `lib/errors.ts` (`getErrorMessage`), `lib/bidderProfile.ts`, `lib/openTripBidForm.ts`                            | 에러 메시지·프로필·입찰 폼 조립                         |
+| API         | `lib/api.ts`, `lib/adminApi.ts`                                                                                  | 클라이언트 API (`adminAPI` re-export)                   |
+| 여정 그룹   | `lib/tripGroups.ts` → `tripGroupsCore`                                                                           | 왕복·표시 그룹핑 (서버와 공유)                          |
+| 입찰자 UI   | `components/bidder/*`, `components/contracts/BidderAwardedTripsList.tsx`, `components/trips/AwardedTripCard.tsx` | 프로필·낙찰 목록·카드                                   |
+| 레이아웃    | `components/layout/DashboardMobileShell.tsx`                                                                     | 모바일 하단 탭·헤더 셸                                  |
+| 승객 Dialog | `components/passenger/dialogs/`                                                                                  | `PassengerCancelTripDialog`, `PassengerEditTripDialog`, `PassengerBidDetailDialog` |
+| 입찰 Dialog | `components/OpenTripBidDialog.tsx` + `components/openTripBid/*`                                                  | 수수료 단계·여정 요약·폼 본문 분리                      |
 
 ### `OpenTripBidDialog` 분리 (~951줄 → ~193줄)
 
-| 파일 | 역할 |
-|------|------|
-| `OpenTripBidDialog.tsx` | 단계 조립·submit 오케스트레이션 |
-| `openTripBid/OpenTripBidFeeStep.tsx` | 수수료 안내 |
-| `openTripBid/OpenTripBidTripSummarySection.tsx` | 여정 요약 |
-| `openTripBid/OpenTripBidFormBody.tsx` | 가격·차량·부대비용·메시지·부가서비스 |
-| `lib/openTripBidForm.ts` | `BidProfileForm`, `assembleBidNote`, 부가서비스 행 정의 |
+| 파일                                            | 역할                                                    |
+| ----------------------------------------------- | ------------------------------------------------------- |
+| `OpenTripBidDialog.tsx`                         | 단계 조립·submit 오케스트레이션                         |
+| `openTripBid/OpenTripBidFeeStep.tsx`            | 수수료 안내                                             |
+| `openTripBid/OpenTripBidTripSummarySection.tsx` | 여정 요약                                               |
+| `openTripBid/OpenTripBidFormBody.tsx`           | 가격·차량·부대비용·메시지·부가서비스                    |
+| `lib/openTripBidForm.ts`                        | `BidProfileForm`, `assembleBidNote`, 부가서비스 행 정의 |
 
 ### 로컬 확인 (수동)
 
 `npm run dev:all` 실행 후:
 
-1. 기사 / 회사 / 승객 — 탭 전환, 프로필 저장, 계약·입찰 탭 lazy load  
-2. 승객 — 견적 취소 Dialog, 입찰 상세, 낙찰·리뷰  
-3. 기사 / 회사 — `OpenTripBidDialog` (수수료 → 폼 → 제출)  
+1. 기사 / 회사 / 승객 — 탭 전환, 프로필 저장, 계약·입찰 탭 lazy load
+2. 승객 — 견적 취소 Dialog, 입찰 상세, 낙찰·리뷰
+3. 기사 / 회사 — `OpenTripBidDialog` (수수료 → 폼 → 제출)
 4. 관리자 — 사용자·입찰·인증 패널
 
 ## Project Structure

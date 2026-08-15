@@ -14,7 +14,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
-import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
+import { ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 
 export function AdminCreatePanel() {
   const {
@@ -24,13 +24,15 @@ export function AdminCreatePanel() {
     handleCreateAdmin,
 } = useAdminDashboard();
   return (
-<AdminPanelCard>
-<h2 className="text-lg font-semibold">관리자 계정 생성</h2>
-                    <p className="text-sm text-gray-600">
-                        운영/고객지원/재무 관리자 계정을 생성합니다.
-                    </p>
-                    <div className="space-y-3">
-                        <div>
+<AdminPanelCard className="max-w-lg">
+<div>
+                        <h2 className="text-lg font-semibold text-slate-900">관리자 계정 생성</h2>
+                        <p className="mt-1 text-sm text-slate-600">
+                            운영/고객지원/재무 관리자 계정을 생성합니다.
+                        </p>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="space-y-1.5">
                             <Label>이메일</Label>
                             <Input
                                 value={adminForm.email}
@@ -43,7 +45,7 @@ export function AdminCreatePanel() {
                                 placeholder="admin2@example.com"
                             />
                         </div>
-                        <div>
+                        <div className="space-y-1.5">
                             <Label>비밀번호</Label>
                             <Input
                                 type="password"
@@ -57,10 +59,10 @@ export function AdminCreatePanel() {
                                 placeholder="비밀번호"
                             />
                         </div>
-                        <div>
+                        <div className="space-y-1.5">
                             <Label>관리자 역할</Label>
                             <select
-                                className="border rounded px-2 py-1 w-full"
+                                className={`${ADMIN_SELECT_CLASS} w-full`}
                                 value={adminForm.adminRole}
                                 onChange={(e) =>
                                     setAdminForm((prev) => ({
@@ -74,7 +76,7 @@ export function AdminCreatePanel() {
                                 <option value="Finance">재무</option>
                             </select>
                         </div>
-                        <Button onClick={handleCreateAdmin}>관리자 생성</Button>
+                        <Button className="w-full bg-sky-700 hover:bg-sky-800" onClick={handleCreateAdmin}>관리자 생성</Button>
                     </div>
 </AdminPanelCard>
   );

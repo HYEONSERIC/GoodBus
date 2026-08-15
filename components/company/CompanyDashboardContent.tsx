@@ -9,7 +9,10 @@ import { OpenTripBidDialog } from '@/components/OpenTripBidDialog';
 import { BidderAwardedTripsList } from '@/components/contracts/BidderAwardedTripsList';
 import { BidderMyBidDetailOverlay } from '@/components/bidder/BidderMyBidDetailOverlay';
 import { DashboardMobileShell } from '@/components/layout/DashboardMobileShell';
-import { BidderProfileTabPanel } from '@/components/bidder/BidderProfileTabPanel';
+import {
+    BidderProfileTabPanel,
+    formatBidderRatingLine,
+} from '@/components/bidder/BidderProfileTabPanel';
 import { BidderProfileEditPanel } from '@/components/bidder/BidderProfileEditPanel';
 import { OpenTripsList } from '@/components/trips/OpenTripsList';
 import { TripFilterDialogs } from '@/components/trips/TripFilterDialogs';
@@ -18,6 +21,17 @@ import { ContractTabPanel } from '@/components/contracts/ContractTabPanel';
 import { ContractOpenBidsList } from '@/components/contracts/ContractOpenBidsList';
 import { VerificationUploadDialog } from '@/components/auth/VerificationUploadDialog';
 import { MembershipPlansPanel } from '@/components/membership/MembershipPlansPanel';
+import {
+    SupportInquiryDialog,
+    COMPANY_SUPPORT_MENU,
+} from '@/components/support/SupportInquiryDialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { useCompanyDashboard } from '@/hooks/useCompanyDashboard';
 
 export function CompanyDashboardContent() {
@@ -74,6 +88,35 @@ export function CompanyDashboardContent() {
                     uploading={c.verificationUploading}
                     onUpload={c.handleVerificationUpload}
                     onFileChange={c.setVerificationFile}
+                />
+
+                <Dialog
+                    open={c.pendingDialogOpen}
+                    onOpenChange={c.setPendingDialogOpen}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>승인 대기중입니다</DialogTitle>
+                            <DialogDescription>
+                                사업자등록증이 아직 승인되지 않았습니다. 관리자
+                                승인 후 입찰할 수 있습니다.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Button onClick={() => c.setPendingDialogOpen(false)}>
+                            확인
+                        </Button>
+                    </DialogContent>
+                </Dialog>
+
+                <SupportInquiryDialog
+                    open={c.companySupportOpen}
+                    onOpenChange={c.setCompanySupportOpen}
+                    menuOptions={COMPANY_SUPPORT_MENU}
+                    titleInputId="company-inquiry-title"
+                    bodyInputId="company-inquiry-body"
+                    onSubmitted={() =>
+                        c.setCompanyInquiryListKey((k) => k + 1)
+                    }
                 />
 
                 <BidderMyBidDetailOverlay
@@ -167,7 +210,8 @@ export function CompanyDashboardContent() {
                         {c.contractSubTab === 'bidding' && (
                             <ContractOpenBidsList
                                 cardTrips={c.myBidCardTrips}
-                                partnerPool={c.myBids}
+                                partnerPool={c.openTripsPool}
+                                roundOptions={c.COMPANY_ROUND_OPTS}
                                 distanceByTripId={c.distanceByTripId}
                                 userId={c.user?.id}
                                 onOpenDetail={(trip, partner) =>
@@ -212,7 +256,9 @@ export function CompanyDashboardContent() {
                     <div className="mx-auto w-full max-w-xl">
                         <SupportCustomerCenter
                             heading="고객센터"
-                            showInquiry={false}
+                            showInquiry
+                            refreshMyInquiriesKey={c.companyInquiryListKey}
+                            onInquiryClick={() => c.setCompanySupportOpen(true)}
                         />
                     </div>
                 )}
@@ -228,8 +274,17 @@ export function CompanyDashboardContent() {
                         vehicleYearLabel={c.profile.vehicleYearLabel}
                         insuranceLabel={c.insuranceLabel}
                         companyLabel={c.profile.companyLabel}
+                        membershipLabel={c.currentMembershipLabel}
                         vehiclePhotos={c.profile.vehiclePhotos}
-                        ratingLine="★★★★☆ (4.9)"
+                        driverComment={c.profile.profileForm.driverComment}
+                        ratingLine={formatBidderRatingLine(
+                            c.driverReviewStats.avgRating,
+                            c.driverReviewStats.count,
+                        )}
+                        profileSection={c.profileSection}
+                        onProfileSectionChange={c.setProfileSection}
+                        driverReviews={c.driverReviews}
+                        resolveMediaUrl={c.profile.resolveMediaUrl}
                         galleryOpen={c.profile.galleryOpen}
                         onGalleryOpenChange={c.profile.setGalleryOpen}
                         galleryIndex={c.profile.galleryIndex}
@@ -264,6 +319,9 @@ export function CompanyDashboardContent() {
                         onGarageSelect={c.profile.selectGaragePlace}
                         documentUrl={c.companyRegistrationUrl}
                         uploadBaseUrl={c.uploadBaseUrl}
+                        onOpenVerification={() =>
+                            c.setVerificationDialogOpen(true)
+                        }
                         onSave={async () => {
                             await c.profile.handleProfileSave();
                             await c.loadData();
@@ -278,7 +336,12 @@ export function CompanyDashboardContent() {
                     <PaymentCardsPanel userId={c.user?.id} />
                 )}
 
-                {c.activeTab === 'membership' && <MembershipPlansPanel />}
+                {c.activeTab === 'membership' && (
+                    <MembershipPlansPanel
+                        userId={c.user?.id}
+                        currentPlanName={c.membershipPlan?.name}
+                    />
+                )}
             </DashboardMobileShell>
             {c.menuOpen && (
                 <div className="fixed inset-0 z-40 bg-black/30">
@@ -296,7 +359,12 @@ export function CompanyDashboardContent() {
                             <p className="mt-3 text-lg font-semibold">
                                 {c.profile.displayName}
                             </p>
-                            <p className="text-xs text-gray-500">★★★★☆</p>
+                            <p className="text-xs text-gray-500">
+                                {formatBidderRatingLine(
+                                    c.driverReviewStats.avgRating,
+                                    c.driverReviewStats.count,
+                                )}
+                            </p>
                         </div>
                         <div className="divide-y border-y">
                             <button

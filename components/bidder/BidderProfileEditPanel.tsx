@@ -36,6 +36,7 @@ export function BidderProfileEditPanel({
     onGarageSelect,
     documentUrl,
     uploadBaseUrl,
+    onOpenVerification,
     onSave,
     onBack,
     onHome,
@@ -56,6 +57,7 @@ export function BidderProfileEditPanel({
     onGarageSelect: (place: KakaoPlace) => void;
     documentUrl: string | null;
     uploadBaseUrl: string;
+    onOpenVerification?: () => void;
     onSave: () => void | Promise<void>;
     onBack: () => void;
     onHome: () => void;
@@ -282,9 +284,21 @@ export function BidderProfileEditPanel({
                         </div>
 
                         <div className="space-y-3">
-                            <Label className="text-sm text-gray-700">
-                                {DOCUMENT_LABEL[role]}
-                            </Label>
+                            <div className="flex items-center justify-between gap-2">
+                                <Label className="text-sm text-gray-700">
+                                    {DOCUMENT_LABEL[role]}
+                                </Label>
+                                {onOpenVerification ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={onOpenVerification}
+                                    >
+                                        재업로드
+                                    </Button>
+                                ) : null}
+                            </div>
                             {documentUrl ? (
                                 <div className="grid grid-cols-4 gap-2">
                                     <div className="aspect-square overflow-hidden rounded-md bg-gray-50">

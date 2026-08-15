@@ -33,6 +33,14 @@ export type TripFilterable = {
     paxCount: number;
 };
 
+function toLocalDateKey(value: string) {
+    const d = new Date(value);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 export function filterTripsByCriteria<T extends TripFilterable>(
     list: T[],
     criteria: TripListFilterCriteria,
@@ -46,8 +54,7 @@ export function filterTripsByCriteria<T extends TripFilterable>(
             return false;
         }
         if (selectedDate) {
-            const tripDate = new Date(trip.dateTime).toISOString().slice(0, 10);
-            if (tripDate !== selectedDate) {
+            if (toLocalDateKey(trip.dateTime) !== selectedDate) {
                 return false;
             }
         }

@@ -1,7 +1,11 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { randomBytes } from 'crypto';
-import { IMAGE_MIME_TO_EXTENSION } from '../utils/uploadFileFilter';
+import {
+    IMAGE_MIME_TO_EXTENSION,
+    InvalidImageError,
+    isValidImageBuffer,
+} from '../utils/uploadFileFilter';
 
 type SaveFileInput = {
     buffer: Buffer;
@@ -23,6 +27,10 @@ class LocalStorageService implements StorageService {
         folder,
         filePrefix,
     }: SaveFileInput): Promise<string> {
+        if (!isValidImageBuffer(buffer, mimetype)) {
+            throw new InvalidImageError();
+        }
+
         const ext = IMAGE_MIME_TO_EXTENSION[mimetype] ?? '.bin';
         const dir = path.join(this.root, folder);
         const filename = `${filePrefix}-${Date.now()}-${randomBytes(4).toString('hex')}${ext}`;

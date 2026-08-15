@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,22 +48,22 @@ function ConsentRow({
 
 export function Notifications() {
     const [open, setOpen] = useState(false);
-    const [quoteAlertConsent, setQuoteAlertConsent] = useState(false);
-    const [marketingAlertConsent, setMarketingAlertConsent] = useState(false);
-
-    useEffect(() => {
+    const [quoteAlertConsent, setQuoteAlertConsent] = useState(() => {
         try {
-            const quoteSaved = localStorage.getItem(QUOTE_ALERT_CONSENT_KEY);
-            const marketingSaved = localStorage.getItem(
-                MARKETING_ALERT_CONSENT_KEY
-            );
-            setQuoteAlertConsent(quoteSaved === 'true');
-            setMarketingAlertConsent(marketingSaved === 'true');
+            return localStorage.getItem(QUOTE_ALERT_CONSENT_KEY) === 'true';
         } catch {
-            setQuoteAlertConsent(false);
-            setMarketingAlertConsent(false);
+            return false;
         }
-    }, []);
+    });
+    const [marketingAlertConsent, setMarketingAlertConsent] = useState(() => {
+        try {
+            return (
+                localStorage.getItem(MARKETING_ALERT_CONSENT_KEY) === 'true'
+            );
+        } catch {
+            return false;
+        }
+    });
 
     function toggleQuoteAlertConsent() {
         const next = !quoteAlertConsent;

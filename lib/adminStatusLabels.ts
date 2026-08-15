@@ -1,5 +1,7 @@
 /** 관리자 화면용 — API 값은 영문 유지, 표시만 한국어 */
 
+import type { AdminStatusTone } from '@/components/admin/AdminStatusBadge';
+
 const TRIP_STATUS_LABELS: Record<string, string> = {
     open: '진행 중',
     awarded: '낙찰',
@@ -38,6 +40,27 @@ export function formatBidStatusLabel(status: string | null | undefined) {
     return BID_STATUS_LABELS[status] ?? status;
 }
 
+const TRIP_STATUS_TONES: Record<string, AdminStatusTone> = {
+    open: 'info',
+    awarded: 'success',
+    cancelled: 'neutral',
+};
+
+const BID_STATUS_TONES: Record<string, AdminStatusTone> = {
+    open: 'info',
+    withdrawn: 'neutral',
+    awarded: 'success',
+    lost: 'danger',
+};
+
+export function tripStatusTone(status: string | null | undefined): AdminStatusTone {
+    return (status && TRIP_STATUS_TONES[status]) || 'neutral';
+}
+
+export function bidStatusTone(status: string | null | undefined): AdminStatusTone {
+    return (status && BID_STATUS_TONES[status]) || 'neutral';
+}
+
 const VERIFICATION_STATUS_LABELS: Record<string, string> = {
     pending: '승인 대기',
     approved: '승인 완료',
@@ -56,4 +79,16 @@ export function formatVerificationStatusLabel(
 ) {
     if (!status) return '—';
     return VERIFICATION_STATUS_LABELS[status] ?? status;
+}
+
+const VERIFICATION_STATUS_TONES: Record<string, AdminStatusTone> = {
+    pending: 'warning',
+    approved: 'success',
+    rejected: 'danger',
+};
+
+export function verificationStatusTone(
+    status: string | null | undefined,
+): AdminStatusTone {
+    return (status && VERIFICATION_STATUS_TONES[status]) || 'neutral';
 }

@@ -14,19 +14,29 @@ export const PASSENGER_CANCEL_REASONS = [
     '기타',
 ] as const;
 
+// 백엔드 server/src/routes/trips.ts의 DRIVER_FAULT_CANCEL_REASON과 문구 동기화 유지
+// — 이 사유로 취소하면 수수료가 환불되지 않음(그 외 사유는 자동 환불).
+export const DRIVER_FAULT_CANCEL_REASON = '기사님 사유로 취소';
+
 export function PassengerCancelTripDialog({
     open,
     cancelReason,
     onCancelReasonChange,
     onClose,
     onConfirm,
+    isAwarded,
 }: {
     open: boolean;
     cancelReason: string;
     onCancelReasonChange: (reason: string) => void;
     onClose: () => void;
     onConfirm: () => void;
+    isAwarded?: boolean;
 }) {
+    const reasons = isAwarded
+        ? [...PASSENGER_CANCEL_REASONS, DRIVER_FAULT_CANCEL_REASON]
+        : PASSENGER_CANCEL_REASONS;
+
     return (
         <Dialog
             open={open}
@@ -41,7 +51,7 @@ export function PassengerCancelTripDialog({
                     </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
-                    {PASSENGER_CANCEL_REASONS.map((reason) => (
+                    {reasons.map((reason) => (
                         <label
                             key={reason}
                             className="flex cursor-pointer items-center gap-3 rounded-md px-1 py-2 hover:bg-gray-50"
@@ -58,6 +68,11 @@ export function PassengerCancelTripDialog({
                             />
                             <span className="text-base text-gray-700">
                                 {reason}
+                                {reason === DRIVER_FAULT_CANCEL_REASON && (
+                                    <span className="ml-1 text-xs text-gray-400">
+                                        (수수료 미환불)
+                                    </span>
+                                )}
                             </span>
                         </label>
                     ))}

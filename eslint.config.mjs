@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // server/ is a separate Express + TypeScript project with its own
+    // tsconfig (already excluded from the root tsconfig.json) — it isn't
+    // part of the Next.js app this eslint-config-next setup targets.
+    "server/**",
+    // pm2 process config — plain CommonJS (.cjs) by design, not app code.
+    "deploy/**",
   ]),
 ]);
 

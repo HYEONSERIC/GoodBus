@@ -16,39 +16,6 @@ export function PassengerQuoteRequestSection({
 }) {
     return (
         <>
-            <div className="grid grid-cols-3 divide-x divide-gray-200 overflow-hidden rounded-none border border-gray-200 bg-white shadow-sm">
-                <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                    <CardHeader className="px-4 pb-1 gap-1 text-center">
-                        <CardTitle className="text-sm text-gray-500 text-center">
-                            회원등급
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        일반회원
-                    </CardContent>
-                </Card>
-                <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                    <CardHeader className="px-4 pb-1 gap-1 text-center">
-                        <CardTitle className="text-sm text-gray-500 text-center">
-                            적립금
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        0원
-                    </CardContent>
-                </Card>
-                <Card className="rounded-none border-0 shadow-none gap-0 bg-white py-3">
-                    <CardHeader className="px-4 pb-1 gap-1 text-center">
-                        <CardTitle className="text-sm text-gray-500 text-center">
-                            추천 혜택
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-4 pt-0 text-lg font-semibold tracking-tight text-center">
-                        월 100만원
-                    </CardContent>
-                </Card>
-            </div>
-
             <Card className="rounded-none border-gray-200 shadow-sm">
                 <CardHeader className="pb-3 text-center">
                     <CardTitle className="text-[17px] font-semibold tracking-tight">
@@ -67,6 +34,39 @@ export function PassengerQuoteRequestSection({
                     </Button>
                 </CardContent>
             </Card>
+
+            <div className="grid grid-cols-3 divide-x divide-gray-200 overflow-hidden rounded-none border border-gray-200 bg-white">
+                <Card className="rounded-none border-0 shadow-none gap-0.5 bg-white py-2">
+                    <CardHeader className="px-2 gap-0 text-center">
+                        <CardTitle className="text-xs text-gray-400 text-center">
+                            회원등급
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-2 pt-0 text-xs text-center text-gray-400">
+                        준비중
+                    </CardContent>
+                </Card>
+                <Card className="rounded-none border-0 shadow-none gap-0.5 bg-white py-2">
+                    <CardHeader className="px-2 gap-0 text-center">
+                        <CardTitle className="text-xs text-gray-400 text-center">
+                            적립금
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-2 pt-0 text-xs text-center text-gray-400">
+                        준비중
+                    </CardContent>
+                </Card>
+                <Card className="rounded-none border-0 shadow-none gap-0.5 bg-white py-2">
+                    <CardHeader className="px-2 gap-0 text-center">
+                        <CardTitle className="text-xs text-gray-400 text-center">
+                            추천 혜택
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-2 pt-0 text-xs text-center text-gray-400">
+                        준비중
+                    </CardContent>
+                </Card>
+            </div>
         </>
     );
 }
