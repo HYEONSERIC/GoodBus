@@ -41,7 +41,7 @@ jobs:
                   echo '```' >> "$GITHUB_STEP_SUMMARY"
 
             - name: Upload full reports
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v7
               with:
                   name: npm-audit-reports
                   path: |
