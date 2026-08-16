@@ -299,7 +299,7 @@ pm2 restart all
 - [x] Toss 카드 등록 동작 확인 — `NEXT_PUBLIC_TOSS_CLIENT_KEY` 반영 후 첫 시도에서 401(Unauthorized)로 실패, 원인은 로컬→서버로 값을 옮기며 클라이언트 키 끝자리를 **대문자 O를 숫자 0으로 오독**한 오타(`...RGZwXL0` vs 실제 `...RGZwXLO`) — Toss 개발자센터에서 원본 대조 후 정정, 재빌드 후 실제 카드 등록 위젯("실제 결제가 안되는 테스트입니다" 배지)까지 뜨는 것 확인
 - [x] 관리자 로그인 — Admin 계정 생성 후 API 로그인 200 확인(2026-08-16). **관리자 콘솔 UI(매출 탭 등)는 브라우저로 아직 미확인**
 - [x] `curl https://도메인/api/health` — `{"status":"ok"}` 200 확인(2026-08-16)
-- [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인 — **아직 두 값 다 서버에 없음**(OS 재설치로 새로 만들어진 env 파일이라 항목 자체가 비어있는 게 아니라 아예 안 적혀 있음), 에러 트래킹이 현재 꺼져 있는 상태
+- [x] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정 + 실제 에러 발생시켜 Sentry 대시보드 리포트 확인 — 2026-08-16 완료. 이 과정에서 브라우저 에러가 8/10부터 계속 안 잡히고 있던 버그(`sentry.client.config.ts` → `instrumentation-client.ts`)를 발견·수정함(아래 "10-3" 참고)
 
 ### 10-1. 보안 침해사고 이후 강화 항목 (2026-08-14 RCE 사고 대응)
 
@@ -333,15 +333,16 @@ pm2 restart all
 
 여러 기기에서 접속해야 하면 각 기기의 공개키를 `authorized_keys`에 추가로 등록하면 된다.
 
-### 10-3. 다운타임 모니터링 (사용자가 제3자 서비스 가입 필요)
+### 10-3. 다운타임 모니터링 + 에러 트래킹 (2026-08-16 완료 + 라이브 검증)
 
 Sentry는 애플리케이션이 살아서 에러를 던질 때만 잡는다 — 프로세스가 죽거나(크립토마이너가 CPU를 다 먹는 등) 크래시 루프에 빠지면 감지 못 한다. 별도 외부 핑 모니터링이 필요:
 
-1. [UptimeRobot](https://uptimerobot.com) (또는 동급 무료 서비스) 가입
-2. 모니터 대상: `https://<도메인>/api/health` — Next → Express 프록시 경로라 두 계층을 동시에 검증(Express만 죽어도, Next만 죽어도 이 경로가 실패함)
-3. 타입: HTTP(s) Keyword 모니터, 응답 바디에 `"status":"ok"` 포함 여부까지 체크(단순 200 응답이 아니라 실제 정상 JSON인지까지 확인 — 타임아웃과 502를 둘 다 잡음), 5분 간격
-4. 알림 채널: 이메일 + (선택) Slack/텔레그램 — 최소 2개 채널 권장(이메일 서버 자체 장애 시 단일 채널이면 무용지물)
-5. 프로덕션 `server/.env`/`.env.local`의 `SENTRY_DSN`이 실제로 채워져 있는지도 함께 확인 — OS 재설치 이후 처음부터 다시 만들어진 파일이라 "선택 항목"으로 표시된 값이 누락됐을 가능성이 있음. 없으면 각 Sentry 프로젝트에서 재발급해 채우고 `pm2 restart all`
+1. **UptimeRobot** 가입 완료. 모니터 대상은 `https://<도메인>/api/health`(Next → Express 프록시 경로라 두 계층을 동시에 검증 — Express만 죽어도, Next만 죽어도 이 경로가 실패함), 5분 간격, 이메일 알림 등록 확인. SMS/전화는 유료 크레딧 기반이라 스킵(무료 25건 제공되지만 굳이 안 씀)
+2. **Sentry 프로젝트 2개** 생성 완료 — 백엔드(`node-express`, Express 플랫폼), 프론트(`javascript-nextjs`, Next.js 플랫폼). 각 DSN을 `server/.env`의 `SENTRY_DSN`, `.env.local`의 `NEXT_PUBLIC_SENTRY_DSN`에 반영
+
+**⚠️ 발견한 버그 — `sentry.client.config.ts`가 8/10 도입 이후 계속 무시되고 있었음**: `@sentry/nextjs`(현재 10.x) + Next.js 16 조합은 브라우저 쪽 초기화를 Next.js의 공식 client instrumentation 훅 파일(**`instrumentation-client.ts`**, 프로젝트 루트)로 찾는데, 이 레포는 예전 컨벤션 파일명(`sentry.client.config.ts`)만 있어서 빌드 시 조용히 무시되고 있었다 — 빌드 로그에 에러도 경고도 전혀 없어서 `.next/static/chunks/*.js`를 직접 grep해서 "sentry" 문자열이 0개라는 걸로 확인했다. 즉 **서버(Express)/Next 서버사이드 에러는 계속 정상 수집되고 있었지만, 실제 사용자 브라우저에서 나는 JS 에러는 한 번도 Sentry에 안 잡히고 있었다.** `git mv sentry.client.config.ts instrumentation-client.ts`로 해결 — 파일 내용(단순 `Sentry.init({...})` 호출)은 그대로 재사용 가능, 재빌드하면 클라이언트 청크에 SDK가 포함되는 것으로 확인.
+
+**라이브 검증 순서**: ① `dist/loadEnv.js`를 먼저 `require`하지 않고 `dist/instrument.js`만 단독 실행하면 `SENTRY_DSN`이 로드 안 된 상태라 `Sentry.flush()`가 "성공"을 리턴해도 실제로는 아무것도 안 보낸 거짓 양성이 나온다(env 로딩 순서 확인 필수) ② 백엔드는 `loadEnv.js` → `instrument.js` 순서로 로드 후 `captureException`+`flush`로 Sentry Issues에 실제로 뜨는 것 확인 ③ 프론트는 브라우저에서 직접 `setTimeout(() => { throw new Error(...) }, 100)`으로 미처리 예외를 발생시켜 네트워크 탭에서 `ingest.us.sentry.io/.../envelope/` POST가 200으로 나가는 것까지 확인 — 두 프로젝트 Issues 탭에 실제로 이슈가 뜨는 것으로 최종 확정
 
 ### 10-4. 봇/브루트포스 방어 확장 (2026-08-16, 실제 배포 시 적용 + 라이브 검증 완료)
 
