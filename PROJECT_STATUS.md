@@ -23,7 +23,7 @@
 - **SSL:** Let's Encrypt(certbot) 적용, HSTS 포함 보안 헤더 응답 확인
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
 - **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
-- **아직 안 됨:** Kakao/Toss 키 재발급 여부 미확인, Phase 3(도메인 구매+Cloudflare)
+- **아직 안 됨:** Kakao 키 재발급 여부 미확인(Toss는 2026-08-16 재발급 완료), Phase 3(도메인 구매+Cloudflare)
 
 ---
 
@@ -235,7 +235,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). **여전히 남은 것**: Kakao/Toss API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것). 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **여전히 남은 것**: Kakao API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것). 상세는 `DEPLOYMENT.md` "10-1" 참고
     - **UptimeRobot + Sentry 완료, 브라우저 에러 캡처 버그 발견·수정** (2026-08-16) — UptimeRobot에 `/api/health` 5분 간격 모니터 등록(이메일 알림). Sentry는 백엔드(`node-express`)·프론트(`javascript-nextjs`) 프로젝트 2개 생성해 DSN 반영, 실제 에러 발생시켜 둘 다 라이브 검증. 이 과정에서 **`sentry.client.config.ts`가 8/10 Sentry 도입 이후 계속 무시되고 있던 버그**를 발견 — `@sentry/nextjs` 10.x+Next 16은 브라우저 초기화를 `instrumentation-client.ts` 파일명으로 찾는데 구 컨벤션 파일명만 있어서 빌드 에러/경고 없이 조용히 누락되고 있었음(서버 에러는 정상 수집 중이었지만 사용자 브라우저 JS 에러는 한 번도 안 잡히고 있었음). 파일명 변경으로 해결, 브라우저에서 실제 미처리 예외를 던져 Sentry로 200 응답 나가는 것까지 확인(`DEPLOYMENT.md` "10-3" 참고)
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
@@ -285,7 +285,7 @@
 
 1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
 2. ~~SSH 키 인증 전환~~ **2026-08-16 완료** (`DEPLOYMENT.md` "10-2")
-3. UptimeRobot 가입, Sentry DSN 재발급, Kakao/Toss 키 재발급 여부 확인 — 전부 사용자가 콘솔에서 직접 해야 하는 절차
+3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — 남은 건 Kakao 키 재발급 여부 확인뿐
 4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
 5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
 6. ~~휴대전화 OTP 로그인 API·UI~~ **구현·테스트 완료(2026-08-11)** — 심사 통과 후 env만 채우면 개발 모드 → 실발송 전환 (`.claude/roadmap.md` 참고)

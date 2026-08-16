@@ -310,7 +310,8 @@ pm2 restart all
 - [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고 (UptimeRobot 가입 여전히 안 함)
 - [x] **GitHub Dependabot/vulnerability alerts** — 2026-08-15, 꺼져 있는 것으로 확인(`gh api` 조회 결과), `gh api -X PUT repos/HYEONSERIC/GoodBus/vulnerability-alerts`와 `.../automated-security-fixes`로 활성화 완료. `.github/dependabot.yml` 추가(root+server 주간 스캔)
 - [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
-- [~] Kakao/Toss API 키가 프로덕션 서버에 반영되고 실제 동작까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 이게 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)/[Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 후 교체 권장
+- [x] **Toss Secret Key/Webhook Secret 재발급 완료** (2026-08-16) — [Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 받아 `server/.env` 갱신 → `pm2 restart goodbus-api`, 헬스체크·에러 로그로 정상 기동 확인. Client key(`NEXT_PUBLIC_TOSS_CLIENT_KEY`)는 공개 키라 재발급 대상 아님, 기존 값 유지
+- [~] Kakao API 키는 프로덕션 서버에 반영되고 실제 동작(장소검색)까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)에서 재발급 후 교체 권장
 - [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities
 
 ### 10-2. SSH 하드닝 (2026-08-16 완료 + 라이브 검증)
