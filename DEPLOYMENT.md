@@ -306,23 +306,30 @@ pm2 restart all
 2026-08-14 Next.js 취약점을 통한 RCE로 서버가 침해돼 OS 재설치로 복구한 사고가 있었음(전체 경위는 `PROJECT_STATUS.md` 참고). 그때 드러난 운영 공백들:
 
 - [x] **DB 자동 백업** — 2026-08-15 스크립트 작성, **2026-08-16 crontab 실제 등록 + 실행 검증 완료**(위 "8-2" 참고). `crontab -l`에 03:00 등록 확인, 수동 1회 실행으로 만든 덤프(`goodbus_2026-08-16_162355.sql.gz`)의 gzip 무결성과 `CREATE TABLE public."User"` 포함 여부까지 확인
-- [ ] **SSH 비밀번호 인증만 있음** — 2026-08-16 재확인 결과 아직 그대로(`PasswordAuthentication yes`, `PermitRootLogin yes`). 아래 "10-2" 절차대로 전환 필요 (락아웃 위험이 있는 작업이라 VPS에서 직접, 순서 지켜서) — **다른 인프라 항목이 다 끝난 지금 우선순위가 가장 높은 잔여 항목**
+- [x] **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no` + `PermitRootLogin prohibit-password` 적용 후, 키 로그인 유지 + 비밀번호 인증이 프롬프트 없이 즉시 거부되는 것까지 라이브 검증(아래 "10-2" 참고)
 - [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고 (UptimeRobot 가입 여전히 안 함)
 - [x] **GitHub Dependabot/vulnerability alerts** — 2026-08-15, 꺼져 있는 것으로 확인(`gh api` 조회 결과), `gh api -X PUT repos/HYEONSERIC/GoodBus/vulnerability-alerts`와 `.../automated-security-fixes`로 활성화 완료. `.github/dependabot.yml` 추가(root+server 주간 스캔)
 - [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
 - [~] Kakao/Toss API 키가 프로덕션 서버에 반영되고 실제 동작까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 이게 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)/[Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 후 교체 권장
 - [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities
 
-### 10-2. SSH 하드닝 (사용자가 VPS에서 직접 — 락아웃 위험, 순서 준수)
+### 10-2. SSH 하드닝 (2026-08-16 완료 + 라이브 검증)
 
-1. 로컬 mac: `ssh-keygen -t ed25519 -C "goodbus-vps-2026-08"` (기존 키 재사용 금지 — 침해 기간 노출 가능성 배제)
-2. `ssh-copy-id -i ~/.ssh/goodbus_vps.pub <user>@<서버IP>` — 비밀번호 인증이 아직 살아있을 때만 가능
-3. **새 터미널 창**을 열어 `ssh -i ~/.ssh/goodbus_vps <user>@<서버IP>`로 키 로그인이 실제로 되는지 확인. 기존 비밀번호 세션은 그대로 열어둔 채로 둔다(안전장치)
-4. `/etc/ssh/sshd_config`: `PasswordAuthentication no`, `PermitRootLogin no`(또는 `prohibit-password`), `PubkeyAuthentication yes`
-5. `sudo systemctl restart sshd`
-6. 다시 새 터미널에서 키 로그인 확인 + 비밀번호 로그인이 실제로 거부되는지 확인
-7. `fail2ban-client status sshd`로 fail2ban이 살아있는지 확인 (트러블슈팅 절 참고 — 이미 동작 중일 가능성 높음)
-8. 카페24 콘솔의 웹 기반 서버 접속(VNC/시리얼 콘솔) 방법을 미리 확인해둔다 — 키를 잃어버려도 이걸로 복구 가능
+카페24 자동설치가 `/etc/ssh/sshd_config.d/99-cafe24-harden.conf`를 이미 깔아둔다(`MaxAuthTries 3`, `LoginGraceTime 30`, 포워딩 차단 등) — 단, **비밀번호 인증 차단은 빠져있어서** 이 부분만 별도 drop-in으로 추가한다. `sshd_config`의 `Include /etc/ssh/sshd_config.d/*.conf`가 파일 앞부분에 있어 나중에 오는 메인 설정과 충돌 안 남.
+
+1. `authorized_keys`에 재설치 이후 새로 만든 키(`goodbus-vps-2026-08`, `ssh-copy-id`로 등록 완료)만 있는지 먼저 확인 — 침해 기간 이전 키가 남아있지 않아야 함
+2. `/etc/ssh/sshd_config.d/90-goodbus-keyonly.conf` 신설:
+   ```ini
+   PasswordAuthentication no
+   PermitRootLogin prohibit-password
+   PubkeyAuthentication yes
+   ```
+   **주의**: `PermitRootLogin no`가 아니라 **`prohibit-password`**를 써야 한다 — root로 키 접속하는 구조라 `no`를 쓰면 root 로그인 자체가(키 포함) 완전히 막혀 락아웃된다. `prohibit-password`는 "root는 키로만" 허용.
+3. `sshd -t`로 문법 검증 → **먼저 검증하고** 나서 재시작(순서 중요)
+4. `systemctl restart ssh` — Ubuntu 24.04는 유닛명이 `sshd`가 아니라 **`ssh`**(`sshd`로 하면 "Unit sshd.service not found")
+5. 재시작 직후 곧바로 두 가지 확인: ① 기존 키로 새 연결이 되는지 ② `-o PreferredAuthentications=password -o PubkeyAuthentication=no -o BatchMode=yes`로 비밀번호 인증을 강제한 연결이 프롬프트도 없이 즉시 `Permission denied (publickey)`로 거부되는지
+6. `fail2ban-client status sshd`로 fail2ban이 살아있는지 확인 — 이미 실제 브루트포스 시도를 자동 차단한 이력 있음(위 "10-4" 참고)
+7. 카페24 콘솔의 웹 기반 서버 접속(VNC/시리얼 콘솔) 방법을 미리 확인해둔다 — 키를 잃어버려도 이걸로 복구 가능
 
 여러 기기에서 접속해야 하면 각 기기의 공개키를 `authorized_keys`에 추가로 등록하면 된다.
 

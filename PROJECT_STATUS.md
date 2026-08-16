@@ -23,7 +23,7 @@
 - **SSL:** Let's Encrypt(certbot) 적용, HSTS 포함 보안 헤더 응답 확인
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
 - **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
-- **아직 안 됨:** SSH 키 인증 전환(비밀번호 인증 여전히 열려있음), UptimeRobot 다운타임 모니터링, Sentry DSN 미설정
+- **아직 안 됨:** UptimeRobot 다운타임 모니터링, Sentry DSN 미설정, Kakao/Toss 키 재발급 여부 미확인
 
 ---
 
@@ -219,7 +219,8 @@
     - **카페24 플랫폼 방화벽**: ON 전환 + INBOUND 22/80/443 허용 규칙 추가, 나머지 전부 차단. 콘솔 UI가 직관적이지 않아 절차를 `DEPLOYMENT.md`에 기록
     - **Kakao/Toss API 키**: 프로덕션 서버에 반영하고 실제 동작(카카오 장소검색 API 호출 성공, Toss 카드 등록 위젯 노출)까지 확인. 반영 과정에서 Toss 클라이언트 키 오타(문자 O ↔ 숫자 0) 하나로 실제 401 에러가 발생했고, 브라우저 네트워크 탭으로 원인 특정 후 수정
     - **nodemailer 취약점 발견·수정**: 위 8/15 npm audit 정리 때 보류됐던 `nodemailer`(당시 breaking major라 후순위)를 재점검 — high severity 8건(SMTP 인젝션, addressparser DoS, TLS 검증 미흡 등) 중 실제 사용 패턴(`server/src/utils/email.ts`, 단순 `createTransport`+`sendMail`)에서 트리거 가능한 건 주소 파싱 관련 2건으로 좁혀 확인 후 `^6.9.8`→`^9.0.5` 업그레이드. 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과, `npm audit` 결과 root+server 둘 다 0 vulnerabilities
-    - **재확인 결과 아직 안 된 것**: SSH 비밀번호 인증이 여전히 열려있음(`PasswordAuthentication yes`), UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
+    - **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no`+`PermitRootLogin prohibit-password` 적용, 키 로그인 유지·비밀번호 인증 즉시거부 라이브 검증 완료. Cafe24가 이미 깔아둔 `sshd_config.d/99-cafe24-harden.conf`(MaxAuthTries 등)에 이 두 항목만 빠져있어 별도 drop-in으로 추가
+    - **재확인 결과 아직 안 된 것**: UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
 
 ## 미완료 / 실서비스 갭
 
@@ -234,7 +235,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 대부분의 인프라 항목(백업 cron 실제 등록, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer)은 2026-08-15~16에 완료(위 "완료됨" 참고). **여전히 남은 것**: ① **SSH 키 인증 전환** — 2026-08-16 재확인 결과 `PasswordAuthentication yes`/`PermitRootLogin yes` 그대로, 다른 항목이 다 끝난 지금 우선순위 1순위(절차는 `DEPLOYMENT.md` "10-2") ② UptimeRobot 등 다운타임 모니터링 가입("10-3") ③ Kakao/Toss API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것) ④ 프로덕션 `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 여전히 미설정(OS 재설치로 env가 새로 만들어져 빈 상태). 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 대부분의 인프라 항목(백업 cron 실제 등록, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, **SSH 키 전용 인증**)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). **여전히 남은 것**: ① UptimeRobot 등 다운타임 모니터링 가입("10-3") ② Kakao/Toss API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것) ③ 프로덕션 `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 여전히 미설정(OS 재설치로 env가 새로 만들어져 빈 상태). 상세는 `DEPLOYMENT.md` "10-1" 참고
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
 - **결제** (2026-08-13에 토스페이먼츠 + 낙찰 수수료 자동화로 대부분 구현 — 위 "결제·멤버십" 섹션 참고)
@@ -282,7 +283,7 @@
 ## 다음 단계
 
 1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
-2. **SSH 키 인증 전환** — 유일하게 남은 인프라 보안 항목, 락아웃 위험 있어 절차대로 순서 준수 (`DEPLOYMENT.md` "10-2")
+2. ~~SSH 키 인증 전환~~ **2026-08-16 완료** (`DEPLOYMENT.md` "10-2")
 3. UptimeRobot 가입, Sentry DSN 재발급, Kakao/Toss 키 재발급 여부 확인 — 전부 사용자가 콘솔에서 직접 해야 하는 절차
 4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
 5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
@@ -290,5 +291,5 @@
 7. 랜딩 정리, 실 가격 확정 (~~약관 정리~~ 페이지는 2026-08-14 추가 완료, 법률 검토·통신판매업 신고번호 반영은 남음)
 8. ~~PG 신청·결제·빌링키(카드 등록)·멤버십 서버 연동~~ **테스트 키로 구현·테스트 완료(2026-08-13), 프로덕션 반영·동작 확인도 2026-08-16 완료** — 토스페이먼츠 가맹심사 통과 후 env만 교체하면 실 결제 전환
 9. 관리자 콘솔에 결제/구독 조회·환불 UI 추가
-10. Phase 3 — 도메인 구매 + Cloudflare 전체 프록시 (미착수)
+10. Phase 3 — 도메인 구매 + Cloudflare 전체 프록시 (미착수). **도메인 구매가 전제조건**: 지금의 `goodbus0716.mycafe24.com`은 카페24 소유 도메인이라 네임서버를 Cloudflare로 못 바꿈 — Cloudflare의 볼류메트릭 DDoS 완화·Bot Fight Mode는 카페24엔 없는 기능이라(방금 켠 플랫폼 방화벽은 포트 단위 차단일 뿐, 트래픽 양 자체를 흡수해주진 않음) 도메인 구매 없이는 대체 불가
 11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `admin.ts` 전체 Zod 스키마화
