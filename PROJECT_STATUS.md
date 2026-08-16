@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-08-15
+**최종 갱신:** 2026-08-16
 
 ---
 
@@ -16,14 +16,14 @@
 
 ---
 
-## 호스팅 계획 (카페24)
+## 호스팅 (카페24) — 2026-08-16 실제 프로덕션 배포 완료
 
-- **선택 예정:** 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원
-- **스택:** Node.js 24, PostgreSQL 17, Nginx, PM2 (자동 구성 패키지)
-- **프레임워크 자동설치:** Express 5 패키지 선택 예정  
-  → GoodBus는 **Next.js(웹) + Express(API)** 이중 구조이므로, 자동설치는 시작점일 뿐 **pm2로 web(:3000) + api(:4000) 둘 다 직접 실행** 필요
-- **SSL:** 카페24는 별도 구매·적용을 안내하지만, `DEPLOYMENT.md`는 Nginx + certbot(Let's Encrypt 무료 인증서) 경로로 대체
-- **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` (pm2, nginx, bootstrap/deploy 스크립트) — **카페24 기준으로 재작성 완료, 실제 프로덕션 배포는 아직 없음**
+- **운영 중:** `goodbus0716.mycafe24.com`, 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원
+- **스택:** Ubuntu 24.04, Node.js(pm2 fork 모드), Docker Postgres(네이티브 PostgreSQL 17은 `systemctl disable`로 끔), Nginx + certbot
+- **SSL:** Let's Encrypt(certbot) 적용, HSTS 포함 보안 헤더 응답 확인
+- **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
+- **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
+- **아직 안 됨:** SSH 키 인증 전환(비밀번호 인증 여전히 열려있음), UptimeRobot 다운타임 모니터링, Sentry DSN 미설정
 
 ---
 
@@ -75,7 +75,7 @@
 - **차량별 최저입찰금액 확인**: 멤버십 티어와 무관한 독립 월 구독 상품(400원/월, `MinBidAddonSubscription`)으로 멤버십 페이지에 5번째 항목으로 노출 — 구독/해지/재구독 동일 패턴
 - 정기결제 실행은 `server/src/prisma/run-recurring-billing.ts`(멤버십+애드온 공용, 독립 스크립트+시스템 crontab, `npm run db:run-recurring-billing`) — pm2 상시 프로세스 아님, `DEPLOYMENT.md` 8-1절 참고
 - 웹훅(`POST /payments/webhook`, HMAC 서명 검증)은 등록돼 있으나 보조 채널 — 실제 결제/구독 확정은 confirm/billing API의 동기 응답이 authoritative
-- **아직 테스트(test_) 키 상태** — `server/.env`의 `TOSS_SECRET_KEY`/`TOSS_WEBHOOK_SECRET`, 루트 `.env.local`의 `NEXT_PUBLIC_TOSS_CLIENT_KEY`가 전부 테스트 키. 실 결제는 발생하지 않음(가상 승인)
+- **아직 테스트(test_) 키 상태** — `server/.env`의 `TOSS_SECRET_KEY`/`TOSS_WEBHOOK_SECRET`, 루트 `.env.local`의 `NEXT_PUBLIC_TOSS_CLIENT_KEY`가 전부 테스트 키. 실 결제는 발생하지 않음(가상 승인). **2026-08-16 프로덕션 서버에 반영 + 실제 카드 등록 위젯까지 브라우저로 검증 완료** — 반영 과정에서 클라이언트 키 오타(문자 O를 숫자 0으로 오독)로 인한 Toss 401 에러를 실제로 겪고 수정함(`DEPLOYMENT.md` 트러블슈팅 표 참고)
 - **낙찰 수수료(10%) 자동 결제** (2026-08-13) — `POST /trips/:id/award`에서 낙찰 확정 **전에** 낙찰자(기사/회사) 빌링키로 `입찰가(만원) × 10%`를 선결제하고, 성공해야 낙찰이 확정됨(`server/src/utils/adminRevenue.ts`의 `DEFAULT_PLATFORM_COMMISSION_RATE`와 동일 소스). 카드 미등록 상태에서는 애초에 입찰 자체가 차단됨(`POST /bids`). 결제 실패 시 낙찰은 성립하지 않고 승객·기사 양쪽에 알림(`NotificationType.AWARD_PAYMENT_FAILED`) 발송. 낙찰된 여정이 취소되면 사유가 "기사님 사유로 취소"가 아닌 한 토스 결제취소 API로 자동 환불(`PATCH /trips/:id/cancel`). 실제 청구/환불 흐름까지 curl로 end-to-end 검증 완료
 
 ### 남은 작업
@@ -210,14 +210,23 @@
     - Nginx에 알려진 스캐너 UA(sqlmap/nikto/nmap 등)·빈 UA·흔한 취약점 스캔 경로(`/wp-admin`, `/.env`, `/.git` 등) 차단(`444`, 무응답 종료) 추가 — Docker로 실제 요청 보내 정상 트래픽은 통과, 스캐너 패턴은 연결 즉시 종료되는 것 확인. UA 위조는 쉬워서 진짜 방어선이 아니라 노이즈 감소용임을 명시
     - `profile.ts`·`chats.ts`에 Zod 스키마 적용(admin.ts는 크래시 유발 패턴 재확인 결과 이미 없어서 보류, CSRF도 GET 기반 상태변경 라우트 없음 재확인)
     - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키 발급(무료 Cloudflare 계정 가입)은 아직 안 됨** — 키 없으면 위젯 자체가 안 뜨고 서버 검증도 스킵되는 상태로 당분간 유지
-    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **Phase 3(안정화 후 별도)**: 도메인 구매→Cloudflare 전체 프록시(무료 DDoS 완화+WAF+Bot Fight Mode), Turnstile 키 실제 발급. 상세 계획은 이번 대화의 plan 파일 참고
+    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **2026-08-16에 전부 완료 — 아래 항목 참고.** **Phase 3(안정화 후 별도, 미착수)**: 도메인 구매→Cloudflare 전체 프록시(무료 DDoS 완화+WAF+Bot Fight Mode), Turnstile 키 실제 발급
+- **실제 프로덕션 배포 + 인프라 보안 강화 완료** (2026-08-16)
+    - `DEPLOYMENT.md` 순서대로 `goodbus0716.mycafe24.com`에 실제 배포. 문서에 없던 인프라 이슈 5건을 배포 중 새로 발견·수정(카페24 starter 앱의 포트 3000 선점, 네이티브 Postgres 5432 충돌, `/uploads` 프록시 누락, welcome 페이지 우선순위, Nginx `add_header` 상속 버그로 인한 HSTS 미노출) — 전부 `DEPLOYMENT.md` "10. 배포 후 체크리스트"/트러블슈팅 표에 반영
+    - **fail2ban**: 카페24가 이미 설치해둔 fail2ban + `nginx-http-auth`/`nginx-limit-req`/`nginx-botsearch` 필터를 활성화하고, 우리 앱 전용 `goodbus-login` jail(로그인 실패 로그 기반) 추가. 과정에서 `backend=auto`가 조용히 journald만 보고 지정한 로그 파일은 무시하는 버그를 발견 — `backend=polling`으로 전 jail 수정. 실제 8회 실패 로그인으로 밴 발생시키고 해제까지 라이브 검증(`DEPLOYMENT.md` "10-4")
+    - **unattended-upgrades**: 카페24가 이미 설치·보안오리진까지 구성해둔 상태였음 — `Automatic-Reboot false` 명시적으로 켜고 `--dry-run`으로 보안 오리진만 골라내는 것 확인(`DEPLOYMENT.md` "10-5")
+    - **DB 백업 cron**: `crontab`에 03:00 등록 + 수동 1회 실행으로 실제 덤프 파일 생성·무결성 확인
+    - **카페24 플랫폼 방화벽**: ON 전환 + INBOUND 22/80/443 허용 규칙 추가, 나머지 전부 차단. 콘솔 UI가 직관적이지 않아 절차를 `DEPLOYMENT.md`에 기록
+    - **Kakao/Toss API 키**: 프로덕션 서버에 반영하고 실제 동작(카카오 장소검색 API 호출 성공, Toss 카드 등록 위젯 노출)까지 확인. 반영 과정에서 Toss 클라이언트 키 오타(문자 O ↔ 숫자 0) 하나로 실제 401 에러가 발생했고, 브라우저 네트워크 탭으로 원인 특정 후 수정
+    - **nodemailer 취약점 발견·수정**: 위 8/15 npm audit 정리 때 보류됐던 `nodemailer`(당시 breaking major라 후순위)를 재점검 — high severity 8건(SMTP 인젝션, addressparser DoS, TLS 검증 미흡 등) 중 실제 사용 패턴(`server/src/utils/email.ts`, 단순 `createTransport`+`sendMail`)에서 트리거 가능한 건 주소 파싱 관련 2건으로 좁혀 확인 후 `^6.9.8`→`^9.0.5` 업그레이드. 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과, `npm audit` 결과 root+server 둘 다 0 vulnerabilities
+    - **재확인 결과 아직 안 된 것**: SSH 비밀번호 인증이 여전히 열려있음(`PasswordAuthentication yes`), UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
 
 ## 미완료 / 실서비스 갭
 
 - **배포**
-    - 프로덕션 배포 **미실행** (가이드·스크립트는 `DEPLOYMENT.md`, `deploy/`에 존재)
-    - 카페24 VPS 호스팅 **신청·구축 예정**
-    - CI(lint+build+test)는 GitHub Actions로 도입됐지만, 배포 자동화(CD)는 없음 — 여전히 수동 배포
+    - ~~프로덕션 배포 미실행~~ **2026-08-16 실제 배포 완료**(위 "호스팅" 섹션·"완료됨" 참고)
+    - CI(lint+build+test)는 GitHub Actions로 도입됐지만, 배포 자동화(CD)는 없음 — 여전히 수동 배포(`deploy/scripts/deploy.sh` 또는 수동 `git pull`+`build:prod`+`pm2 restart`)
+    - `DEPLOYMENT.md` "10. 배포 후 체크리스트" 중 미완료 항목: 승객 견적 생성→기사 입찰→승객 낙찰 전체 흐름 브라우저 검증, 관리자 콘솔 UI(매출 탭 등) 브라우저 검증, Sentry 에러 리포트 실제 확인
 - **휴대전화 로그인**
     - 코드(스키마·API·UI) **구현·테스트 완료**, 현재는 개발 모드(서버 로그 출력)로 동작 — 자세한 내용은 위 "인증 — 휴대전화 / 알림톡" 섹션 참고
     - 실제 알림톡/SMS 발송은 알리고 가입·카카오 채널·템플릿 심사 **대기/예정** (외부 절차, 코드 아님)
@@ -225,7 +234,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속(admin/trips 크래시, 결제 중복 청구, OTP 남용, 차단 세션 등)과 백업/npm audit/Dependabot 등 리포지토리에서 처리 가능한 인프라 항목은 2026-08-15에 완료(위 "완료됨" 참고). **여전히 남은 것 — 전부 VPS 접속/제3자 서비스 가입이 필요해 사용자가 직접 해야 함**: ① SSH 키 인증 전환(`authorized_keys` 비어있음, 절차는 `DEPLOYMENT.md` "10-2") ② 백업 cron 실제 등록(스크립트는 준비됨, "8-2") ③ UptimeRobot 등 다운타임 모니터링 가입("10-3") ④ Kakao/Toss API 키 재발급(침해 기간 노출 가능성) ⑤ 프로덕션 `SENTRY_DSN` 생존 확인(OS 재설치로 env가 새로 만들어짐). 상세 체크리스트는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 대부분의 인프라 항목(백업 cron 실제 등록, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer)은 2026-08-15~16에 완료(위 "완료됨" 참고). **여전히 남은 것**: ① **SSH 키 인증 전환** — 2026-08-16 재확인 결과 `PasswordAuthentication yes`/`PermitRootLogin yes` 그대로, 다른 항목이 다 끝난 지금 우선순위 1순위(절차는 `DEPLOYMENT.md` "10-2") ② UptimeRobot 등 다운타임 모니터링 가입("10-3") ③ Kakao/Toss API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것) ④ 프로덕션 `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 여전히 미설정(OS 재설치로 env가 새로 만들어져 빈 상태). 상세는 `DEPLOYMENT.md` "10-1" 참고
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
 - **결제** (2026-08-13에 토스페이먼츠 + 낙찰 수수료 자동화로 대부분 구현 — 위 "결제·멤버십" 섹션 참고)
@@ -272,10 +281,14 @@
 
 ## 다음 단계
 
-1. 카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx
-2. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
-3. ~~휴대전화 OTP 로그인 API·UI~~ **구현·테스트 완료(2026-08-11)** — 심사 통과 후 env만 채우면 개발 모드 → 실발송 전환 (`.claude/roadmap.md` 참고)
-4. 랜딩 정리, 실 가격 확정 (~~약관 정리~~ 페이지는 2026-08-14 추가 완료, 법률 검토·통신판매업 신고번호 반영은 남음)
-5. ~~PG 신청·결제·빌링키(카드 등록)·멤버십 서버 연동~~ **테스트 키로 구현·테스트 완료(2026-08-13)** — 토스페이먼츠 가맹심사 통과 후 env만 교체하면 실 결제 전환
-6. 관리자 콘솔에 결제/구독 조회·환불 UI 추가
-7. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback (Sentry·CI·감사 로그 기본형은 2026-08-10에, 관리자/결제/OTP/세션/JWT 보안 갭은 2026-08-15에 완료)
+1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
+2. **SSH 키 인증 전환** — 유일하게 남은 인프라 보안 항목, 락아웃 위험 있어 절차대로 순서 준수 (`DEPLOYMENT.md` "10-2")
+3. UptimeRobot 가입, Sentry DSN 재발급, Kakao/Toss 키 재발급 여부 확인 — 전부 사용자가 콘솔에서 직접 해야 하는 절차
+4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
+5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
+6. ~~휴대전화 OTP 로그인 API·UI~~ **구현·테스트 완료(2026-08-11)** — 심사 통과 후 env만 채우면 개발 모드 → 실발송 전환 (`.claude/roadmap.md` 참고)
+7. 랜딩 정리, 실 가격 확정 (~~약관 정리~~ 페이지는 2026-08-14 추가 완료, 법률 검토·통신판매업 신고번호 반영은 남음)
+8. ~~PG 신청·결제·빌링키(카드 등록)·멤버십 서버 연동~~ **테스트 키로 구현·테스트 완료(2026-08-13), 프로덕션 반영·동작 확인도 2026-08-16 완료** — 토스페이먼츠 가맹심사 통과 후 env만 교체하면 실 결제 전환
+9. 관리자 콘솔에 결제/구독 조회·환불 UI 추가
+10. Phase 3 — 도메인 구매 + Cloudflare 전체 프록시 (미착수)
+11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `admin.ts` 전체 Zod 스키마화
