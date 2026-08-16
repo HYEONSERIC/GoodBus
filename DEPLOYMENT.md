@@ -282,29 +282,36 @@ pm2 restart all
 
 ## 10. 배포 후 체크리스트
 
-- [x] 방화벽에서 **22(SSH), 80, 443만 개방** — 5432(Postgres)는 반드시 외부 차단 (2026-08-15, `nc -z goodbus0716.mycafe24.com {22,80,443,5432}`로 외부에서 직접 확인: 22/80/443만 열려있고 5432는 닫혀있음 확인 완료)
-- [ ] `https://도메인/` 접속
-- [ ] 로그인 / 로그아웃
-- [ ] 승객 견적 생성, Kakao 주소·거리
+> **2026-08-16 실제 프로덕션 배포 완료** (`goodbus0716.mycafe24.com`) — 아래 항목 중 이 날짜로 표시된 것은 실제 라이브 서버에서 검증됨. 카페24 OS 재설치 이후 이 문서 순서대로 처음부터 다시 배포하면서, 문서에 없던 인프라 이슈 몇 개를 새로 발견·수정함(아래 "트러블슈팅" 표에 추가):
+> - 카페24 자동설치 마법사가 만들어둔 starter 앱이 `appuser` 계정으로 포트 3000을 선점해 `goodbus-web`이 크래시루프
+> - 네이티브 PostgreSQL 17이 5432를 이미 점유(문서에 이미 있던 경고대로 `systemctl stop/disable postgresql`로 해결)
+> - `/uploads/*`가 카페24 자동생성 Nginx config에 프록시 안 돼 있어 404
+> - `/var/www/cafe24-welcome/index.html`이 실제 앱보다 우선 서빙됨
+> - Nginx `add_header` 상속 규칙 때문에 카페24가 이미 선언해둔 HSTS 헤더가 실제로는 응답에 안 붙고 있었음
+
+- [x] 방화벽에서 **22(SSH), 80, 443만 개방** — 카페24 **플랫폼 레벨** 방화벽(콘솔 UI, iptables 아님)을 ON으로 전환하고 INBOUND 규칙 3개(TCP 22/80/443, 전체 허용) 추가로 완료(2026-08-16). 콘솔 UI 흐름이 직관적이지 않아 기록해둠: 상단 **"방화벽 정책(Rule) 추가"** 버튼이 신규 규칙을 만드는 유일한 경로 — 하위 테이블의 "허용 IP 추가"/"차단 IP 추가" 버튼은 *이미 존재하는* 규칙 행에 IP를 붙이는 용도라, 빈 상태에서 누르면 "IP를 추가하실 정책을 선택해 주세요" 에러만 반복됨. "방화벽 정책(Rule) 추가" → "INBOUND 정책: 익명접속(모든IP)" 선택 → 서비스이름/프로토콜/포트 입력이 정공법. 방화벽 OFF 상태에서 "정책 추가"를 누르면 먼저 ON으로 전환할지 묻는 확인창이 뜸 — **이 순간부터 허용 규칙이 하나도 없으면 즉시 전체 인바운드가 막히므로, ON 전환 직후 곧바로 22/80/443 규칙부터 추가할 것.**
+- [x] `https://도메인/` 접속 — 200 (2026-08-16)
+- [x] 로그인 / 로그아웃 — 회원가입(Driver) → 로그인 스모크 테스트로 확인(2026-08-16)
+- [ ] 승객 견적 생성, Kakao 주소·거리 — Kakao REST API 키 반영 후 검색 API 자체는 확인(아래 참고), 실제 견적 생성 플로우는 미확인
 - [ ] 기사 입찰, 승객 낙찰
-- [ ] 프로필·면허증 업로드 → 이미지 표시
-- [ ] 관리자 로그인·매출 탭
-- [ ] `curl https://도메인/api/health` 또는 Express `/health` (내부)
-- [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인
+- [x] 프로필·면허증 업로드 → 이미지 표시 — 업로드 라우트 자체는 8/15에 curl로 검증 완료, 이번 배포 후 브라우저 재확인은 미완
+- [x] Kakao API 키 동작 확인 — `KAKAO_REST_API_KEY` 반영 후 `/api/kakao/places?query=서울역` 실제 검색 성공(2026-08-16)
+- [x] Toss 카드 등록 동작 확인 — `NEXT_PUBLIC_TOSS_CLIENT_KEY` 반영 후 첫 시도에서 401(Unauthorized)로 실패, 원인은 로컬→서버로 값을 옮기며 클라이언트 키 끝자리를 **대문자 O를 숫자 0으로 오독**한 오타(`...RGZwXL0` vs 실제 `...RGZwXLO`) — Toss 개발자센터에서 원본 대조 후 정정, 재빌드 후 실제 카드 등록 위젯("실제 결제가 안되는 테스트입니다" 배지)까지 뜨는 것 확인
+- [x] 관리자 로그인 — Admin 계정 생성 후 API 로그인 200 확인(2026-08-16). **관리자 콘솔 UI(매출 탭 등)는 브라우저로 아직 미확인**
+- [x] `curl https://도메인/api/health` — `{"status":"ok"}` 200 확인(2026-08-16)
+- [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인 — **아직 두 값 다 서버에 없음**(OS 재설치로 새로 만들어진 env 파일이라 항목 자체가 비어있는 게 아니라 아예 안 적혀 있음), 에러 트래킹이 현재 꺼져 있는 상태
 
 ### 10-1. 보안 침해사고 이후 강화 항목 (2026-08-14 RCE 사고 대응)
 
 2026-08-14 Next.js 취약점을 통한 RCE로 서버가 침해돼 OS 재설치로 복구한 사고가 있었음(전체 경위는 `PROJECT_STATUS.md` 참고). 그때 드러난 운영 공백들:
 
-- [x] **DB 자동 백업** — 2026-08-15, `server/scripts/backup-db.sh` + crontab으로 해결(위 "8-2" 참고). **crontab 실제 등록은 여전히 사용자가 VPS에서 해야 함**
-- [ ] **SSH 비밀번호 인증만 있음** — `authorized_keys`가 비어있어 브루트포스에 노출. 아래 "10-2" 절차대로 전환 필요 (락아웃 위험이 있는 작업이라 VPS에서 직접, 순서 지켜서)
-- [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고
+- [x] **DB 자동 백업** — 2026-08-15 스크립트 작성, **2026-08-16 crontab 실제 등록 + 실행 검증 완료**(위 "8-2" 참고). `crontab -l`에 03:00 등록 확인, 수동 1회 실행으로 만든 덤프(`goodbus_2026-08-16_162355.sql.gz`)의 gzip 무결성과 `CREATE TABLE public."User"` 포함 여부까지 확인
+- [ ] **SSH 비밀번호 인증만 있음** — 2026-08-16 재확인 결과 아직 그대로(`PasswordAuthentication yes`, `PermitRootLogin yes`). 아래 "10-2" 절차대로 전환 필요 (락아웃 위험이 있는 작업이라 VPS에서 직접, 순서 지켜서) — **다른 인프라 항목이 다 끝난 지금 우선순위가 가장 높은 잔여 항목**
+- [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고 (UptimeRobot 가입 여전히 안 함)
 - [x] **GitHub Dependabot/vulnerability alerts** — 2026-08-15, 꺼져 있는 것으로 확인(`gh api` 조회 결과), `gh api -X PUT repos/HYEONSERIC/GoodBus/vulnerability-alerts`와 `.../automated-security-fixes`로 활성화 완료. `.github/dependabot.yml` 추가(root+server 주간 스캔)
-- [ ] 침해 기간 `.env`가 노출됐을 수 있으므로 **Kakao/Toss API 키는 여전히 재발급 안 됨** — JWT_SECRET/DB 비밀번호/root SSH 비밀번호는 사고 당일 로테이션 완료했지만 이 항목만 남음:
-  - Kakao REST API Key / Mobility API Key / JS Key — [Kakao Developers](https://developers.kakao.com) 콘솔에서 재발급
-  - Toss Secret Key / Webhook Secret — [Toss Payments 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 (client key는 공개 키라 후순위)
-  - 재발급 후 VPS `server/.env`/`.env.local` 갱신 → `pm2 restart all`
-- [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15, 재점검 결과 실제로는 27건 중 26건이 `npm audit fix`(non-breaking)로 해소됨(`tar`는 `package.json` `overrides`로 별도 고정). **`nodemailer` 1건만 남음** — breaking major(`9.0.5`) 필요해 별도 검증 후 처리 예정, 매주 월요일 `.github/workflows/dependency-audit.yml`로 추적
+- [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
+- [~] Kakao/Toss API 키가 프로덕션 서버에 반영되고 실제 동작까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 이게 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)/[Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 후 교체 권장
+- [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities
 
 ### 10-2. SSH 하드닝 (사용자가 VPS에서 직접 — 락아웃 위험, 순서 준수)
 
@@ -329,48 +336,78 @@ Sentry는 애플리케이션이 살아서 에러를 던질 때만 잡는다 — 
 4. 알림 채널: 이메일 + (선택) Slack/텔레그램 — 최소 2개 채널 권장(이메일 서버 자체 장애 시 단일 채널이면 무용지물)
 5. 프로덕션 `server/.env`/`.env.local`의 `SENTRY_DSN`이 실제로 채워져 있는지도 함께 확인 — OS 재설치 이후 처음부터 다시 만들어진 파일이라 "선택 항목"으로 표시된 값이 누락됐을 가능성이 있음. 없으면 각 Sentry 프로젝트에서 재발급해 채우고 `pm2 restart all`
 
-### 10-4. 봇/브루트포스 방어 확장 (2026-08-15, 재설치 후 배포 시 VPS에서 진행)
+### 10-4. 봇/브루트포스 방어 확장 (2026-08-16, 실제 배포 시 적용 + 라이브 검증 완료)
 
-카페24 자동설치가 fail2ban을 이미 깔아준다 — SSH 외에 애플리케이션 레벨까지 감시 범위를 넓힌다.
+카페24 자동설치가 fail2ban과 `nginx-http-auth`/`nginx-limit-req`/`nginx-botsearch` 필터를 이미 깔아준다 — 우리가 한 건 jail을 켜고, 아래 버그를 고치고, 앱 전용 jail 하나를 추가한 것뿐이다.
 
-1. **Nginx 로그 기반 기본 제공 필터 활성화**: `/etc/fail2ban/jail.local`에 아래 추가
-   ```ini
-   [nginx-http-auth]
-   enabled = true
-   [nginx-limit-req]
-   enabled = true
-   filter = nginx-limit-req
-   logpath = /var/log/nginx/error.log
-   [nginx-botsearch]
-   enabled = true
-   ```
-2. **커스텀 jail — 로그인 실패**: `server/src/routes/auth.ts`가 `/auth/login` 실패 시 `[SECURITY] failed login ip=<IP> email=<email>` 형식으로 pm2 로그(`~/.pm2/logs/goodbus-api-out.log`)에 남긴다. 필터 신설:
-   ```ini
-   # /etc/fail2ban/filter.d/goodbus-login.conf
-   [Definition]
-   failregex = ^\[SECURITY\] failed login ip=<HOST> email=.*$
-   ```
-   ```ini
-   # /etc/fail2ban/jail.local에 추가
-   [goodbus-login]
-   enabled = true
-   filter = goodbus-login
-   logpath = /root/.pm2/logs/goodbus-api-out.log
-   maxretry = 10
-   findtime = 600
-   bantime = 3600
-   ```
-3. `sudo systemctl restart fail2ban` 후 `sudo fail2ban-client status goodbus-login`으로 jail이 로드됐는지 확인
+**⚠️ 발견한 버그 — `backend=auto`가 로그 파일이 아니라 journald를 감시함**: `/etc/fail2ban/jail.conf`의 기본 `backend = auto`가 이 서버에서는 조용히 `systemd`(journald)로 해석돼, `logpath`를 지정해도 무시하고 저널만 본다. Nginx 로그도, pm2 로그(journald에 안 실림)도 이 상태로는 fail2ban이 절대 못 본다 — `fail2ban-client status <jail>`의 `Journal matches` 줄이 `File list` 대신 떠 있으면 이 상태다. **해결: 아래 4개 jail 전부 `backend = polling`을 명시.** 이걸 놓치면 jail이 "실행 중"으로는 보이지만 실제로는 아무것도 차단하지 않는 죽은 설정이 된다.
 
-### 10-5. OS 보안패치 자동화 (2026-08-15, 재설치 후 배포 시 VPS에서 진행)
+`/etc/fail2ban/jail.d/goodbus.local`:
+```ini
+[sshd]
+enabled = true
 
-2026-08-14 사고의 근본 원인이 "패치를 미룬 것"이었던 만큼(위 13절 정책 참고), OS 레벨 보안패치는 사람이 안 챙겨도 자동으로 들어가게 한다.
+[nginx-http-auth]
+enabled = true
+backend = polling
+port = http,https
+logpath = /var/log/nginx/error.log
+
+[nginx-limit-req]
+enabled = true
+backend = polling
+port = http,https
+logpath = /var/log/nginx/error.log
+findtime = 10m
+maxretry = 10
+bantime = 1h
+
+[nginx-botsearch]
+enabled = true
+backend = polling
+port = http,https
+logpath = /var/log/nginx/error.log
+
+[goodbus-login]
+enabled = true
+backend = polling
+filter = goodbus-login
+logpath = /root/.pm2/logs/goodbus-api-error-0.log
+port = http,https
+findtime = 10m
+maxretry = 8
+bantime = 1h
+```
+
+**커스텀 jail — 로그인 실패**: `server/src/routes/auth.ts`가 `/auth/login` 실패 시 `[SECURITY] failed login ip=<IP> email=<email>`를 `console.warn`으로 남기는데, 이건 stderr로 가므로 **로그 경로는 `-out-`이 아니라 `-error-0.log`**(pm2가 stdout/stderr를 분리 파일로 관리). 필터:
+```ini
+# /etc/fail2ban/filter.d/goodbus-login.conf
+[Definition]
+failregex = ^.*\[SECURITY\] failed login ip=<HOST> .*$
+ignoreregex =
+```
 
 ```bash
-sudo apt install -y unattended-upgrades
-sudo dpkg-reconfigure -plow unattended-upgrades
+sudo fail2ban-client -t   # 문법 검증
+sudo systemctl restart fail2ban
+sudo fail2ban-client status goodbus-login   # "File list"에 로그 경로가 떠야 정상 (Journal matches면 위 버그 재발)
 ```
-`/etc/apt/apt.conf.d/50unattended-upgrades`에서 `Unattended-Upgrade::Automatic-Reboot`는 **`false`로 유지** — 커널 업데이트로 재부팅이 필요해지면 자동 재부팅 대신 "10-3 다운타임 모니터링"(UptimeRobot)이 감지하게 하고, 재부팅은 직접 확인 후 진행한다(자동 재부팅 중 pm2/Docker가 안 살아나는 걸 아무도 모르는 상태로 방치하는 게 더 위험).
+
+**라이브 검증(2026-08-16)**: 실패 로그인 8회를 실제 공인 IP로 반복 요청해 `goodbus-login`이 진짜로 밴하는 것 확인 후 즉시 `fail2ban-client set goodbus-login unbanip <IP>`로 해제. `sshd` jail은 배포 당일에만 이미 실제 브루트포스 시도 4건을 자체적으로 차단함. **주의**: fail2ban의 기본 `ignoreself` 설정 때문에 서버 자신에서(예: `curl 127.0.0.1`) 테스트하면 밴이 안 걸린다 — 반드시 외부 IP로 테스트할 것.
+
+### 10-5. OS 보안패치 자동화 (2026-08-16, 실제 배포 시 확인 + 라이브 검증 완료)
+
+카페24 자동설치가 `unattended-upgrades`를 이미 설치하고 보안 오리진(`-security`, ESM)까지 구성해둔 상태였다 — 별도 설치 불필요, 아래만 확인/보강하면 된다.
+
+```bash
+# 이미 설치돼 있는지 확인
+dpkg -l | grep unattended-upgrades
+cat /etc/apt/apt.conf.d/20auto-upgrades   # Update-Package-Lists/Unattended-Upgrade 둘 다 "1"이어야 함
+```
+
+`/etc/apt/apt.conf.d/50unattended-upgrades`에서 `Unattended-Upgrade::Automatic-Reboot "false";`를 **주석 해제해서 명시적으로 켜기**(기존엔 주석 처리라 암묵적 기본값에 의존하고 있었음) — 커널 업데이트로 재부팅이 필요해지면 자동 재부팅 대신 "10-3 다운타임 모니터링"(UptimeRobot)이 감지하게 하고, 재부팅은 직접 확인 후 진행한다(자동 재부팅 중 pm2/Docker가 안 살아나는 걸 아무도 모르는 상태로 방치하는 게 더 위험).
+
+**라이브 검증(2026-08-16)**: `unattended-upgrade --dry-run --debug`로 실행해 `-security`/ESM 오리진만 후보로 잡고 일반 `-updates` 오리진은 의도대로 건너뛰는 것 확인, `apt-daily.timer`/`apt-daily-upgrade.timer` 둘 다 enabled 확인.
 
 ---
 
@@ -403,6 +440,8 @@ sudo dpkg-reconfigure -plow unattended-upgrades
 | CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
 | SSH `Connection refused`가 갑자기 뜸 | 서버가 죽은 게 아니라 fail2ban이 실패한 로그인 시도를 감지해 접속 IP를 일시 차단했을 가능성 — 몇 분 기다리거나 Cafe24 웹 콘솔로 우회 접속해 `fail2ban-client status sshd`/`unban` 확인 |
 | 정상 사용자인데 간헐적으로 429 응답 | `deploy/nginx/goodbus.conf`의 `limit_req`(2026-08-15 추가, `/api/auth/` 2r/s, 나머지 10r/s)에 걸렸을 가능성 — burst 값(각각 5/20) 조정 검토 |
+| fail2ban jail이 "started"인데 실제로 아무도 밴이 안 됨 | `fail2ban-client status <jail>`에서 `File list` 대신 `Journal matches`가 떠 있으면 `backend=auto`가 조용히 journald를 보고 있는 것 — logpath가 있어도 무시됨. `backend = polling` 명시 필요(위 "10-4" 참고) |
+| Toss 결제창에서 "알 수 없는 에러가 발생했습니다" | 네트워크 탭에서 `apigw-sandbox.tosspayments.com/.../billing/route` 요청의 상태코드 확인 — 401이면 `NEXT_PUBLIC_TOSS_CLIENT_KEY` 자체가 틀린 것(Toss 개발자센터 원본과 문자 단위로 대조, 특히 대문자 O/숫자 0 오독 주의). `.env.local` 값을 바꿨다면 Next.js가 빌드 타임에 굽는 값이라 `npm run build` 재실행 없이는 반영 안 됨 |
 
 로그:
 
