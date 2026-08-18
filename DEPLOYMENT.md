@@ -418,6 +418,49 @@ cat /etc/apt/apt.conf.d/20auto-upgrades   # Update-Package-Lists/Unattended-Upgr
 
 **라이브 검증(2026-08-16)**: `unattended-upgrade --dry-run --debug`로 실행해 `-security`/ESM 오리진만 후보로 잡고 일반 `-updates` 오리진은 의도대로 건너뛰는 것 확인, `apt-daily.timer`/`apt-daily-upgrade.timer` 둘 다 enabled 확인.
 
+### 10-6. 커스텀 도메인 연결 (busrent.co.kr, 2026-08-18 완료 + 라이브 검증)
+
+카페24 콘솔에서 도메인을 구매해 "대표 도메인"으로 지정하는 것은 **DNS를 VPS IP로 연결하는 것뿐**이고, 서버의 Nginx/인증서에는 자동 반영되지 않는다. DNS가 이미 VPS를 가리키고 있는데도(`dig busrent.co.kr` → VPS IP) `http://busrent.co.kr`가 Nginx 기본 404를 뱉는다면 이 절차가 누락된 것 — Nginx `server_name`에 새 도메인이 없으면 포트 80 블록의 `return 404;`(certbot이 생성한 catch-all)에 걸린다.
+
+**주의**: 이 서버는 `deploy/nginx/goodbus.conf`(이 레포의 템플릿)를 직접 심볼릭 링크한 게 아니라, 카페24 자동설치가 만들어둔 자체 템플릿(`/etc/nginx/sites-available/GoodBus`, `location = /` welcome fallback·`/etc/nginx/cafe24-proxy.conf` include 등 구조가 다름)을 실사용 중이다. 아래 절차는 **실제 운영 파일 기준**이며, 레포의 `deploy/nginx/goodbus.conf`는 최초 셋업 참고용 초안일 뿐 실서버와 100% 동일하지 않다는 점을 감안한다.
+
+```bash
+# 1) 인증서를 기존 도메인 + 신규 도메인까지 포함하도록 확장 발급
+#    (기존 계정 재사용, --expand로 goodbus0716.mycafe24.com 인증서에 SAN 추가)
+certbot --nginx -d goodbus0716.mycafe24.com -d busrent.co.kr -d www.busrent.co.kr \
+  --expand --non-interactive --agree-tos
+
+# 인증서 발급/설치는 성공하지만, busrent.co.kr에 매칭되는 server 블록이 없어서
+# "Could not automatically find a matching server block for busrent.co.kr" 경고가 뜬다 —
+# 인증서 자체(SAN)는 이미 3개 도메인 다 포함된 상태이므로, 아래 2)만 하면 된다.
+
+# 2) /etc/nginx/sites-available/GoodBus 수동 수정 (편집 전 반드시 백업)
+cp /etc/nginx/sites-available/GoodBus /etc/nginx/sites-available/GoodBus.bak-$(date +%Y%m%d%H%M%S)
+```
+
+수정 내용 (443 블록과 80 블록 둘 다):
+
+- `server_name goodbus0716.mycafe24.com;` → `server_name goodbus0716.mycafe24.com busrent.co.kr www.busrent.co.kr;`
+- 80번 포트 블록의 `if ($host = goodbus0716.mycafe24.com) { return 301 https://$host$request_uri; }` 바로 아래에, 같은 패턴으로 `busrent.co.kr`/`www.busrent.co.kr`용 `if` 블록을 하나씩 추가(certbot이 도메인을 추가로 인식했을 때 자동 생성하는 것과 동일한 패턴)
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+**라이브 검증(2026-08-18)**: `curl -I http://busrent.co.kr/`(301→https), `curl -I https://busrent.co.kr/`·`https://www.busrent.co.kr/`(200), `openssl s_client`로 인증서 SAN에 3개 도메인 전부 포함 확인, 기존 `goodbus0716.mycafe24.com`도 그대로 정상 동작 확인.
+
+**부수 작업 — `NEXT_PUBLIC_SITE_URL` 반영**: `lib/siteConfig.ts`의 `SITE_URL`(sitemap/robots/OG태그/JSON-LD의 기준 URL)이 이 값 없으면 `goodbus0716.mycafe24.com`로 폴백한다. 커스텀 도메인 연결 후 `.env.local`에 `NEXT_PUBLIC_SITE_URL=https://busrent.co.kr` 추가 → **`NEXT_PUBLIC_*`는 빌드 타임에 굽는 값이라 `.env.local`만 고치면 반영 안 됨, 반드시 재빌드 필요**:
+
+```bash
+cd /var/www/goodbus
+npm run build:prod
+pm2 restart all
+```
+
+재빌드 후 `curl https://busrent.co.kr/sitemap.xml`·`/robots.txt`와 홈페이지 `og:url`/JSON-LD `url` 필드가 전부 `busrent.co.kr` 기준으로 나오는 것 확인(2026-08-18).
+
+**아직 안 한 것**: 카카오맵 API는 허용 도메인에 `busrent.co.kr` 등록 완료(사용자 확인, 2026-08-18). 토스페이먼츠 쪽 허용 도메인(있다면)은 미확인 — 실 키 전환 시점에 함께 확인 필요. Cloudflare 전체 프록시(Phase 3)는 여전히 미착수 — 이번 도메인 구매로 전제조건은 충족됐으므로 다음 후보 작업.
+
 ---
 
 ## 11. 나중에 확장 (비용 ↑)
