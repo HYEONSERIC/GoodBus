@@ -461,6 +461,25 @@ pm2 restart all
 
 **아직 안 한 것**: 카카오맵 API는 허용 도메인에 `busrent.co.kr` 등록 완료(사용자 확인, 2026-08-18). 토스페이먼츠 쪽 허용 도메인(있다면)은 미확인 — 실 키 전환 시점에 함께 확인 필요. Cloudflare 전체 프록시(Phase 3)는 여전히 미착수 — 이번 도메인 구매로 전제조건은 충족됐으므로 다음 후보 작업.
 
+**추가 후속 조치 — 옛 도메인 하드코딩 정리 + 모니터링 (2026-08-18 완료 + 라이브 검증)**: 도메인 연결 자체는 끝났지만, 코드/외부 서비스에 옛 도메인이 하드코딩된 곳이 몇 군데 더 있었다. 전체 리포 `grep`으로 훑고, 실제 UptimeRobot/Sentry 대시보드까지 직접 열어 확인함:
+
+- `NEXT_PUBLIC_API_URL`(`.env.local`) — 업로드 이미지(`hooks/use*Dashboard.tsx`, `components/ChatPanel.tsx` 등) 절대경로 생성에 쓰임. 옛 도메인이 계속 살아있어 당장 깨지진 않지만 새 도메인으로 갱신. `NEXT_PUBLIC_*`라 마찬가지로 재빌드 필요.
+- `CORS_ORIGIN`(`server/.env`) — Express `cors()` 설정. 브라우저는 `app/api/[...path]/route.ts`가 서버사이드로 Express를 프록시하는 same-origin 구조라 옛 값이어도 실제로 브라우저에 영향은 없었지만(프록시 라우트가 `access-control-allow-*` 헤더를 반환 전에 삭제), 값 자체가 맞지 않는 상태를 방치할 이유가 없어 함께 갱신.
+
+```bash
+# .env.local / server/.env 값 교체 후
+cd /var/www/goodbus
+npm run build:prod
+pm2 restart all
+```
+
+재빌드 후 `.next/static/chunks/*.js`를 `grep`해서 옛 도메인 문자열이 0건, 새 도메인 문자열만 남은 것 확인. `/api/auth/login`·`/api/health` 응답 정상 확인.
+
+- **UptimeRobot**: 기존 모니터가 `goodbus0716.mycafe24.com` 하나뿐이었음(실제 대시보드에서 직접 확인) — 두 도메인이 같은 서버를 가리켜도 이번 사고처럼 도메인 단위로 따로 깨질 수 있으므로, `busrent.co.kr/api/health` 모니터를 동일 패턴(5분 간격, 이메일 알림)으로 신규 추가.
+- **Sentry**: `javascript-nextjs`/`node-express` 두 프로젝트의 Inbound Filters·Client Keys를 직접 열어 확인 — 도메인/오리진 화이트리스트가 전혀 없어 DSN은 도메인과 무관하게 동작함. **조치 불필요**로 결론.
+- **확인은 했지만 코드 조치 없음**: JWT 쿠키는 `domain` 속성이 없는 host-only 쿠키라 도메인별로 자연스럽게 분리됨(기존 세션 재사용 불가는 정상, 재로그인 필요). Toss 결제창 `successUrl`/`failUrl`은 `window.location.origin` 기반이라 하드코딩 없음.
+- **여전히 코드 밖에서 확인 필요**: Toss Payments 대시보드의 웹훅 URL/허용 도메인 설정 — 로그인 필요해 이번엔 미확인, 가맹심사 통과·실 키 전환 시점에 같이 볼 것.
+
 ---
 
 ## 11. 나중에 확장 (비용 ↑)
