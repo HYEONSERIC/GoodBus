@@ -480,6 +480,39 @@ pm2 restart all
 - **확인은 했지만 코드 조치 없음**: JWT 쿠키는 `domain` 속성이 없는 host-only 쿠키라 도메인별로 자연스럽게 분리됨(기존 세션 재사용 불가는 정상, 재로그인 필요). Toss 결제창 `successUrl`/`failUrl`은 `window.location.origin` 기반이라 하드코딩 없음.
 - **여전히 코드 밖에서 확인 필요**: Toss Payments 대시보드의 웹훅 URL/허용 도메인 설정 — 로그인 필요해 이번엔 미확인, 가맹심사 통과·실 키 전환 시점에 같이 볼 것.
 
+### 10-7. 옛 도메인(goodbus0716.mycafe24.com) 브라우저 트래픽을 새 도메인으로 리다이렉트 (2026-08-18 완료 + 라이브 검증)
+
+커스텀 도메인이 생긴 뒤에도 카페24 기본 서브도메인(`goodbus0716.mycafe24.com`)이 완전히 동일한 사이트를 계속 서빙하면 사용자 입장에서 "사이트가 2개"로 보이고, `<link rel="canonical">`이 없는 상태라 검색엔진 중복 콘텐츠로 잡힐 여지도 있었다(`og:url`만 새 도메인을 가리키는 건 약한 신호). Vercel(`*.vercel.app`)·Heroku(`*.herokuapp.com`) 등이 흔히 쓰는 패턴대로, 기본 서브도메인은 살려두되 **사람이 보는 페이지만 커스텀 도메인으로 301 리다이렉트**하기로 함.
+
+**주의해서 뺀 것 — `/api/*`는 리다이렉트 대상에서 제외**: 웹훅(예: Toss)은 POST인데, 클라이언트에 따라 301 응답을 받으면 POST 바디를 안 실어 나르거나 재시도를 안 하는 경우가 있어 조용히 유실될 수 있다. `/api/*`(헬스체크·백엔드 프록시 전부 포함)는 옛 도메인에서도 그대로 직접 응답하도록 남겨뒀다 — 실제로 기존 UptimeRobot 모니터가 처음부터 `/api/health`를 보고 있었다는 것도 이번에 확인(root `/`가 아니었음), 그래서 이 모니터도 영향 없음.
+
+`/etc/nginx/sites-available/GoodBus`의 443 서버 블록, `# --- Method whitelist ---` 바로 아래에 추가(플래그 변수 방식 — `if`를 하나로 합치는 대신 두 단계로 나눠 host 매치→api 경로면 취소 순으로 처리):
+
+```nginx
+set $redirect_to_new 0;
+if ($host = goodbus0716.mycafe24.com) {
+    set $redirect_to_new 1;
+}
+if ($uri ~ ^/api/) {
+    set $redirect_to_new 0;
+}
+if ($redirect_to_new) {
+    return 301 https://busrent.co.kr$request_uri;
+}
+```
+
+```bash
+cp /etc/nginx/sites-available/GoodBus /etc/nginx/sites-available/GoodBus.bak-$(date +%Y%m%d%H%M%S)
+# (수정)
+nginx -t && systemctl reload nginx
+```
+
+**라이브 검증(2026-08-18)**:
+- `curl https://goodbus0716.mycafe24.com/`, `/company` → 301, `Location: https://busrent.co.kr/...` (경로 보존)
+- `curl https://goodbus0716.mycafe24.com/api/health` → 200 직접 응답(리다이렉트 없음), `busrent.co.kr`/`www.busrent.co.kr`도 그대로 정상
+- **인증서 자동 갱신 재검증**: 리다이렉트 로직 추가 전/후 두 번 다 `certbot renew --dry-run --cert-name goodbus0716.mycafe24.com` → `Congratulations, all simulated renewals succeeded`. (걱정했던 지점: `if`는 location 매칭보다 먼저 처리되는 rewrite phase라 ACME 챌린지 요청도 가로챌 수 있는데, 이 서버는 3개 도메인이 **하나의 공유 서버 블록**에 있어서 certbot이 갱신 시 넣는 `location = /.well-known/acme-challenge/...` 응답 블록이 어느 호스트로 리졸브되든 같은 블록 안에 이미 존재함 — 그래서 리다이렉트를 한 번 더 타도 문제없이 검증됨. 도메인마다 서버 블록이 분리된 구성이라면 이 가정이 깨지니 그대로 복붙하지 말 것.)
+- UptimeRobot의 기존 `goodbus0716.mycafe24.com` 모니터(`/api/health` 대상) — 리다이렉트 적용 전후 응답시간 그래프 끊김 없이 정상, 0 incidents
+
 ---
 
 ## 11. 나중에 확장 (비용 ↑)

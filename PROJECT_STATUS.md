@@ -18,7 +18,7 @@
 
 ## 호스팅 (카페24) — 2026-08-16 실제 프로덕션 배포 완료, 2026-08-18 커스텀 도메인 연결
 
-- **운영 중:** `busrent.co.kr`(대표 도메인, 2026-08-18 연결) / `www.busrent.co.kr` / `goodbus0716.mycafe24.com`(계속 병행 동작), 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원
+- **운영 중:** `busrent.co.kr`(대표 도메인, 2026-08-18 연결) / `www.busrent.co.kr`, 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원. `goodbus0716.mycafe24.com`은 브라우저 페이지 접속 시 새 도메인으로 301 리다이렉트(2026-08-18, `/api/*`는 웹훅 등 고려해 예외), 사이트가 두 곳으로 보이는 문제 해소
 - **스택:** Ubuntu 24.04, Node.js(pm2 fork 모드), Docker Postgres(네이티브 PostgreSQL 17은 `systemctl disable`로 끔), Nginx + certbot
 - **SSL:** Let's Encrypt(certbot) 적용, 3개 도메인 모두 포함하는 멀티도메인(SAN) 인증서로 확장 발급(2026-08-18), HSTS 포함 보안 헤더 응답 확인
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
