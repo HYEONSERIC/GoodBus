@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-08-18
+**최종 갱신:** 2026-08-19
 
 ---
 
@@ -83,7 +83,7 @@
 
 1. **가맹 심사 신청** → 실 키 발급 후 env 값만 교체(코드 변경 없음)
 2. 실 가격 확정 (현재 100/200/300/400원은 테스트용 placeholder)
-3. 관리자 콘솔에 결제/구독/환불 조회 화면 (현재 `PaymentTransaction`은 DB에만 쌓이고 관리자 UI 없음)
+3. 관리자 콘솔에 결제/구독/환불 조회 화면 (2026-08-19에 기사/회사용 개인 결제 내역 화면은 추가됨 — 아래 "완료됨" 참고. 관리자가 전체를 조회하는 화면은 여전히 없음)
 4. `AdminRevenuePanel`의 GMV×10% "추정 매출"이 실제 `PaymentTransaction`(platform_commission) 기록과 별개로 계산됨 — 실 결제 도입 후 두 수치 정합화(reconcile) 필요
 
 ---
@@ -222,6 +222,13 @@
     - **nodemailer 취약점 발견·수정**: 위 8/15 npm audit 정리 때 보류됐던 `nodemailer`(당시 breaking major라 후순위)를 재점검 — high severity 8건(SMTP 인젝션, addressparser DoS, TLS 검증 미흡 등) 중 실제 사용 패턴(`server/src/utils/email.ts`, 단순 `createTransport`+`sendMail`)에서 트리거 가능한 건 주소 파싱 관련 2건으로 좁혀 확인 후 `^6.9.8`→`^9.0.5` 업그레이드. 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과, `npm audit` 결과 root+server 둘 다 0 vulnerabilities
     - **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no`+`PermitRootLogin prohibit-password` 적용, 키 로그인 유지·비밀번호 인증 즉시거부 라이브 검증 완료. Cafe24가 이미 깔아둔 `sshd_config.d/99-cafe24-harden.conf`(MaxAuthTries 등)에 이 두 항목만 빠져있어 별도 drop-in으로 추가
     - **재확인 결과 아직 안 된 것**: UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
+- **구매안전서비스 비적용대상 증빙자료 대응 + 결제 내역 화면 신설** (2026-08-19)
+    - 동구청 민생경제과의 통신판매업 신고 심사 대응용 — "당사는 버스 이용대금을 수납하지 않고, 고객은 배차 확정된 버스업체/기사에게 직접 지급하며, 당사는 중개수수료만 별도로 정산받는다"는 안내문구를 입찰 팝업(`components/openTripBid/OpenTripBidFeeStep.tsx`, 기사/회사 대시보드 공용)에 추가
+    - 기사/회사 대시보드에 신규 "결제 내역" 탭 추가 — `GET /payments/transactions`(본인 스코프, enum 쿼리 파라미터는 `admin.ts`의 `parseEnumQuery` 패턴으로 검증) + `components/PaymentHistoryPanel.tsx`(일시/항목/금액/상태를 일반 텍스트로 표시, 상태는 "결제완료/결제대기/결제실패/결제취소"). 위 "결제·멤버십" 남은 작업 3번의 사용자 측 절반을 해소 — 관리자가 전체를 조회하는 화면은 여전히 없음
+    - 실제 승객→기사 입찰→낙찰 플로우를 시연해 커미션(10%) 결제 1건을 실제로 성공시키고 결제 내역 화면에서 확인까지 완료(증빙 스크린샷 확보)
+    - 공지사항(`SupportPost`) 등록은 관리자 콘솔에서 수동으로 하는 콘텐츠 작업이라 이번 범위에서 제외 — 프로덕션 관리자 계정 확보 후 동일 문구로 별도 등록 필요
+- **잔여 "GOODBUS" 브랜드명 정리** (2026-08-19)
+    - "버스대절"로 상호 변경 이후에도 대시보드 헤더 기본값, 입찰 팝업 제목, 승객 견적 등록 안내문 등 5곳에 구 브랜드명("GOODBUS"/"굿버스")이 남아있던 것을 전부 "버스대절"로 교체(`DashboardMobileShell.tsx`, `useDriverDashboard.tsx`/`useCompanyDashboard.tsx`, `OpenTripBidFeeStep.tsx`, `PassengerQuoteRequestSection.tsx`). 관리자 전용 CSV 파일명 접두사·localStorage 내부 키는 사용자에게 노출되지 않아 그대로 유지
 
 ## 미완료 / 실서비스 갭
 
@@ -243,7 +250,7 @@
 - **결제** (2026-08-13에 토스페이먼츠 + 낙찰 수수료 자동화로 대부분 구현 — 위 "결제·멤버십" 섹션 참고)
     - 아직 **테스트 키** — 실 가맹심사·키 전환 전
     - 실 가격 미정 (현재 100~400원대 placeholder)
-    - 관리자 콘솔에 결제/구독/수수료 내역 조회 UI 없음(`PaymentTransaction`은 DB에만 존재) — 환불 자체는 취소 흐름에서 자동화됨
+    - 관리자 콘솔에 결제/구독/수수료 내역 조회 UI 없음 (기사/회사 개인용 결제 내역 화면은 2026-08-19 추가됨 — 위 "완료됨" 참고) — 환불 자체는 취소 흐름에서 자동화됨
     - 영수증 발급 흐름 없음
 - **관측성**
     - Sentry로 에러 추적은 도입됨(위 "완료됨" 참고), 다만 중앙 로깅·메트릭(응답시간, 처리량 등)은 여전히 없음

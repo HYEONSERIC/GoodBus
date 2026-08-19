@@ -191,6 +191,11 @@ export const paymentsAPI = {
         fetchAPI('/payments/addon/min-bid/reactivate', {
             method: 'POST',
         }),
+    getTransactions: async (params?: {
+        kind?: string;
+        status?: string;
+        take?: number;
+    }) => fetchAPI(`/payments/transactions${toQuery(params)}`),
 };
 
 export const chatsAPI = {

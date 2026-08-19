@@ -3,7 +3,11 @@ import express from 'express';
 import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { UserRole } from '@prisma/client';
+import {
+    UserRole,
+    PaymentTransactionKind,
+    PaymentTransactionStatus,
+} from '@prisma/client';
 import { issueBillingKey, chargeBillingKey } from '../utils/toss';
 import {
     MEMBERSHIP_PRICES_WON,
@@ -17,6 +21,22 @@ function addOneMonth(date: Date): Date {
     const next = new Date(date);
     next.setMonth(next.getMonth() + 1);
     return next;
+}
+
+/**
+ * Query-string values are attacker-controlled. Prisma throws PrismaClientValidationError
+ * for enum values outside the schema, which — with no try/catch on these routes and no
+ * unhandledRejection handler — crashes the whole process (Express 4 doesn't auto-catch
+ * async rejections). Always parse untrusted enum input through this instead of `as any`.
+ */
+function parseEnumQuery<T extends Record<string, string>>(
+    enumObj: T,
+    value: unknown,
+): T[keyof T] | undefined {
+    if (typeof value !== 'string') return undefined;
+    return (Object.values(enumObj) as string[]).includes(value)
+        ? (value as T[keyof T])
+        : undefined;
 }
 
 router.get(
@@ -527,5 +547,33 @@ router.post(
         res.json({ subscription: updated });
     },
 );
+
+router.get('/transactions', requireAuth, async (req, res) => {
+    const kind = parseEnumQuery(PaymentTransactionKind, req.query.kind);
+    const status = parseEnumQuery(PaymentTransactionStatus, req.query.status);
+    const takeRaw = Number(req.query.take);
+    const take =
+        Number.isFinite(takeRaw) && takeRaw > 0
+            ? Math.min(Math.floor(takeRaw), 200)
+            : 50;
+
+    const transactions = await prisma.paymentTransaction.findMany({
+        where: { userId: req.user!.userId, kind, status },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: {
+            id: true,
+            kind: true,
+            status: true,
+            amount: true,
+            tripId: true,
+            bidId: true,
+            failReason: true,
+            createdAt: true,
+        },
+    });
+
+    res.json({ transactions });
+});
 
 export default router;

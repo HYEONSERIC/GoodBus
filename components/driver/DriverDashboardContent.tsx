@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
+import { PaymentHistoryPanel } from '@/components/PaymentHistoryPanel';
 import {
     BidderProfileTabPanel,
     formatBidderRatingLine,
@@ -48,7 +49,9 @@ export function DriverDashboardContent() {
                     d.setActiveTab(
                         d.activeTab === 'paymentCards'
                             ? d.paymentCardsPrevTab
-                            : d.membershipPrevTab,
+                            : d.activeTab === 'paymentHistory'
+                              ? d.paymentHistoryPrevTab
+                              : d.membershipPrevTab,
                     )
                 }
                 onHome={() => d.setActiveTab('available')}
@@ -56,7 +59,8 @@ export function DriverDashboardContent() {
                 bottomTabs={
                     d.activeTab !== 'profile' &&
                     d.activeTab !== 'profileEdit' &&
-                    d.activeTab !== 'paymentCards'
+                    d.activeTab !== 'paymentCards' &&
+                    d.activeTab !== 'paymentHistory'
                         ? {
                               tabs: [
                                   { id: 'available', label: '주문' },
@@ -337,6 +341,8 @@ export function DriverDashboardContent() {
                     <PaymentCardsPanel userId={d.user?.id} />
                 )}
 
+                {d.activeTab === 'paymentHistory' && <PaymentHistoryPanel />}
+
                 {d.activeTab === 'membership' && (
                     <MembershipPlansPanel
                         userId={d.user?.id}
@@ -410,6 +416,21 @@ export function DriverDashboardContent() {
                                 }}
                             >
                                 결제카드
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                                onClick={() => {
+                                    d.setPaymentHistoryPrevTab(
+                                        d.activeTab === 'paymentHistory'
+                                            ? 'available'
+                                            : d.activeTab,
+                                    );
+                                    d.setActiveTab('paymentHistory');
+                                    d.setMenuOpen(false);
+                                }}
+                            >
+                                결제 내역
                             </button>
                             <button
                                 type="button"

@@ -74,6 +74,7 @@ function useCompanyDashboardState() {
         | 'support'
         | 'membership'
         | 'paymentCards'
+        | 'paymentHistory'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -93,6 +94,7 @@ function useCompanyDashboardState() {
         | 'chat'
         | 'support'
         | 'paymentCards'
+        | 'paymentHistory'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -102,6 +104,17 @@ function useCompanyDashboardState() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentHistory'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentHistoryPrevTab, setPaymentHistoryPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -465,13 +478,17 @@ function useCompanyDashboardState() {
             ? 'membership'
             : activeTab === 'paymentCards'
               ? 'paymentCards'
-              : 'menu';
+              : activeTab === 'paymentHistory'
+                ? 'paymentHistory'
+                : 'menu';
     const headerTitle =
         activeTab === 'membership'
             ? '멤버십'
             : activeTab === 'paymentCards'
               ? '결제카드'
-              : 'GOODBUS';
+              : activeTab === 'paymentHistory'
+                ? '결제 내역'
+                : '버스대절';
 
     return {
         COMPANY_ROUND_OPTS,
@@ -506,6 +523,8 @@ function useCompanyDashboardState() {
         setMembershipPrevTab,
         paymentCardsPrevTab,
         setPaymentCardsPrevTab,
+        paymentHistoryPrevTab,
+        setPaymentHistoryPrevTab,
         menuOpen,
         setMenuOpen,
         tripFilters,

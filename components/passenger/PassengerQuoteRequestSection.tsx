@@ -19,7 +19,7 @@ export function PassengerQuoteRequestSection({
             <Card className="rounded-none border-gray-200 shadow-sm">
                 <CardHeader className="pb-3 text-center">
                     <CardTitle className="text-[17px] font-semibold tracking-tight">
-                        굿버스에서 가격비교 하고 적립금도 받아가세요.
+                        버스대절에서 가격비교 하고 적립금도 받아가세요.
                     </CardTitle>
                     <CardDescription className="text-sm">
                         원하는 여정을 등록하면 기사/업체가 입찰을 제안합니다.
