@@ -23,6 +23,7 @@ import {
     verificationStatusTone,
 } from '@/lib/adminStatusLabels';
 import { verificationDisplayForUser } from '@/lib/adminVerification';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 export function AdminVerificationPanel() {
   const {
@@ -113,7 +114,9 @@ export function AdminVerificationPanel() {
                                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                                     <div className="space-y-1.5 min-w-0">
                                                         <p className="break-all text-sm font-medium text-slate-900">
-                                                            {user.email}
+                                                            {adminPersonLabel(
+                                                                user,
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-slate-500">
                                                             {roleLabel} ·{' '}

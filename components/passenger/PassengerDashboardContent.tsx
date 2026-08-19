@@ -48,7 +48,9 @@ export function PassengerDashboardContent() {
                         <div className="absolute left-0 top-0 h-full w-72 bg-white shadow-lg p-6 space-y-6">
                             <div>
                                 <p className="text-lg font-semibold">
-                                    {p.user?.email}
+                                    {p.user?.email ||
+                                        p.user?.phoneNumber ||
+                                        '내 정보'}
                                 </p>
                                 <p className="text-sm text-gray-500">
                                     Passenger

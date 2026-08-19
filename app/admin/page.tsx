@@ -45,7 +45,7 @@ function AdminPageContent() {
         return (
             <div className="min-h-screen space-y-4 bg-slate-50 p-6 md:p-8">
                 <AdminErrorBanner message={error} />
-                <Button onClick={() => router.push('/login')}>
+                <Button onClick={() => router.push('/admin/login')}>
                     로그인으로 돌아가기
                 </Button>
             </div>

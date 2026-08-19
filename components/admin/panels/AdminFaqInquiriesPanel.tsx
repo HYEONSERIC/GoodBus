@@ -26,6 +26,7 @@ import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
 import { AdminActivitySectionFooter } from '@/components/admin/AdminActivitySectionFooter';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
 import { getErrorMessage } from '@/lib/errors';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 const SUPPORT_INQUIRY_LIST_MAX = 500;
 
@@ -118,7 +119,7 @@ export function AdminFaqInquiriesPanel() {
                         <Input
                             value={inquirySearch}
                             onChange={(e) => setInquirySearch(e.target.value)}
-                            placeholder="제목·내용·이메일·이름"
+                            placeholder="제목·내용·이메일·이름·전화번호"
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     void loadSupportInquiries({ take: 300 });
@@ -312,7 +313,9 @@ export function AdminFaqInquiriesPanel() {
                                         작성자
                                     </p>
                                     <p className="mt-0.5 break-all">
-                                        {supportInquiryDetail.user.email}
+                                        {adminPersonLabel(
+                                            supportInquiryDetail.user,
+                                        )}
                                     </p>
                                     <p className="mt-1 text-xs text-slate-500">
                                         역할: {supportInquiryDetail.user.role}

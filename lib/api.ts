@@ -60,27 +60,20 @@ function toQuery(params?: Record<string, string | number | undefined>) {
 }
 
 export const authAPI = {
-    signup: async (
-        email: string,
-        password: string,
-        role: 'Passenger' | 'Driver' | 'BusCompany',
-        displayName?: string,
-        phoneNumber?: string,
-        phoneOtpCode?: string,
-        turnstileToken?: string
-    ) =>
+    // All roles sign up by phone+OTP only. displayName is the Driver's name
+    // or the BusCompany's contact-person name; companyName is BusCompany-only.
+    signup: async (params: {
+        role: 'Passenger' | 'Driver' | 'BusCompany';
+        phoneNumber: string;
+        phoneOtpCode: string;
+        displayName?: string;
+        companyName?: string;
+    }) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({
-                email,
-                password,
-                role,
-                displayName,
-                phoneNumber,
-                phoneOtpCode,
-                turnstileToken,
-            }),
+            body: JSON.stringify(params),
         }),
+    // Email/password login is Admin-only now — public signup has no email/password.
     login: async (email: string, password: string) =>
         fetchAPI('/auth/login', {
             method: 'POST',
@@ -91,18 +84,25 @@ export const authAPI = {
             method: 'POST',
         }),
     getMe: async () => fetchAPI('/auth/me'),
+    // accountType: 승객/기사·회사는 같은 번호로 각각 계정을 만들 수 있어서, 어느
+    // 계정군을 찾는지 서버에 명시해야 함.
     requestPhoneOtp: async (
         phoneNumber: string,
-        purpose: 'signup' | 'login'
+        purpose: 'signup' | 'login',
+        accountType: 'passenger' | 'business'
     ) =>
         fetchAPI('/auth/phone/request-otp', {
             method: 'POST',
-            body: JSON.stringify({ phoneNumber, purpose }),
+            body: JSON.stringify({ phoneNumber, purpose, accountType }),
         }),
-    loginWithPhone: async (phoneNumber: string, code: string) =>
+    loginWithPhone: async (
+        phoneNumber: string,
+        code: string,
+        accountType: 'passenger' | 'business'
+    ) =>
         fetchAPI('/auth/phone/login', {
             method: 'POST',
-            body: JSON.stringify({ phoneNumber, code }),
+            body: JSON.stringify({ phoneNumber, code, accountType }),
         }),
 };
 

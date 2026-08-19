@@ -18,7 +18,7 @@ import { chatsAPI, authAPI } from '@/lib/api';
 
 interface ChatUser {
     id: string;
-    email: string;
+    email: string | null;
     role: string;
     displayName?: string | null;
     companyName?: string | null;
@@ -113,7 +113,7 @@ function formatChatPeerLabel(u: ChatUser) {
     if (r === 'Driver') return '기사님';
     if (r === 'BusCompany') return '운수업체';
     if (r === 'Passenger') return '고객님';
-    return u.email;
+    return u.email || '상대방';
 }
 
 const DEFAULT_CHAT_AVATAR = '/chat-default-avatar.png';
@@ -756,10 +756,10 @@ export function ChatPanel({
                             message.message
                         );
                         const imageUrl = resolveChatImageUrl(rawImageUrl);
+                        // email can be null for phone-only accounts, so `null === null`
+                        // would falsely match different users — id is the only safe compare.
                         const isMine =
-                            message.isMine ??
-                            (message.senderId === user?.id ||
-                                message.sender.email === user?.email);
+                            message.isMine ?? message.senderId === user?.id;
                         return (
                             <div
                                 key={message.id}

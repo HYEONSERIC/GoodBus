@@ -100,14 +100,14 @@ enum PhoneVerificationPurpose {
 
 model User {
   id          String   @id @default(cuid())
-  email       String   @unique
-  passwordHash String
+  email       String?  @unique
+  passwordHash String?
   role        UserRole
   status      UserStatus @default(Active)
   adminRole   AdminRole?
   displayName String?
   companyName String?
-  phoneNumber String? @unique
+  phoneNumber String?
   phoneVerifiedAt DateTime?
   garageAddress String?
   busNumber   String?
@@ -143,6 +143,10 @@ model User {
   membershipSubscription MembershipSubscription?
   minBidAddonSubscription MinBidAddonSubscription?
   paymentTransactions  PaymentTransaction[]
+
+  // 같은 번호로 승객 계정 + 기사/회사 계정을 각각 만들 수 있게 role별로만 유일하게 잡음
+  // (기사/회사는 같은 번호로 Driver·BusCompany 둘 다는 못 만듦 — auth.ts에서 그룹으로 막음).
+  @@unique([phoneNumber, role])
 }
 
 model PhoneVerification {

@@ -115,11 +115,14 @@ router.post(
                         select: {
                             id: true,
                             email: true,
+                            displayName: true,
                             role: true,
                         },
                     },
                 },
             });
+
+            const bidderLabel = bid.bidder.displayName || bid.bidder.email || '기사';
 
             // Create notification for passenger
             await prisma.notification.create({
@@ -127,7 +130,7 @@ router.post(
                     userId: bid.trip.passenger.id,
                     type: NotificationType.BID_RECEIVED,
                     title: 'New Bid Received',
-                    message: `You received a new bid of ${price}만원 from ${bid.bidder.email} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
+                    message: `You received a new bid of ${price}만원 from ${bidderLabel} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
                     tripId: tripId,
                     bidId: bid.id,
                 },

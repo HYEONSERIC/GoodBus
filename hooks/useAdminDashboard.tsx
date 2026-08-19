@@ -373,7 +373,7 @@ function useAdminDashboardState() {
 
     const handleLogout = async () => {
         await authAPI.logout();
-        router.push('/login');
+        router.push('/admin/login');
     };
 
     const handleFilter = async () => {
@@ -484,17 +484,18 @@ function useAdminDashboardState() {
 
     const openBidsForBidder = async (opts: {
         bidderId: string;
-        email: string;
+        email: string | null;
         bidStatus?: string;
         highlightBidId?: string;
     }) => {
         setActiveTab('bids');
-        setBidSearch(opts.email);
+        const search = opts.email ?? '';
+        setBidSearch(search);
         if (opts.bidStatus !== undefined) {
             setBidStatusFilter(opts.bidStatus);
         }
         await runBidSearch({
-            search: opts.email,
+            search,
             bidderId: opts.bidderId,
             bidStatus: opts.bidStatus,
             highlightBidId: opts.highlightBidId ?? null,
@@ -504,12 +505,13 @@ function useAdminDashboardState() {
 
     const openBidsForPassenger = async (opts: {
         passengerId: string;
-        email: string;
+        email: string | null;
     }) => {
         setActiveTab('bids');
-        setBidSearch(opts.email);
+        const search = opts.email ?? '';
+        setBidSearch(search);
         await runBidSearch({
-            search: opts.email,
+            search,
             passengerId: opts.passengerId,
             highlightBidId: null,
             take: 50,

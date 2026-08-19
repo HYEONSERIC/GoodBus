@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminDashboard } from '@/hooks/useAdminDashboard';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,7 +68,7 @@ export function AdminBidsPanel() {
                             <Input
                                 value={bidSearch}
                                 onChange={(e) => setBidSearch(e.target.value)}
-                                placeholder="이메일/출발지/도착지"
+                                placeholder="이름·이메일·전화번호/출발지/도착지"
                             />
                         </AdminFilterField>
                         <AdminFilterField label="입찰 상태">
@@ -183,7 +184,9 @@ export function AdminBidsPanel() {
                                                     })
                                                 }
                                             >
-                                                {bid.trip.passenger.email}
+                                                {adminPersonLabel(
+                                                    bid.trip.passenger,
+                                                )}
                                             </AdminDeepLink>
                                             <span className="mx-1 text-slate-300">
                                                 ·
@@ -209,7 +212,7 @@ export function AdminBidsPanel() {
                                                     })
                                                 }
                                             >
-                                                {bid.bidder.email}
+                                                {adminPersonLabel(bid.bidder)}
                                             </AdminDeepLink>
                                             <span className="mx-1 text-slate-300">
                                                 ·

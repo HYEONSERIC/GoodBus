@@ -14,9 +14,11 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import { Button } from '@/components/ui/button';
 import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
 import { formatManWon } from '@/lib/adminRevenueDisplay';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
+import type { AdminPersonRef } from '@/types/admin';
 
-function initialOf(email: string) {
-    return email.trim()[0]?.toUpperCase() ?? '?';
+function initialOf(person: AdminPersonRef) {
+    return adminPersonLabel(person).trim()[0]?.toUpperCase() ?? '?';
 }
 
 function StatCard({
@@ -159,7 +161,7 @@ export function AdminOverviewPanel() {
                                         className="flex items-start gap-3 px-4 py-3"
                                     >
                                         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
-                                            {initialOf(trip.passenger.email)}
+                                            {initialOf(trip.passenger)}
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <AdminDeepLink
@@ -179,7 +181,9 @@ export function AdminOverviewPanel() {
                                                         )
                                                     }
                                                 >
-                                                    {trip.passenger.email}
+                                                    {adminPersonLabel(
+                                                        trip.passenger,
+                                                    )}
                                                 </AdminDeepLink>
                                                 <span className="mx-1 text-slate-300">
                                                     ·
@@ -245,7 +249,7 @@ export function AdminOverviewPanel() {
                                         className="flex items-start gap-3 px-4 py-3"
                                     >
                                         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-50 text-xs font-semibold text-sky-700">
-                                            {initialOf(bid.bidder.email)}
+                                            {initialOf(bid.bidder)}
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <AdminDeepLink
@@ -271,7 +275,9 @@ export function AdminOverviewPanel() {
                                                         })
                                                     }
                                                 >
-                                                    {bid.bidder.email}
+                                                    {adminPersonLabel(
+                                                        bid.bidder,
+                                                    )}
                                                 </AdminDeepLink>
                                                 <span className="text-slate-400">
                                                     {' '}

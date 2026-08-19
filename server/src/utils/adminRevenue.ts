@@ -30,7 +30,7 @@ type AwardedBidRow = {
     id: string;
     price: unknown;
     bidder: {
-        email: string;
+        email: string | null;
         displayName: string | null;
         companyName: string | null;
         role: string;
@@ -63,7 +63,7 @@ export type RevenueAwardRow = {
     awardedAt: string | null;
     countedAt: string;
     usedCreatedAtFallback: boolean;
-    bidderEmail: string;
+    bidderEmail: string | null;
     bidderDisplayName: string;
     bidderRole: string;
 };
@@ -127,7 +127,8 @@ function bidderDisplayName(bidder: AwardedBidRow['bidder']) {
     return (
         bidder.displayName?.trim() ||
         bidder.companyName?.trim() ||
-        bidder.email
+        bidder.email ||
+        '기사'
     );
 }
 

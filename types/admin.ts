@@ -1,3 +1,12 @@
+/** 관리자 화면 전반에서 쓰는 사용자 참조 — 전화 전용 가입자는 email이 null일 수 있음 */
+export interface AdminPersonRef {
+    id: string;
+    email: string | null;
+    displayName?: string | null;
+    companyName?: string | null;
+    phoneNumber?: string | null;
+}
+
 export type AdminTabId =
     | 'overview'
     | 'users'
@@ -27,7 +36,7 @@ export interface SupportInquiryAdminRow {
     category: string;
     categoryLabel: string;
     createdAt: string;
-    authorEmail: string;
+    authorEmail: string | null;
     authorRole: string;
     authorDisplay: string;
     repliedAt: string | null;
@@ -59,7 +68,7 @@ export interface SupportInquiryDetail {
     adminReply: string | null;
     repliedAt: string | null;
     user: {
-        email: string;
+        email: string | null;
         role: string;
         displayName: string | null;
         companyName: string | null;
@@ -86,7 +95,7 @@ export interface AdminRevenueAwardRow {
     awardedAt: string | null;
     countedAt: string;
     usedCreatedAtFallback: boolean;
-    bidderEmail: string;
+    bidderEmail: string | null;
     bidderDisplayName: string;
     bidderRole: string;
 }
@@ -130,20 +139,23 @@ export interface OverviewResponse {
         origin: string;
         destination: string;
         createdAt: string;
-        passenger: { id: string; email: string };
+        passenger: AdminPersonRef;
     }>;
     recentBids: Array<{
         id: string;
         price: string;
         createdAt: string;
         trip: { id: string; origin: string; destination: string };
-        bidder: { id: string; email: string; role: string };
+        bidder: AdminPersonRef & { role: string };
     }>;
 }
 
 export interface AdminUser {
     id: string;
-    email: string;
+    email: string | null;
+    displayName?: string | null;
+    companyName?: string | null;
+    phoneNumber?: string | null;
     role: string;
     status: 'Active' | 'Blocked';
     createdAt: string;
@@ -231,13 +243,13 @@ export interface AdminBidRow {
     price: string;
     status: string;
     createdAt: string;
-    bidder: { id: string; email: string; role: string };
+    bidder: AdminPersonRef & { role: string };
     trip: {
         id: string;
         origin: string;
         destination: string;
         status: string;
-        passenger: { id: string; email: string };
+        passenger: AdminPersonRef;
     };
 }
 
@@ -246,7 +258,7 @@ export interface AdminNotificationHistoryRow {
     type: string;
     title: string;
     readAt: string;
-    user: { id: string; email: string; role: string };
+    user: AdminPersonRef & { role: string };
     trip?: {
         id: string;
         origin: string;
@@ -284,7 +296,10 @@ export interface AdminAuditLogMeta {
 
 export interface VerificationRow {
     id: string;
-    email: string;
+    email: string | null;
+    displayName?: string | null;
+    companyName?: string | null;
+    phoneNumber?: string | null;
     role: string;
     driverLicenseUrl?: string | null;
     driverLicenseStatus?: string | null;

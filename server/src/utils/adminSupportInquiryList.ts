@@ -20,6 +20,7 @@ const inquiryListSelect = {
             role: true,
             displayName: true,
             companyName: true,
+            phoneNumber: true,
         },
     },
 } as const;
@@ -59,6 +60,11 @@ function buildSearchWhere(search: string): Prisma.SupportInquiryWhereInput {
             {
                 user: {
                     companyName: { contains: search, mode: 'insensitive' },
+                },
+            },
+            {
+                user: {
+                    phoneNumber: { contains: search },
                 },
             },
         ],
@@ -135,7 +141,9 @@ export async function listAdminSupportInquiries(params: {
             authorDisplay:
                 r.user.displayName ||
                 r.user.companyName ||
-                r.user.email,
+                r.user.email ||
+                r.user.phoneNumber ||
+                '알 수 없음',
         })),
         meta: {
             unansweredTotal,

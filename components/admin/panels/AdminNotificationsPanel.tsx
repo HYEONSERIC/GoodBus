@@ -16,6 +16,7 @@ import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
 import { formatNotificationResult } from '@/lib/adminNotifications';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 import {
     ADMIN_AMOUNT_HEADERS,
     formatManWonOrDash,
@@ -48,7 +49,7 @@ export function AdminNotificationsPanel() {
                                 onChange={(e) =>
                                     setNotificationSearch(e.target.value)
                                 }
-                                placeholder="email, title, message"
+                                placeholder="이름, 이메일, 전화번호, 제목, 내용"
                             />
                         </AdminFilterField>
                         <AdminFilterField label="타입">
@@ -125,7 +126,7 @@ export function AdminNotificationsPanel() {
                                             {new Date(item.readAt).toLocaleString()}
                                         </td>
                                         <td className="py-3 pr-4 text-slate-900">
-                                            {item.user.email}
+                                            {adminPersonLabel(item.user)}
                                         </td>
                                         <td className="py-3 pr-4 text-slate-600">
                                             {item.trip || item.bid?.trip

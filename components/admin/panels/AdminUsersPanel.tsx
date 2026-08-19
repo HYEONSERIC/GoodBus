@@ -24,6 +24,7 @@ import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
 import { AdminStatusBadge } from '@/components/admin/AdminStatusBadge';
 import { formatManWon } from '@/lib/adminRevenueDisplay';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 export function AdminUsersPanel() {
   const {
@@ -100,7 +101,7 @@ export function AdminUsersPanel() {
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                            placeholder="이메일 검색"
+                            placeholder="이름·이메일·전화번호 검색"
                             />
                         </AdminFilterField>
                         <Button variant="outline" onClick={handleFilter}>
@@ -126,7 +127,7 @@ export function AdminUsersPanel() {
                                             colSpan={5}
                                             className="py-8 text-center text-sm text-slate-500"
                                         >
-                                            조건에 맞는 회원이 없습니다. 역할·상태 필터나 이메일 검색어를 조정해 보세요.
+                                            조건에 맞는 회원이 없습니다. 역할·상태 필터나 검색어를 조정해 보세요.
                                         </td>
                                     </tr>
                                 ) : null}
@@ -139,7 +140,7 @@ export function AdminUsersPanel() {
                                             loadUserDetails(user.id, 10);
                                         }}
                                     >
-                                        <td className="py-3 pr-4 pl-4 text-slate-900">{user.email}</td>
+                                        <td className="py-3 pr-4 pl-4 text-slate-900">{adminPersonLabel(user)}</td>
                                         <td className="py-3 pr-4 text-slate-600">{user.role}</td>
                                         <td className="py-3 pr-4">
                                             <AdminStatusBadge
@@ -196,10 +197,18 @@ export function AdminUsersPanel() {
                         )}
                         {selectedUser && (
                             <div className="space-y-2 text-sm">
-                                <div>
-                                    <span className="font-medium">이메일:</span>{' '}
-                                    {selectedUser.email}
-                                </div>
+                                {selectedUser.email ? (
+                                    <div>
+                                        <span className="font-medium">
+                                            이메일:
+                                        </span>{' '}
+                                        {selectedUser.email}
+                                    </div>
+                                ) : (
+                                    <div className="text-slate-500">
+                                        전화번호 전용 가입 계정 (이메일 없음)
+                                    </div>
+                                )}
                                 {(selectedUser.displayName ||
                                     selectedUser.companyName ||
                                     selectedUser.phoneNumber ||

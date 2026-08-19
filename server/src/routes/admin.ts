@@ -86,6 +86,9 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
                 select: {
                     id: true,
                     email: true,
+                    phoneNumber: true,
+                    displayName: true,
+                    companyName: true,
                 },
             },
         },
@@ -106,6 +109,9 @@ router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, re
                 select: {
                     id: true,
                     email: true,
+                    phoneNumber: true,
+                    displayName: true,
+                    companyName: true,
                     role: true,
                 },
             },
@@ -141,16 +147,44 @@ router.get('/users', requireAuth, requireRole(UserRole.Admin), async (req, res) 
         where: {
             role: role ? parseEnumQuery(UserRole, role) : undefined,
             status: status ? parseEnumQuery(UserStatus, status) : undefined,
-            email: search
+            // 전화 전용 가입자는 email이 없어서 email만으로 검색하면 못 찾음 —
+            // phoneNumber/displayName/companyName도 같이 검색되게 OR로 확장.
+            ...(search
                 ? {
-                      contains: String(search),
-                      mode: 'insensitive',
+                      OR: [
+                          {
+                              email: {
+                                  contains: String(search),
+                                  mode: 'insensitive',
+                              },
+                          },
+                          {
+                              phoneNumber: {
+                                  contains: String(search),
+                              },
+                          },
+                          {
+                              displayName: {
+                                  contains: String(search),
+                                  mode: 'insensitive',
+                              },
+                          },
+                          {
+                              companyName: {
+                                  contains: String(search),
+                                  mode: 'insensitive',
+                              },
+                          },
+                      ],
                   }
-                : undefined,
+                : {}),
         },
         select: {
             id: true,
             email: true,
+            phoneNumber: true,
+            displayName: true,
+            companyName: true,
             role: true,
             status: true,
             adminRole: true,
@@ -200,6 +234,27 @@ router.get(
                                   },
                               },
                               {
+                                  user: {
+                                      phoneNumber: { contains: search },
+                                  },
+                              },
+                              {
+                                  user: {
+                                      displayName: {
+                                          contains: search,
+                                          mode: 'insensitive' as const,
+                                      },
+                                  },
+                              },
+                              {
+                                  user: {
+                                      companyName: {
+                                          contains: search,
+                                          mode: 'insensitive' as const,
+                                      },
+                                  },
+                              },
+                              {
                                   title: {
                                       contains: search,
                                       mode: 'insensitive' as const,
@@ -231,6 +286,9 @@ router.get(
                             select: {
                                 id: true,
                                 email: true,
+                                phoneNumber: true,
+                                displayName: true,
+                                companyName: true,
                                 role: true,
                             },
                         },
@@ -499,7 +557,14 @@ router.get(
                                 destination: true,
                             },
                         },
-                        passenger: { select: { email: true } },
+                        passenger: {
+                            select: {
+                                email: true,
+                                displayName: true,
+                                companyName: true,
+                                phoneNumber: true,
+                            },
+                        },
                     },
                 });
                 reviews = rows.map((r) => ({
@@ -508,7 +573,12 @@ router.get(
                     comment: r.comment,
                     createdAt: r.createdAt,
                     trip: r.trip,
-                    counterpartyEmail: r.passenger.email,
+                    counterpartyEmail:
+                        r.passenger.displayName ||
+                        r.passenger.companyName ||
+                        r.passenger.email ||
+                        r.passenger.phoneNumber ||
+                        '알 수 없음',
                 }));
             } else if (user.role === UserRole.Passenger) {
                 const rows = await prisma.tripReview.findMany({
@@ -527,7 +597,14 @@ router.get(
                                 destination: true,
                             },
                         },
-                        driver: { select: { email: true } },
+                        driver: {
+                            select: {
+                                email: true,
+                                displayName: true,
+                                companyName: true,
+                                phoneNumber: true,
+                            },
+                        },
                     },
                 });
                 reviews = rows.map((r) => ({
@@ -536,7 +613,12 @@ router.get(
                     comment: r.comment,
                     createdAt: r.createdAt,
                     trip: r.trip,
-                    counterpartyEmail: r.driver.email,
+                    counterpartyEmail:
+                        r.driver.displayName ||
+                        r.driver.companyName ||
+                        r.driver.email ||
+                        r.driver.phoneNumber ||
+                        '알 수 없음',
                 }));
             }
         }
@@ -555,6 +637,9 @@ router.get(
 const verificationUserSelect = {
     id: true,
     email: true,
+    phoneNumber: true,
+    displayName: true,
+    companyName: true,
     role: true,
     driverLicenseUrl: true,
     driverLicenseStatus: true,
@@ -637,6 +722,9 @@ router.get(
                 driverLicenseUrl: true,
                 companyRegistrationUrl: true,
                 email: true,
+                phoneNumber: true,
+                displayName: true,
+                companyName: true,
             },
         });
 
@@ -662,8 +750,10 @@ router.get(
         }
 
         const ext = path.extname(absolutePath) || '.jpg';
-        const safeEmail = user.email?.replace(/[^a-zA-Z0-9.-]/g, '_') || 'user';
-        return res.download(absolutePath, `${type}-${safeEmail}${ext}`);
+        const label =
+            user.companyName || user.displayName || user.email || user.phoneNumber;
+        const safeLabel = label?.replace(/[^a-zA-Z0-9가-힣.-]/g, '_') || 'user';
+        return res.download(absolutePath, `${type}-${safeLabel}${ext}`);
     }
 );
 
@@ -699,6 +789,9 @@ router.patch(
             select: {
                 id: true,
                 email: true,
+                phoneNumber: true,
+                displayName: true,
+                companyName: true,
                 role: true,
                 driverLicenseStatus: true,
                 companyRegistrationStatus: true,
@@ -788,12 +881,40 @@ router.get(
                               },
                           },
                           {
+                              bidder: {
+                                  phoneNumber: { contains: search },
+                              },
+                          },
+                          {
+                              bidder: {
+                                  displayName: {
+                                      contains: search,
+                                      mode: 'insensitive',
+                                  },
+                              },
+                          },
+                          {
+                              bidder: {
+                                  companyName: {
+                                      contains: search,
+                                      mode: 'insensitive',
+                                  },
+                              },
+                          },
+                          {
                               trip: {
                                   passenger: {
                                       email: {
                                           contains: search,
                                           mode: 'insensitive',
                                       },
+                                  },
+                              },
+                          },
+                          {
+                              trip: {
+                                  passenger: {
+                                      phoneNumber: { contains: search },
                                   },
                               },
                           },
@@ -827,7 +948,14 @@ router.get(
                 take,
                 include: {
                     bidder: {
-                        select: { id: true, email: true, role: true },
+                        select: {
+                            id: true,
+                            email: true,
+                            phoneNumber: true,
+                            displayName: true,
+                            companyName: true,
+                            role: true,
+                        },
                     },
                     trip: {
                         select: {
@@ -836,7 +964,13 @@ router.get(
                             destination: true,
                             status: true,
                             passenger: {
-                                select: { id: true, email: true },
+                                select: {
+                                    id: true,
+                                    email: true,
+                                    phoneNumber: true,
+                                    displayName: true,
+                                    companyName: true,
+                                },
                             },
                         },
                     },

@@ -7,7 +7,6 @@ import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
 import { sendOtpSms, isAligoDevMode } from '../utils/aligo';
 import { createIpRateLimiter, getClientIp } from '../utils/ipRateLimit';
-import { verifyTurnstileToken } from '../utils/turnstile';
 
 const router = express.Router();
 
@@ -35,18 +34,16 @@ const signupRateLimiter = createIpRateLimiter({
     message: '너무 많은 요청이 있었습니다. 잠시 후 다시 시도해주세요',
 });
 
+// All three public-signup roles authenticate by phone+OTP only — no email/password.
+// Required fields vary by role: Passenger needs just a phone; Driver additionally
+// needs a name; BusCompany needs a company name and a contact-person name
+// (stored in `displayName`, same column Driver's name uses).
 const signupSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(6),
     role: z.enum(['Passenger', 'Driver', 'BusCompany']),
     displayName: z.string().trim().min(1).max(50).optional(),
-    // Required for Passenger signups only — Driver/BusCompany add a phone
-    // number later via their profile screen instead (see PROJECT_STATUS.md).
-    phoneNumber: z.string().trim().optional(),
-    phoneOtpCode: z.string().trim().optional(),
-    // Driver/BusCompany only (see the Turnstile check below) — Passenger already
-    // has a phone-OTP cost barrier this path doesn't.
-    turnstileToken: z.string().optional(),
+    companyName: z.string().trim().min(1).max(100).optional(),
+    phoneNumber: z.string().trim().min(1),
+    phoneOtpCode: z.string().trim().min(1),
 });
 
 const loginSchema = z.object({
@@ -54,14 +51,34 @@ const loginSchema = z.object({
     password: z.string(),
 });
 
+// 승객과 기사·회사는 같은 번호로 각각 계정을 만들 수 있어야 해서(둘 다 개인 휴대폰을
+// 씀), phoneNumber 하나만으로는 계정을 특정할 수 없다. 로그인/OTP 요청 시 어느
+// "계정군"을 찾는지 프론트가 명시해야 함 — 승객 로그인/가입 화면은 'passenger',
+// 기사·회사 로그인/가입 화면은 'business'를 보낸다. 기사와 회사는 같은 번호로
+// 동시에 둘 다는 못 만들게 이 그룹 안에서 막는다(운영 편의상 한 번호=한 사업자).
+const AccountType = z.enum(['passenger', 'business']);
+type AccountType = z.infer<typeof AccountType>;
+
+function accountTypeRoleFilter(accountType: AccountType) {
+    return accountType === 'passenger'
+        ? ('Passenger' as const)
+        : { in: ['Driver', 'BusCompany'] as ('Driver' | 'BusCompany')[] };
+}
+
+function roleToAccountType(role: 'Passenger' | 'Driver' | 'BusCompany'): AccountType {
+    return role === 'Passenger' ? 'passenger' : 'business';
+}
+
 const requestOtpSchema = z.object({
     phoneNumber: z.string().trim().min(1),
     purpose: z.enum(['signup', 'login']),
+    accountType: AccountType,
 });
 
 const phoneLoginSchema = z.object({
     phoneNumber: z.string().trim().min(1),
     code: z.string().trim().min(1),
+    accountType: AccountType,
 });
 
 function otpErrorMessage(
@@ -82,92 +99,67 @@ function otpErrorMessage(
 router.post('/signup', signupRateLimiter, async (req, res) => {
     try {
         const {
-            email,
-            password,
             role,
             displayName,
+            companyName,
             phoneNumber: rawPhoneNumber,
             phoneOtpCode,
-            turnstileToken,
         } = signupSchema.parse(req.body);
 
-        // Driver/BusCompany has no phone-OTP cost barrier (added below the fold
-        // instead, via the profile screen) — Turnstile is the substitute check
-        // against scripted mass signups on this specific path.
-        if (role !== 'Passenger') {
-            const humanVerified = await verifyTurnstileToken(
-                turnstileToken,
-                getClientIp(req)
-            );
-            if (!humanVerified) {
-                return res
-                    .status(400)
-                    .json({ error: '보안 확인에 실패했습니다. 다시 시도해주세요.' });
-            }
+        if (role === 'Driver' && !displayName) {
+            return res.status(400).json({ error: '이름을 입력해주세요' });
+        }
+        if (role === 'BusCompany' && (!companyName || !displayName)) {
+            return res
+                .status(400)
+                .json({ error: '회사명과 담당자 이름을 입력해주세요' });
         }
 
-        let phoneNumber: string | null = null;
-        if (role === 'Passenger') {
-            if (!rawPhoneNumber || !phoneOtpCode) {
-                return res
-                    .status(400)
-                    .json({ error: '휴대전화 인증이 필요합니다' });
-            }
+        const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
+        if (!phoneNumber) {
+            return res
+                .status(400)
+                .json({ error: '올바른 휴대전화번호를 입력해주세요' });
+        }
 
-            phoneNumber = normalizePhoneNumber(rawPhoneNumber);
-            if (!phoneNumber) {
-                return res
-                    .status(400)
-                    .json({ error: '올바른 휴대전화번호를 입력해주세요' });
-            }
+        const otpResult = await consumeOtp(phoneNumber, 'signup', phoneOtpCode);
+        if (!otpResult.ok) {
+            return res
+                .status(400)
+                .json({ error: otpErrorMessage(otpResult.error) });
+        }
 
-            const otpResult = await consumeOtp(
+        // 같은 번호라도 승객/기사·회사 계정군이 다르면 허용 — 기사·회사끼리는
+        // (Driver/BusCompany) 같은 그룹으로 취급해 한 번호에 하나만 허용.
+        const existingPhone = await prisma.user.findFirst({
+            where: {
                 phoneNumber,
-                'signup',
-                phoneOtpCode
-            );
-            if (!otpResult.ok) {
-                return res
-                    .status(400)
-                    .json({ error: otpErrorMessage(otpResult.error) });
-            }
-        }
-
-        const existingUser = await prisma.user.findUnique({
-            where: { email },
+                role: accountTypeRoleFilter(roleToAccountType(role)),
+            },
         });
-
-        if (existingUser) {
-            return res.status(400).json({ error: 'Email already exists' });
-        }
-
-        if (phoneNumber) {
-            const existingPhone = await prisma.user.findUnique({
-                where: { phoneNumber },
+        if (existingPhone) {
+            return res.status(400).json({
+                error:
+                    role === 'Passenger'
+                        ? '이미 승객으로 가입된 휴대전화번호입니다'
+                        : '이미 기사·회사로 가입된 휴대전화번호입니다',
             });
-            if (existingPhone) {
-                return res
-                    .status(400)
-                    .json({ error: '이미 가입에 사용된 휴대전화번호입니다' });
-            }
         }
-
-        const passwordHash = await bcrypt.hash(password, 10);
 
         const user = await prisma.user.create({
             data: {
-                email,
-                passwordHash,
                 role: role as any,
-                displayName,
+                displayName: role === 'Passenger' ? undefined : displayName,
+                companyName: role === 'BusCompany' ? companyName : undefined,
                 phoneNumber,
-                phoneVerifiedAt: phoneNumber ? new Date() : null,
+                phoneVerifiedAt: new Date(),
             },
             select: {
                 id: true,
-                email: true,
                 role: true,
                 displayName: true,
+                companyName: true,
+                phoneNumber: true,
                 createdAt: true,
             },
         });
@@ -194,7 +186,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
         if ((error as { code?: string })?.code === 'P2002') {
             return res
                 .status(400)
-                .json({ error: '이미 사용 중인 이메일 또는 휴대전화번호입니다' });
+                .json({ error: '이미 가입에 사용된 휴대전화번호입니다' });
         }
         console.error('Signup error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -203,7 +195,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
 
 router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
     try {
-        const { phoneNumber: rawPhoneNumber, purpose } =
+        const { phoneNumber: rawPhoneNumber, purpose, accountType } =
             requestOtpSchema.parse(req.body);
 
         const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
@@ -215,11 +207,14 @@ router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
 
         // 가입 여부를 응답으로 노출하면 무작위 번호 스캔으로 가입자 명단을
         // 추출할 수 있어, 대상이 아닌 경우에도 겉보기엔 같은 성공 응답을
-        // 반환하되 실제 인증번호는 발송하지 않는다.
-        const user = await prisma.user.findUnique({ where: { phoneNumber } });
+        // 반환하되 실제 인증번호는 발송하지 않는다. accountType으로 승객/기사·회사
+        // 계정군을 나눠서 찾으므로 같은 번호라도 다른 계정군엔 영향 없음.
+        const user = await prisma.user.findFirst({
+            where: { phoneNumber, role: accountTypeRoleFilter(accountType) },
+        });
         const eligible =
             purpose === 'login'
-                ? !!user && user.role !== 'Admin' && user.status !== 'Blocked'
+                ? !!user && user.status !== 'Blocked'
                 : !user;
 
         if (!eligible) {
@@ -264,9 +259,8 @@ router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
 
 router.post('/phone/login', loginRateLimiter, async (req, res) => {
     try {
-        const { phoneNumber: rawPhoneNumber, code } = phoneLoginSchema.parse(
-            req.body
-        );
+        const { phoneNumber: rawPhoneNumber, code, accountType } =
+            phoneLoginSchema.parse(req.body);
 
         const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
         if (!phoneNumber) {
@@ -282,8 +276,10 @@ router.post('/phone/login', loginRateLimiter, async (req, res) => {
                 .json({ error: otpErrorMessage(otpResult.error) });
         }
 
-        const user = await prisma.user.findUnique({ where: { phoneNumber } });
-        if (!user || user.role === 'Admin') {
+        const user = await prisma.user.findFirst({
+            where: { phoneNumber, role: accountTypeRoleFilter(accountType) },
+        });
+        if (!user) {
             return res
                 .status(404)
                 .json({ error: '가입되지 않은 휴대전화번호입니다' });
@@ -313,6 +309,9 @@ router.post('/phone/login', loginRateLimiter, async (req, res) => {
                 id: user.id,
                 email: user.email,
                 role: user.role,
+                displayName: user.displayName,
+                companyName: user.companyName,
+                phoneNumber: user.phoneNumber,
                 createdAt: user.createdAt,
             },
         });
@@ -344,6 +343,13 @@ router.post('/login', loginRateLimiter, async (req, res) => {
 
         if (user.status === 'Blocked') {
             return res.status(403).json({ error: 'Account is blocked' });
+        }
+
+        if (!user.passwordHash) {
+            console.warn(
+                `[SECURITY] failed login ip=${getClientIp(req)} email=${email}`
+            );
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         const isValidPassword = await bcrypt.compare(

@@ -86,7 +86,7 @@ export function buildRevenueAwardsCsv(
         a.origin,
         a.destination,
         a.bidderDisplayName,
-        a.bidderEmail,
+        a.bidderEmail ?? '',
         a.bidderRole,
         a.priceManWon,
     ]);

@@ -26,8 +26,8 @@ export const ADMIN_SECTION_TITLES: Record<AdminTabId, string> = {
 
 export const ADMIN_SECTION_DESCRIPTIONS: Partial<Record<AdminTabId, string>> = {
     overview: '오늘·이번 주 낙찰 현황과 처리 대기 건을 한눈에 확인하세요',
-    users: '이메일·역할·상태로 회원을 찾아 상세 정보를 확인하고 계정을 차단·해제하세요',
-    bids: '이메일·출발지·도착지·기간으로 입찰·낙찰 내역을 조회합니다 (최대 200건, 더보기 지원)',
+    users: '이름·이메일·전화번호·역할·상태로 회원을 찾아 상세 정보를 확인하고 계정을 차단·해제하세요',
+    bids: '이름·이메일·전화번호·출발지·도착지·기간으로 입찰·낙찰 내역을 조회합니다 (최대 200건, 더보기 지원)',
     notifications: '발송된 알림 히스토리를 검색어와 기간으로 확인합니다',
     verification: '기사·회사가 제출한 서류를 검토해 승인 또는 반려하세요',
     revenue: '낙찰 기준 월별 거래액과 추정 수수료를 확인합니다',

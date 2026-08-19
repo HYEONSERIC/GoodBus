@@ -10,13 +10,12 @@ import { AuthScaffold } from '@/components/auth/AuthScaffold';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
+type AccountType = 'passenger' | 'business';
+
 export default function LoginPage() {
     const router = useRouter();
-    const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [accountType, setAccountType] = useState<AccountType>('passenger');
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
 
     const [phoneNumber, setPhoneNumber] = useState('');
     const [phoneCode, setPhoneCode] = useState('');
@@ -36,19 +35,17 @@ export default function LoginPage() {
         return () => clearInterval(timer);
     }, [resendCooldown]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const resetPhoneStep = () => {
+        setPhoneStep('enter-phone');
+        setPhoneCode('');
+        setPhoneNotice('');
         setError('');
-        setLoading(true);
+    };
 
-        try {
-            await authAPI.login(email, password);
-            router.push('/dashboard');
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : '로그인에 실패했습니다');
-        } finally {
-            setLoading(false);
-        }
+    const handleAccountTypeChange = (next: AccountType) => {
+        if (next === accountType) return;
+        setAccountType(next);
+        resetPhoneStep();
     };
 
     const handlePhoneRequest = async () => {
@@ -57,7 +54,11 @@ export default function LoginPage() {
         setPhoneRequestLoading(true);
 
         try {
-            const result = await authAPI.requestPhoneOtp(phoneNumber, 'login');
+            const result = await authAPI.requestPhoneOtp(
+                phoneNumber,
+                'login',
+                accountType
+            );
             setPhoneStep('enter-code');
             setResendCooldown(RESEND_COOLDOWN_SECONDS);
             setPhoneNotice(
@@ -79,7 +80,7 @@ export default function LoginPage() {
         setPhoneVerifyLoading(true);
 
         try {
-            await authAPI.loginWithPhone(phoneNumber, phoneCode);
+            await authAPI.loginWithPhone(phoneNumber, phoneCode, accountType);
             router.push('/dashboard');
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : '로그인에 실패했습니다');
@@ -95,129 +96,92 @@ export default function LoginPage() {
                     <button
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
-                            loginMethod === 'email'
+                            accountType === 'passenger'
                                 ? 'bg-[#2563eb] text-white'
                                 : 'text-gray-700'
                         }`}
-                        onClick={() => setLoginMethod('email')}
+                        onClick={() => handleAccountTypeChange('passenger')}
                     >
-                        이메일로 로그인
+                        승객 로그인
                     </button>
                     <button
                         type="button"
                         className={`rounded-full px-3 py-2 text-sm font-semibold ${
-                            loginMethod === 'phone'
+                            accountType === 'business'
                                 ? 'bg-[#2563eb] text-white'
                                 : 'text-gray-700'
                         }`}
-                        onClick={() => setLoginMethod('phone')}
+                        onClick={() => handleAccountTypeChange('business')}
                     >
-                        휴대전화로 로그인
+                        기사·회사 로그인
                     </button>
                 </div>
 
-                {loginMethod === 'email' ? (
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email">이메일</Label>
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="phoneNumber">휴대전화 번호</Label>
+                        <div className="flex gap-2">
                             <Input
-                                id="email"
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="이메일을 입력하세요"
-                                required
+                                id="phoneNumber"
+                                value={phoneNumber}
+                                onChange={(e) => {
+                                    setPhoneNumber(e.target.value);
+                                    setPhoneStep('enter-phone');
+                                    setPhoneCode('');
+                                }}
+                                placeholder="01012345678"
+                                disabled={phoneRequestLoading}
                             />
+                            <Button
+                                type="button"
+                                className="whitespace-nowrap bg-[#2563eb] hover:bg-[#1d4ed8]"
+                                onClick={handlePhoneRequest}
+                                disabled={
+                                    !phoneNumber ||
+                                    phoneRequestLoading ||
+                                    resendCooldown > 0
+                                }
+                            >
+                                {resendCooldown > 0
+                                    ? `재전송 ${resendCooldown}초`
+                                    : phoneStep === 'enter-code'
+                                      ? '재전송'
+                                      : '인증 요청'}
+                            </Button>
                         </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="password">비밀번호</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        {error && <p className="text-sm text-red-500">{error}</p>}
-
-                        <Button
-                            type="submit"
-                            className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
-                            disabled={loading}
-                        >
-                            {loading ? '로그인 중...' : '로그인'}
-                        </Button>
-                    </form>
-                ) : (
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="phoneNumber">휴대전화 번호</Label>
-                            <div className="flex gap-2">
-                                <Input
-                                    id="phoneNumber"
-                                    value={phoneNumber}
-                                    onChange={(e) => {
-                                        setPhoneNumber(e.target.value);
-                                        setPhoneStep('enter-phone');
-                                        setPhoneCode('');
-                                    }}
-                                    placeholder="01012345678"
-                                    disabled={phoneRequestLoading}
-                                />
-                                <Button
-                                    type="button"
-                                    className="whitespace-nowrap bg-[#2563eb] hover:bg-[#1d4ed8]"
-                                    onClick={handlePhoneRequest}
-                                    disabled={
-                                        !phoneNumber ||
-                                        phoneRequestLoading ||
-                                        resendCooldown > 0
-                                    }
-                                >
-                                    {resendCooldown > 0
-                                        ? `재전송 ${resendCooldown}초`
-                                        : phoneStep === 'enter-code'
-                                          ? '재전송'
-                                          : '인증 요청'}
-                                </Button>
-                            </div>
-                        </div>
-
-                        {phoneStep === 'enter-code' && (
-                            <div className="space-y-2">
-                                <Label htmlFor="phoneCode">인증번호</Label>
-                                <Input
-                                    id="phoneCode"
-                                    value={phoneCode}
-                                    onChange={(e) => setPhoneCode(e.target.value)}
-                                    placeholder="4자리 인증번호"
-                                    inputMode="numeric"
-                                />
-                            </div>
-                        )}
-
-                        {phoneNotice && (
-                            <p className="text-sm text-gray-500">{phoneNotice}</p>
-                        )}
-                        {error && <p className="text-sm text-red-500">{error}</p>}
-
-                        <Button
-                            type="button"
-                            className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
-                            onClick={handlePhoneVerify}
-                            disabled={
-                                phoneStep !== 'enter-code' ||
-                                !phoneCode ||
-                                phoneVerifyLoading
-                            }
-                        >
-                            {phoneVerifyLoading ? '로그인 중...' : '로그인'}
-                        </Button>
                     </div>
-                )}
+
+                    {phoneStep === 'enter-code' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="phoneCode">인증번호</Label>
+                            <Input
+                                id="phoneCode"
+                                value={phoneCode}
+                                onChange={(e) => setPhoneCode(e.target.value)}
+                                placeholder="4자리 인증번호"
+                                inputMode="numeric"
+                            />
+                        </div>
+                    )}
+
+                    {phoneNotice && (
+                        <p className="text-sm text-gray-500">{phoneNotice}</p>
+                    )}
+                    {error && <p className="text-sm text-red-500">{error}</p>}
+
+                    <Button
+                        type="button"
+                        className="h-11 w-full bg-[#2563eb] hover:bg-[#1d4ed8]"
+                        onClick={handlePhoneVerify}
+                        disabled={
+                            phoneStep !== 'enter-code' ||
+                            !phoneCode ||
+                            phoneVerifyLoading
+                        }
+                    >
+                        {phoneVerifyLoading ? '로그인 중...' : '로그인'}
+                    </Button>
+                </div>
             </div>
         </AuthScaffold>
     );
