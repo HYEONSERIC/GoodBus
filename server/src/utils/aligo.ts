@@ -6,7 +6,7 @@ type SendOtpResult =
     | { ok: false; error: string };
 
 function buildSmsMessage(code: string): string {
-    return `[GoodBus] 인증번호는 ${code} 입니다. 5분 내에 입력해주세요.`;
+    return `[버스대절] 인증번호는 ${code} 입니다. 5분 내에 입력해주세요.`;
 }
 
 async function sendViaSms(
@@ -85,7 +85,7 @@ async function sendViaAlimtalk(
                 receiver_1: phoneNumber,
                 message_1: message,
                 failover: 'Y',
-                fsubject_1: 'GoodBus 인증번호',
+                fsubject_1: '버스대절 인증번호',
                 fmessage_1: buildSmsMessage(code),
             }),
         });
