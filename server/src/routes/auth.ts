@@ -122,7 +122,12 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
                 .json({ error: '올바른 휴대전화번호를 입력해주세요' });
         }
 
-        const otpResult = await consumeOtp(phoneNumber, 'signup', phoneOtpCode);
+        const otpResult = await consumeOtp(
+            phoneNumber,
+            'signup',
+            phoneOtpCode,
+            roleToAccountType(role)
+        );
         if (!otpResult.ok) {
             return res
                 .status(400)
@@ -226,7 +231,7 @@ router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
             });
         }
 
-        const issued = await issueOtp(phoneNumber, purpose);
+        const issued = await issueOtp(phoneNumber, purpose, accountType);
         if (!issued.ok) {
             const message =
                 issued.error === 'cooldown'
@@ -269,7 +274,7 @@ router.post('/phone/login', loginRateLimiter, async (req, res) => {
                 .json({ error: '올바른 휴대전화번호를 입력해주세요' });
         }
 
-        const otpResult = await consumeOtp(phoneNumber, 'login', code);
+        const otpResult = await consumeOtp(phoneNumber, 'login', code, accountType);
         if (!otpResult.ok) {
             return res
                 .status(400)

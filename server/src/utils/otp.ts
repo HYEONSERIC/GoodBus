@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { PhoneVerificationPurpose } from '@prisma/client';
+import { PhoneAccountType, PhoneVerificationPurpose } from '@prisma/client';
 import prisma from './db';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -22,7 +22,8 @@ type IssueOtpResult =
 
 export async function issueOtp(
     phoneNumber: string,
-    purpose: PhoneVerificationPurpose
+    purpose: PhoneVerificationPurpose,
+    accountType: PhoneAccountType
 ): Promise<IssueOtpResult> {
     const now = new Date();
 
@@ -30,6 +31,7 @@ export async function issueOtp(
         where: {
             phoneNumber,
             purpose,
+            accountType,
             createdAt: { gte: new Date(now.getTime() - RESEND_COOLDOWN_MS) },
         },
         orderBy: { createdAt: 'desc' },
@@ -42,6 +44,7 @@ export async function issueOtp(
         where: {
             phoneNumber,
             purpose,
+            accountType,
             createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
         },
     });
@@ -56,6 +59,7 @@ export async function issueOtp(
         data: {
             phoneNumber,
             purpose,
+            accountType,
             codeHash,
             expiresAt: new Date(now.getTime() + OTP_TTL_MS),
         },
@@ -74,10 +78,11 @@ type ConsumeOtpResult =
 export async function consumeOtp(
     phoneNumber: string,
     purpose: PhoneVerificationPurpose,
-    code: string
+    code: string,
+    accountType: PhoneAccountType
 ): Promise<ConsumeOtpResult> {
     const record = await prisma.phoneVerification.findFirst({
-        where: { phoneNumber, purpose, consumedAt: null },
+        where: { phoneNumber, purpose, accountType, consumedAt: null },
         orderBy: { createdAt: 'desc' },
     });
 

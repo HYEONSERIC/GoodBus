@@ -98,6 +98,11 @@ enum PhoneVerificationPurpose {
   login
 }
 
+enum PhoneAccountType {
+  passenger
+  business
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String?  @unique
@@ -153,13 +158,14 @@ model PhoneVerification {
   id          String                    @id @default(cuid())
   phoneNumber String
   purpose     PhoneVerificationPurpose
+  accountType PhoneAccountType?
   codeHash    String
   attempts    Int                       @default(0)
   consumedAt  DateTime?
   expiresAt   DateTime
   createdAt   DateTime                  @default(now())
 
-  @@index([phoneNumber, purpose, createdAt])
+  @@index([phoneNumber, purpose, accountType, createdAt])
 }
 
 model SupportPost {
