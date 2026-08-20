@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { OpenTripCard } from '@/components/trips/OpenTripCard';
 import {
     countOpenBids,
@@ -33,10 +34,11 @@ export function OpenTripsList<T extends OpenTripLike>({
     roundOptions?: RoundPartnerOptions;
     showKm?: boolean;
 }) {
-    const cardTrips = groupTripCardsForDisplay(
-        filteredTrips,
-        allTrips,
-        roundOptions,
+    // groupTripCardsForDisplay의 왕복 매칭이 O(n^2)라 매 렌더 재계산을 피한다
+    // (다른 대시보드 훅의 동일 계열 호출은 전부 useMemo로 감싸져 있음).
+    const cardTrips = useMemo(
+        () => groupTripCardsForDisplay(filteredTrips, allTrips, roundOptions),
+        [filteredTrips, allTrips, roundOptions],
     );
 
     if (cardTrips.length === 0) {

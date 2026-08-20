@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -37,6 +38,13 @@ import { useDriverDashboard } from '@/hooks/useDriverDashboard';
 
 export function DriverDashboardContent() {
     const d = useDriverDashboard();
+    // filterTrips 자체는 useCallback으로 안정화되어 있지만 호출 결과는 매번
+    // 새 배열이라, JSX에서 바로 호출하면 OpenTripsList의 useMemo가 무력화된다
+    // — 실제 입력(trips)이 바뀔 때만 재계산되도록 여기서 감싼다.
+    const filteredOpenTrips = useMemo(
+        () => d.tripFilters.filterTrips(d.trips),
+        [d.tripFilters, d.trips],
+    );
 
     return (
         <>
@@ -157,7 +165,7 @@ export function DriverDashboardContent() {
                             <OpenTripsList
                                 trips={d.trips}
                                 allTrips={d.openTripsPool}
-                                filteredTrips={d.tripFilters.filterTrips(d.trips)}
+                                filteredTrips={filteredOpenTrips}
                                 distanceByTripId={d.distanceByTripId}
                                 onBid={d.handleBidButtonClick}
                                 roundOptions={d.DRIVER_ROUND_OPTS}

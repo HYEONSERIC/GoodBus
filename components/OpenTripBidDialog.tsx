@@ -60,6 +60,10 @@ export function OpenTripBidDialog({
             setUiStep('fee');
             setExtendedBid(defaultExtendedBidForm(profileForm));
         }
+        // trip/profileForm 객체 전체가 아니라 실제로 폼을 리셋해야 하는 값만
+        // 의존성으로 둔다 — 부모 리렌더로 두 객체의 참조만 바뀌는 경우까지
+        // 반응하면 사용자가 입력 중인 폼이 계속 초기화된다.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, trip?.id, profileForm.busType, profileForm.capacity, profileForm.busYear]);
 
     function handleOpenChange(next: boolean) {

@@ -2,6 +2,7 @@
 
 import {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useMemo,
@@ -66,6 +67,7 @@ function useDriverDashboardState() {
     const uploadBaseUrl =
         process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     const profile = useBidderProfile('driver', { userEmail: user?.email });
+    const { applyFromUser } = profile;
     const [activeTab, setActiveTab] = useState<
         | 'available'
         | 'contract'
@@ -145,58 +147,12 @@ function useDriverDashboardState() {
     const insuranceLabel =
         verification?.driverLicenseStatus === 'approved' ? '인증완료' : '미인증';
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    useEffect(() => {
-        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
-        reviewsAPI
-            .getDriverMe()
-            .then((data) => {
-                setDriverReviews(data.reviews || []);
-                setDriverReviewStats({
-                    avgRating: data.avgRating ?? null,
-                    count: data.count ?? 0,
-                });
-            })
-            .catch(() => {
-                setDriverReviews([]);
-                setDriverReviewStats({ avgRating: null, count: 0 });
-            });
-    }, [activeTab]);
-
-    useEffect(() => {
-        if (activeTab === 'contract' || activeTab === 'available') {
-            loadData();
-        }
-    }, [activeTab]);
-
-    useEffect(() => {
-        const refreshOnFocus = () => {
-            if (activeTab === 'available') {
-                loadData();
-            }
-        };
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                refreshOnFocus();
-            }
-        };
-        window.addEventListener('focus', refreshOnFocus);
-        document.addEventListener('visibilitychange', onVisibility);
-        return () => {
-            window.removeEventListener('focus', refreshOnFocus);
-            document.removeEventListener('visibilitychange', onVisibility);
-        };
-    }, [activeTab]);
-
-    async function loadData() {
+    const loadData = useCallback(async () => {
         try {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             setMembershipPlan(userData.user?.membershipPlan || null);
-            profile.applyFromUser(userData.user);
+            applyFromUser(userData.user);
             try {
                 const verificationData = await verificationAPI.getMe();
                 setVerification(verificationData.verification);
@@ -254,7 +210,53 @@ function useDriverDashboardState() {
             console.error('Error loading data:', error);
             window.location.href = '/login';
         }
-    }
+    }, [applyFromUser]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useEffect(() => {
+        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
+        reviewsAPI
+            .getDriverMe()
+            .then((data) => {
+                setDriverReviews(data.reviews || []);
+                setDriverReviewStats({
+                    avgRating: data.avgRating ?? null,
+                    count: data.count ?? 0,
+                });
+            })
+            .catch(() => {
+                setDriverReviews([]);
+                setDriverReviewStats({ avgRating: null, count: 0 });
+            });
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'contract' || activeTab === 'available') {
+            loadData();
+        }
+    }, [activeTab, loadData]);
+
+    useEffect(() => {
+        const refreshOnFocus = () => {
+            if (activeTab === 'available') {
+                loadData();
+            }
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshOnFocus();
+            }
+        };
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [activeTab, loadData]);
 
     async function handleLogout() {
         try {

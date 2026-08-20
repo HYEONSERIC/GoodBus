@@ -5,14 +5,6 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 
@@ -20,7 +12,6 @@ export function AdminCreatePanel() {
   const {
     adminForm,
     setAdminForm,
-    adminRole,
     handleCreateAdmin,
 } = useAdminDashboard();
   return (

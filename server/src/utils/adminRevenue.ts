@@ -1,8 +1,8 @@
 import { BidStatus, TripStatus } from '@prisma/client';
 import prisma from './db';
+import { DEFAULT_PLATFORM_COMMISSION_RATE } from './platformCommissionCore';
 
-/** 입찰 UI와 동일: 전세버스 주문 광고 수수료 */
-export const DEFAULT_PLATFORM_COMMISSION_RATE = 0.1;
+export { DEFAULT_PLATFORM_COMMISSION_RATE };
 
 const awardedBidSelect = {
     id: true,

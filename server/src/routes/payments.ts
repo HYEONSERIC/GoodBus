@@ -44,20 +44,25 @@ router.get(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const billingKey = await prisma.billingKey.findUnique({
-            where: { userId: req.user!.userId },
-            select: { cardBrand: true, cardLast4: true },
-        });
+        try {
+            const billingKey = await prisma.billingKey.findUnique({
+                where: { userId: req.user!.userId },
+                select: { cardBrand: true, cardLast4: true },
+            });
 
-        if (!billingKey) {
-            return res.json({ registered: false });
+            if (!billingKey) {
+                return res.json({ registered: false });
+            }
+
+            res.json({
+                registered: true,
+                cardBrand: billingKey.cardBrand,
+                cardLast4: billingKey.cardLast4,
+            });
+        } catch (error) {
+            console.error('Get billing key error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        res.json({
-            registered: true,
-            cardBrand: billingKey.cardBrand,
-            cardLast4: billingKey.cardLast4,
-        });
     },
 );
 
@@ -66,19 +71,24 @@ router.delete(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.membershipSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (subscription?.status === 'active') {
-            return res.status(400).json({
-                error: '멤버십 구독을 먼저 해지해야 카드를 삭제할 수 있습니다',
+        try {
+            const subscription = await prisma.membershipSubscription.findUnique({
+                where: { userId: req.user!.userId },
             });
-        }
+            if (subscription?.status === 'active') {
+                return res.status(400).json({
+                    error: '멤버십 구독을 먼저 해지해야 카드를 삭제할 수 있습니다',
+                });
+            }
 
-        await prisma.billingKey.deleteMany({
-            where: { userId: req.user!.userId },
-        });
-        res.json({ deleted: true });
+            await prisma.billingKey.deleteMany({
+                where: { userId: req.user!.userId },
+            });
+            res.json({ deleted: true });
+        } catch (error) {
+            console.error('Delete billing key error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     },
 );
 
@@ -295,23 +305,28 @@ router.post(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.membershipSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (!subscription || subscription.status !== 'active') {
-            return res.status(404).json({ error: 'Active subscription not found' });
+        try {
+            const subscription = await prisma.membershipSubscription.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            if (!subscription || subscription.status !== 'active') {
+                return res.status(404).json({ error: 'Active subscription not found' });
+            }
+
+            const updated = await prisma.membershipSubscription.update({
+                where: { userId: req.user!.userId },
+                data: {
+                    status: 'cancelled',
+                    cancelledAt: new Date(),
+                    pendingPlan: null,
+                },
+            });
+
+            res.json({ subscription: updated });
+        } catch (error) {
+            console.error('Subscribe cancel error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        const updated = await prisma.membershipSubscription.update({
-            where: { userId: req.user!.userId },
-            data: {
-                status: 'cancelled',
-                cancelledAt: new Date(),
-                pendingPlan: null,
-            },
-        });
-
-        res.json({ subscription: updated });
     },
 );
 
@@ -320,21 +335,26 @@ router.post(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.membershipSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (!subscription?.pendingPlan) {
-            return res
-                .status(404)
-                .json({ error: 'Pending downgrade not found' });
+        try {
+            const subscription = await prisma.membershipSubscription.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            if (!subscription?.pendingPlan) {
+                return res
+                    .status(404)
+                    .json({ error: 'Pending downgrade not found' });
+            }
+
+            const updated = await prisma.membershipSubscription.update({
+                where: { userId: req.user!.userId },
+                data: { pendingPlan: null },
+            });
+
+            res.json({ subscription: updated });
+        } catch (error) {
+            console.error('Subscribe downgrade cancel error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        const updated = await prisma.membershipSubscription.update({
-            where: { userId: req.user!.userId },
-            data: { pendingPlan: null },
-        });
-
-        res.json({ subscription: updated });
     },
 );
 
@@ -343,10 +363,15 @@ router.get(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.membershipSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        res.json({ subscription });
+        try {
+            const subscription = await prisma.membershipSubscription.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            res.json({ subscription });
+        } catch (error) {
+            console.error('Subscribe status error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     },
 );
 
@@ -355,31 +380,36 @@ router.post(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.membershipSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (
-            !subscription ||
-            subscription.status !== 'cancelled' ||
-            subscription.nextBillingAt <= new Date()
-        ) {
-            return res.status(400).json({
-                error: '재구독 가능한 기간이 지났습니다. 새로 구독해주세요.',
-            });
-        }
-
-        const [, updated] = await prisma.$transaction([
-            prisma.user.update({
-                where: { id: req.user!.userId },
-                data: { membershipPlan: subscription.plan },
-            }),
-            prisma.membershipSubscription.update({
+        try {
+            const subscription = await prisma.membershipSubscription.findUnique({
                 where: { userId: req.user!.userId },
-                data: { status: 'active', cancelledAt: null },
-            }),
-        ]);
+            });
+            if (
+                !subscription ||
+                subscription.status !== 'cancelled' ||
+                subscription.nextBillingAt <= new Date()
+            ) {
+                return res.status(400).json({
+                    error: '재구독 가능한 기간이 지났습니다. 새로 구독해주세요.',
+                });
+            }
 
-        res.json({ subscription: updated });
+            const [, updated] = await prisma.$transaction([
+                prisma.user.update({
+                    where: { id: req.user!.userId },
+                    data: { membershipPlan: subscription.plan },
+                }),
+                prisma.membershipSubscription.update({
+                    where: { userId: req.user!.userId },
+                    data: { status: 'active', cancelledAt: null },
+                }),
+            ]);
+
+            res.json({ subscription: updated });
+        } catch (error) {
+            console.error('Subscribe reactivate error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     },
 );
 
@@ -485,21 +515,26 @@ router.post(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.minBidAddonSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (!subscription || subscription.status !== 'active') {
-            return res
-                .status(404)
-                .json({ error: 'Active subscription not found' });
+        try {
+            const subscription = await prisma.minBidAddonSubscription.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            if (!subscription || subscription.status !== 'active') {
+                return res
+                    .status(404)
+                    .json({ error: 'Active subscription not found' });
+            }
+
+            const updated = await prisma.minBidAddonSubscription.update({
+                where: { userId: req.user!.userId },
+                data: { status: 'cancelled', cancelledAt: new Date() },
+            });
+
+            res.json({ subscription: updated });
+        } catch (error) {
+            console.error('Addon min-bid cancel error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        const updated = await prisma.minBidAddonSubscription.update({
-            where: { userId: req.user!.userId },
-            data: { status: 'cancelled', cancelledAt: new Date() },
-        });
-
-        res.json({ subscription: updated });
     },
 );
 
@@ -508,10 +543,15 @@ router.get(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.minBidAddonSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        res.json({ subscription });
+        try {
+            const subscription = await prisma.minBidAddonSubscription.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            res.json({ subscription });
+        } catch (error) {
+            console.error('Addon min-bid status error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     },
 );
 
@@ -520,60 +560,70 @@ router.post(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const subscription = await prisma.minBidAddonSubscription.findUnique({
-            where: { userId: req.user!.userId },
-        });
-        if (
-            !subscription ||
-            subscription.status !== 'cancelled' ||
-            subscription.nextBillingAt <= new Date()
-        ) {
-            return res.status(400).json({
-                error: '재구독 가능한 기간이 지났습니다. 새로 구독해주세요.',
-            });
-        }
-
-        const [, updated] = await prisma.$transaction([
-            prisma.user.update({
-                where: { id: req.user!.userId },
-                data: { minBidAddonPurchased: true },
-            }),
-            prisma.minBidAddonSubscription.update({
+        try {
+            const subscription = await prisma.minBidAddonSubscription.findUnique({
                 where: { userId: req.user!.userId },
-                data: { status: 'active', cancelledAt: null },
-            }),
-        ]);
+            });
+            if (
+                !subscription ||
+                subscription.status !== 'cancelled' ||
+                subscription.nextBillingAt <= new Date()
+            ) {
+                return res.status(400).json({
+                    error: '재구독 가능한 기간이 지났습니다. 새로 구독해주세요.',
+                });
+            }
 
-        res.json({ subscription: updated });
+            const [, updated] = await prisma.$transaction([
+                prisma.user.update({
+                    where: { id: req.user!.userId },
+                    data: { minBidAddonPurchased: true },
+                }),
+                prisma.minBidAddonSubscription.update({
+                    where: { userId: req.user!.userId },
+                    data: { status: 'active', cancelledAt: null },
+                }),
+            ]);
+
+            res.json({ subscription: updated });
+        } catch (error) {
+            console.error('Addon min-bid reactivate error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
     },
 );
 
 router.get('/transactions', requireAuth, async (req, res) => {
-    const kind = parseEnumQuery(PaymentTransactionKind, req.query.kind);
-    const status = parseEnumQuery(PaymentTransactionStatus, req.query.status);
-    const takeRaw = Number(req.query.take);
-    const take =
-        Number.isFinite(takeRaw) && takeRaw > 0
-            ? Math.min(Math.floor(takeRaw), 200)
-            : 50;
+    try {
+        const kind = parseEnumQuery(PaymentTransactionKind, req.query.kind);
+        const status = parseEnumQuery(PaymentTransactionStatus, req.query.status);
+        const takeRaw = Number(req.query.take);
+        const take =
+            Number.isFinite(takeRaw) && takeRaw > 0
+                ? Math.min(Math.floor(takeRaw), 200)
+                : 50;
 
-    const transactions = await prisma.paymentTransaction.findMany({
-        where: { userId: req.user!.userId, kind, status },
-        orderBy: { createdAt: 'desc' },
-        take,
-        select: {
-            id: true,
-            kind: true,
-            status: true,
-            amount: true,
-            tripId: true,
-            bidId: true,
-            failReason: true,
-            createdAt: true,
-        },
-    });
+        const transactions = await prisma.paymentTransaction.findMany({
+            where: { userId: req.user!.userId, kind, status },
+            orderBy: { createdAt: 'desc' },
+            take,
+            select: {
+                id: true,
+                kind: true,
+                status: true,
+                amount: true,
+                tripId: true,
+                bidId: true,
+                failReason: true,
+                createdAt: true,
+            },
+        });
 
-    res.json({ transactions });
+        res.json({ transactions });
+    } catch (error) {
+        console.error('Get transactions error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 export default router;

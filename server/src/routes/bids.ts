@@ -163,65 +163,75 @@ router.get(
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
     async (req, res) => {
-        const bidder = await prisma.user.findUnique({
-            where: { id: req.user!.userId },
-            select: { minBidAddonPurchased: true },
-        });
+        try {
+            const bidder = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: { minBidAddonPurchased: true },
+            });
 
-        if (!bidder) {
-            return res.status(404).json({ error: 'User not found' });
+            if (!bidder) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+
+            if (!bidder.minBidAddonPurchased) {
+                return res.json({ purchased: false });
+            }
+
+            const busSizes: BusSize[] = ['small', 'medium', 'large'];
+            const results = await Promise.all(
+                busSizes.map((busSize) =>
+                    prisma.bid.aggregate({
+                        where: { status: 'awarded', trip: { busSize } },
+                        _min: { price: true },
+                    })
+                )
+            );
+
+            const minByVehicleType = Object.fromEntries(
+                busSizes.map((busSize, i) => [
+                    busSize,
+                    results[i]._min.price !== null
+                        ? Number(results[i]._min.price)
+                        : null,
+                ])
+            );
+
+            res.json({ purchased: true, minByVehicleType });
+        } catch (error) {
+            console.error('Min bid by vehicle type error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        if (!bidder.minBidAddonPurchased) {
-            return res.json({ purchased: false });
-        }
-
-        const busSizes: BusSize[] = ['small', 'medium', 'large'];
-        const results = await Promise.all(
-            busSizes.map((busSize) =>
-                prisma.bid.aggregate({
-                    where: { status: 'awarded', trip: { busSize } },
-                    _min: { price: true },
-                })
-            )
-        );
-
-        const minByVehicleType = Object.fromEntries(
-            busSizes.map((busSize, i) => [
-                busSize,
-                results[i]._min.price !== null
-                    ? Number(results[i]._min.price)
-                    : null,
-            ])
-        );
-
-        res.json({ purchased: true, minByVehicleType });
     }
 );
 
 router.patch('/:id/withdraw', requireAuth, async (req, res) => {
-    const bid = await prisma.bid.findUnique({
-        where: { id: req.params.id },
-    });
+    try {
+        const bid = await prisma.bid.findUnique({
+            where: { id: req.params.id },
+        });
 
-    if (!bid) {
-        return res.status(404).json({ error: 'Bid not found' });
+        if (!bid) {
+            return res.status(404).json({ error: 'Bid not found' });
+        }
+
+        if (bid.bidderId !== req.user!.userId) {
+            return res.status(403).json({ error: 'Not your bid' });
+        }
+
+        if (bid.status !== 'open') {
+            return res.status(400).json({ error: 'Bid cannot be withdrawn' });
+        }
+
+        const updatedBid = await prisma.bid.update({
+            where: { id: req.params.id },
+            data: { status: 'withdrawn' },
+        });
+
+        res.json({ bid: updatedBid });
+    } catch (error) {
+        console.error('Withdraw bid error:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    if (bid.bidderId !== req.user!.userId) {
-        return res.status(403).json({ error: 'Not your bid' });
-    }
-
-    if (bid.status !== 'open') {
-        return res.status(400).json({ error: 'Bid cannot be withdrawn' });
-    }
-
-    const updatedBid = await prisma.bid.update({
-        where: { id: req.params.id },
-        data: { status: 'withdrawn' },
-    });
-
-    res.json({ bid: updatedBid });
 });
 
 export default router;

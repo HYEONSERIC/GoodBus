@@ -5,8 +5,9 @@ import prisma from '../utils/db';
 import { generateToken } from '../utils/jwt';
 import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
-import { sendOtpSms, isAligoDevMode } from '../utils/aligo';
+import { sendOtpSms } from '../utils/aligo';
 import { createIpRateLimiter, getClientIp } from '../utils/ipRateLimit';
+import { verifyTurnstileToken } from '../utils/turnstile';
 
 const router = express.Router();
 
@@ -44,6 +45,7 @@ const signupSchema = z.object({
     companyName: z.string().trim().min(1).max(100).optional(),
     phoneNumber: z.string().trim().min(1),
     phoneOtpCode: z.string().trim().min(1),
+    turnstileToken: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -104,6 +106,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
             companyName,
             phoneNumber: rawPhoneNumber,
             phoneOtpCode,
+            turnstileToken,
         } = signupSchema.parse(req.body);
 
         if (role === 'Driver' && !displayName) {
@@ -113,6 +116,21 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
             return res
                 .status(400)
                 .json({ error: '회사명과 담당자 이름을 입력해주세요' });
+        }
+
+        // Driver/BusCompany 가입에만 Turnstile 검증 적용(signup-business 전용).
+        // TURNSTILE_SECRET_KEY 미설정 시 verifyTurnstileToken은 항상 true를
+        // 반환하므로(Aligo/Sentry와 동일한 옵션 env 패턴) 키 발급 전에도 안전.
+        if (role !== 'Passenger') {
+            const turnstileOk = await verifyTurnstileToken(
+                turnstileToken,
+                getClientIp(req)
+            );
+            if (!turnstileOk) {
+                return res
+                    .status(400)
+                    .json({ error: '보안 인증에 실패했습니다. 다시 시도해주세요' });
+            }
         }
 
         const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
@@ -136,24 +154,46 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
 
         // 같은 번호라도 승객/기사·회사 계정군이 다르면 허용 — 기사·회사끼리는
         // (Driver/BusCompany) 같은 그룹으로 취급해 한 번호에 하나만 허용.
+        // 이미 같은 그룹에 계정이 있으면 새로 만들지 않고 그 계정으로 바로
+        // 로그인 처리한다(사용자 결정) — 인증번호로 본인 확인은 이미 끝났으므로
+        // 새 계정 생성을 막고 에러를 보여주는 것보다 그냥 로그인시키는 쪽이 더
+        // 자연스러움.
         const existingPhone = await prisma.user.findFirst({
             where: {
                 phoneNumber,
                 role: accountTypeRoleFilter(roleToAccountType(role)),
             },
+            select: {
+                id: true,
+                role: true,
+                displayName: true,
+                companyName: true,
+                phoneNumber: true,
+                createdAt: true,
+                status: true,
+            },
         });
         if (existingPhone) {
-            return res.status(400).json({
-                error:
-                    role === 'Passenger'
-                        ? '이미 승객으로 가입된 휴대전화번호입니다'
-                        : '이미 기사·회사로 가입된 휴대전화번호입니다',
+            if (existingPhone.status === 'Blocked') {
+                return res.status(403).json({ error: '차단된 계정입니다' });
+            }
+            const { status: _status, ...existingUser } = existingPhone;
+            const token = generateToken({
+                userId: existingUser.id,
+                role: existingUser.role,
             });
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: 7 * 24 * 60 * 60 * 1000,
+            });
+            return res.json({ user: existingUser, token });
         }
 
         const user = await prisma.user.create({
             data: {
-                role: role as any,
+                role,
                 displayName: role === 'Passenger' ? undefined : displayName,
                 companyName: role === 'BusCompany' ? companyName : undefined,
                 phoneNumber,
@@ -171,7 +211,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
 
         const token = generateToken({
             userId: user.id,
-            role: user.role as any,
+            role: user.role,
         });
 
         res.cookie('token', token, {
@@ -210,29 +250,38 @@ router.post('/phone/request-otp', otpRequestRateLimiter, async (req, res) => {
                 .json({ error: '올바른 휴대전화번호를 입력해주세요' });
         }
 
-        // 가입 여부를 응답으로 노출하면 무작위 번호 스캔으로 가입자 명단을
-        // 추출할 수 있어, 대상이 아닌 경우에도 겉보기엔 같은 성공 응답을
-        // 반환하되 실제 인증번호는 발송하지 않는다. accountType으로 승객/기사·회사
-        // 계정군을 나눠서 찾으므로 같은 번호라도 다른 계정군엔 영향 없음.
-        const user = await prisma.user.findFirst({
-            where: { phoneNumber, role: accountTypeRoleFilter(accountType) },
-        });
-        const eligible =
-            purpose === 'login'
-                ? !!user && user.status !== 'Blocked'
-                : !user;
-
-        if (!eligible) {
-            // devMode도 실제 발송 여부와 무관하게(서버 설정에만 의존) 동일한 값을
-            // 채워, 이 필드의 유무로 가입 여부를 구분할 수 없게 한다.
-            return res.json({
-                message: '인증번호가 발송되었습니다',
-                devMode: isAligoDevMode(),
+        // 가입(signup)은 이미 가입된 번호여도 인증번호를 그대로 보낸다 —
+        // /auth/signup 쪽에서 기존 계정이 있으면 새로 만들지 않고 바로
+        // 로그인시키므로 여기서 막을 이유가 없다(사용자 결정, 2026-08-20).
+        // 로그인(login)은 가입 여부를 바로 알려준다 — "등록된 회원 정보가
+        // 없습니다" 같은 명확한 안내가 우선이라는 판단(사용자 결정). 다만 이
+        // 라우트가 계정 존재/차단 여부를 그대로 노출하므로, 무작위 번호
+        // 스캔으로 가입자 명단을 추출하는 것까지 막지는 못한다 — 완화책은
+        // 아래 IP 레이트리밋(otpRequestRateLimiter)과 번호당 쿨다운/일일
+        // 한도(issueOtp)뿐임을 참고.
+        if (purpose === 'login') {
+            const user = await prisma.user.findFirst({
+                where: { phoneNumber, role: accountTypeRoleFilter(accountType) },
             });
+            if (!user) {
+                return res
+                    .status(404)
+                    .json({ error: '등록된 회원 정보가 없습니다' });
+            }
+            if (user.status === 'Blocked') {
+                return res.status(403).json({ error: '차단된 계정입니다' });
+            }
         }
 
         const issued = await issueOtp(phoneNumber, purpose, accountType);
         if (!issued.ok) {
+            if (issued.error === 'rate_limited') {
+                const minutes = Math.ceil(issued.retryAfterSeconds / 60);
+                return res.status(429).json({
+                    error: `요청이 너무 많습니다. ${minutes}분 후 다시 시도해주세요`,
+                    retryAfterSeconds: issued.retryAfterSeconds,
+                });
+            }
             const message =
                 issued.error === 'cooldown'
                     ? '잠시 후 다시 시도해주세요'

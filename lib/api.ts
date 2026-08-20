@@ -5,13 +5,24 @@ const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL ||
     'http://localhost:4000';
 
+// 백엔드가 응답 없이 무한 대기할 수 있는 경로가 있어(Express4 async rejection
+// 미처리 등, CLAUDE.md 참고) 프론트가 영원히 로딩 상태로 남지 않도록 기본
+// 타임아웃을 둔다. 호출자가 이미 signal을 넘긴 경우는 그대로 존중한다.
+const DEFAULT_TIMEOUT_MS = 15000;
+
 async function fetchAPI(endpoint: string, options?: RequestInit) {
+    const timeoutController = options?.signal ? null : new AbortController();
+    const timeoutId = timeoutController
+        ? setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS)
+        : null;
+
     try {
         const isFormData =
             typeof FormData !== 'undefined' && options?.body instanceof FormData;
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             credentials: 'include',
+            signal: options?.signal ?? timeoutController?.signal,
             headers: {
                 ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
                 ...options?.headers,
@@ -37,13 +48,21 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
             throw new Error(errorMessage);
         }
 
-        const data = await response.json();
-        return data;
+        // 2xx여도 바디가 비어있을 수 있다(204 등) — response.json()을 바로
+        // 부르면 빈 바디에서 SyntaxError가 나서 그대로 노출되므로, 텍스트로
+        // 먼저 읽고 내용이 있을 때만 JSON 파싱한다.
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
     } catch (error: unknown) {
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             throw new Error('Cannot connect to server. Please check if the backend server is running.');
         }
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+        }
         throw error;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
     }
 }
 
@@ -68,6 +87,7 @@ export const authAPI = {
         phoneOtpCode: string;
         displayName?: string;
         companyName?: string;
+        turnstileToken?: string;
     }) =>
         fetchAPI('/auth/signup', {
             method: 'POST',

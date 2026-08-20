@@ -6,9 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AuthScaffold } from '@/components/auth/AuthScaffold';
+import { TurnstileWidget } from '@/components/auth/TurnstileWidget';
 import { authAPI } from '@/lib/api';
 
 const RESEND_COOLDOWN_SECONDS = 60;
+// 사이트 키가 없으면(예: 로컬/키 발급 전) TurnstileWidget이 아무것도 렌더링하지
+// 않고 서버도 항상 통과시키므로, 이때는 토큰 없이도 제출을 막지 않는다.
+const TURNSTILE_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
 
 export default function SignupBusinessPage() {
     const router = useRouter();
@@ -25,6 +29,7 @@ export default function SignupBusinessPage() {
     const [resendCooldown, setResendCooldown] = useState(0);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
     useEffect(() => {
         if (resendCooldown <= 0) return;
@@ -77,6 +82,10 @@ export default function SignupBusinessPage() {
             setError('휴대전화 인증을 완료해주세요.');
             return;
         }
+        if (TURNSTILE_ENABLED && !turnstileToken) {
+            setError('보안 인증을 완료해주세요.');
+            return;
+        }
 
         setLoading(true);
         try {
@@ -87,6 +96,7 @@ export default function SignupBusinessPage() {
                 displayName: name.trim(),
                 companyName:
                     accountType === 'BusCompany' ? companyName.trim() : undefined,
+                turnstileToken: turnstileToken ?? undefined,
             });
             router.push('/dashboard');
         } catch (err: unknown) {
@@ -202,6 +212,9 @@ export default function SignupBusinessPage() {
                     {phoneNotice && (
                         <p className="text-sm text-gray-500">{phoneNotice}</p>
                     )}
+
+                    <TurnstileWidget onVerify={setTurnstileToken} />
+
                     {error && <p className="text-sm text-red-500">{error}</p>}
 
                     <Button

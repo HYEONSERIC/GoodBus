@@ -144,7 +144,6 @@ export interface MyBidQuoteDetailDialogProps {
 export function MyBidQuoteDetailDialog({
     open,
     onOpenChange,
-    role: _role,
     trip,
     partnerTrip,
     km,

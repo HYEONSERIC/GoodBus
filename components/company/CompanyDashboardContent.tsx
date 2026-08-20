@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -37,6 +38,13 @@ import { useCompanyDashboard } from '@/hooks/useCompanyDashboard';
 
 export function CompanyDashboardContent() {
     const c = useCompanyDashboard();
+    // filterTrips 자체는 useCallback으로 안정화되어 있지만 호출 결과는 매번
+    // 새 배열이라, JSX에서 바로 호출하면 OpenTripsList의 useMemo가 무력화된다
+    // — 실제 입력(trips)이 바뀔 때만 재계산되도록 여기서 감싼다.
+    const filteredOpenTrips = useMemo(
+        () => c.tripFilters.filterTrips(c.trips),
+        [c.tripFilters, c.trips],
+    );
 
     return (
         <>
@@ -155,7 +163,7 @@ export function CompanyDashboardContent() {
                             <OpenTripsList
                                 trips={c.trips}
                                 allTrips={c.openTripsPool}
-                                filteredTrips={c.tripFilters.filterTrips(c.trips)}
+                                filteredTrips={filteredOpenTrips}
                                 distanceByTripId={c.distanceByTripId}
                                 onBid={c.handleBidButtonClick}
                                 emptyWhenNoTrips="입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다."

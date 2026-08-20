@@ -2,6 +2,7 @@
 
 import {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useMemo,
@@ -101,15 +102,52 @@ function usePassengerDashboardState() {
         return url.startsWith('/uploads') ? `${uploadBaseUrl}${url}` : url;
     }
 
-    useEffect(() => {
-        loadData();
+    const loadDriverReviewSummaries = useCallback(async (tripList: Trip[]) => {
+        const ids = new Set<string>();
+        for (const trip of tripList) {
+            for (const bid of trip.bids || []) {
+                if (bid.bidder?.id) {
+                    ids.add(bid.bidder.id);
+                }
+            }
+        }
+        if (ids.size === 0) {
+            setDriverStatsById({});
+            return;
+        }
+        try {
+            const data = await reviewsAPI.getDriversSummary([...ids]);
+            setDriverStatsById(data.byDriverId || {});
+        } catch {
+            setDriverStatsById({});
+        }
     }, []);
 
-    useEffect(() => {
-        if (bidDetail) setBidGalleryIndex(0);
-    }, [bidDetail?.bid?.id]);
+    const loadTripReviews = useCallback(async (tripList: Trip[]) => {
+        const completedIds = tripList
+            .filter(
+                (t) =>
+                    t.status === 'awarded' &&
+                    new Date(t.dateTime).getTime() < Date.now(),
+            )
+            .map((t) => t.id);
+        if (completedIds.length === 0) {
+            setTripReviewsByTripId({});
+            return;
+        }
+        try {
+            const data = await reviewsAPI.listForTrips(completedIds);
+            const map: Record<string, TripReviewRecord> = {};
+            for (const r of data.reviews || []) {
+                map[r.tripId] = r;
+            }
+            setTripReviewsByTripId(map);
+        } catch {
+            /* ignore */
+        }
+    }, []);
 
-    async function loadData() {
+    const loadData = useCallback(async () => {
         try {
             const userData = await authAPI.getMe();
             setUser(userData.user);
@@ -134,28 +172,19 @@ function usePassengerDashboardState() {
             console.error('Error loading data:', error);
             window.location.href = '/login';
         }
-    }
+    }, [loadTripReviews, loadDriverReviewSummaries]);
 
-    async function loadDriverReviewSummaries(tripList: Trip[]) {
-        const ids = new Set<string>();
-        for (const trip of tripList) {
-            for (const bid of trip.bids || []) {
-                if (bid.bidder?.id) {
-                    ids.add(bid.bidder.id);
-                }
-            }
-        }
-        if (ids.size === 0) {
-            setDriverStatsById({});
-            return;
-        }
-        try {
-            const data = await reviewsAPI.getDriversSummary([...ids]);
-            setDriverStatsById(data.byDriverId || {});
-        } catch {
-            setDriverStatsById({});
-        }
-    }
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useEffect(() => {
+        if (bidDetail) setBidGalleryIndex(0);
+        // bidDetail 객체 전체가 아니라 bid.id만 의존성으로 둔다 — openBidDetail은
+        // 매번 새 객체를 만들지만, 갤러리 인덱스를 리셋해야 하는 실제 조건은
+        // "선택된 입찰이 바뀌었는가"이지 객체 참조가 바뀌었는가가 아니다.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [bidDetail?.bid?.id]);
 
     async function openBidDetail(bid: Bid, bidTrip: Trip) {
         const requestId = ++bidDetailRequestRef.current;
@@ -192,30 +221,6 @@ function usePassengerDashboardState() {
             return '—';
         }
         return formatPassengerBidderRating(stats.avgRating, stats.count);
-    }
-
-    async function loadTripReviews(tripList: Trip[]) {
-        const completedIds = tripList
-            .filter(
-                (t) =>
-                    t.status === 'awarded' &&
-                    new Date(t.dateTime).getTime() < Date.now(),
-            )
-            .map((t) => t.id);
-        if (completedIds.length === 0) {
-            setTripReviewsByTripId({});
-            return;
-        }
-        try {
-            const data = await reviewsAPI.listForTrips(completedIds);
-            const map: Record<string, TripReviewRecord> = {};
-            for (const r of data.reviews || []) {
-                map[r.tripId] = r;
-            }
-            setTripReviewsByTripId(map);
-        } catch {
-            /* ignore */
-        }
     }
 
     async function handleLogout() {
@@ -382,11 +387,6 @@ function usePassengerDashboardState() {
     const distanceByTripId = useTripDistances(tripsForDistance);
 
     const awardedTrips = trips.filter((trip) => trip.status === 'awarded');
-
-    const passengerOpenTrips = useMemo(
-        () => trips.filter((t) => t.status === 'open'),
-        [trips],
-    );
 
     const passengerAwardedReservationTrips = useMemo(
         () =>

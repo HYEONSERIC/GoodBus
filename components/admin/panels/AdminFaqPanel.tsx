@@ -1,7 +1,6 @@
 'use client';
 
 import { DashboardSubTabs } from '@/components/layout/DashboardSubTabs';
-import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { ADMIN_FAQ_SUB_TABS } from '@/components/admin/adminFaqConstants';
 import { AdminFaqPostsPanel } from '@/components/admin/panels/AdminFaqPostsPanel';
 import { AdminFaqInquiriesPanel } from '@/components/admin/panels/AdminFaqInquiriesPanel';

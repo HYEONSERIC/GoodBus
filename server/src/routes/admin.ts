@@ -191,6 +191,10 @@ router.get('/users', requireAuth, requireRole(UserRole.Admin), async (req, res) 
             createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
+        // 프론트(AdminUsersPanel)가 전량 배열을 기대하는 구조라 페이지네이션
+        // UI 개편은 이번 범위에서 보류 — 대신 사용자 수가 늘어도 쿼리가
+        // 무제한으로 커지지 않도록 안전 상한만 둔다.
+        take: 1000,
     });
 
     res.json({ users });
@@ -665,6 +669,10 @@ router.get(
             return res.status(400).json({ error: 'Invalid status filter' });
         }
 
+        // AdminVerificationPanel도 전량 배열을 기대해 페이지네이션 UI 개편은
+        // 보류 — 무제한 조회만 막는 안전 상한.
+        const VERIFICATIONS_TAKE_CAP = 1000;
+
         if (type === 'all') {
             const [drivers, companies] = await Promise.all([
                 prisma.user.findMany({
@@ -674,6 +682,7 @@ router.get(
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
+                    take: VERIFICATIONS_TAKE_CAP,
                 }),
                 prisma.user.findMany({
                     where: {
@@ -682,6 +691,7 @@ router.get(
                     },
                     select: verificationUserSelect,
                     orderBy: { createdAt: 'desc' },
+                    take: VERIFICATIONS_TAKE_CAP,
                 }),
             ]);
             const users = [...drivers, ...companies].sort(
@@ -704,6 +714,7 @@ router.get(
             },
             select: verificationUserSelect,
             orderBy: { createdAt: 'desc' },
+            take: VERIFICATIONS_TAKE_CAP,
         });
 
         res.json({ users });
@@ -775,11 +786,11 @@ router.patch(
         const data =
             type === 'company'
                 ? {
-                      companyRegistrationStatus: status as any,
+                      companyRegistrationStatus: status,
                       companyRegistrationNote: reason || null,
                   }
                 : {
-                      driverLicenseStatus: status as any,
+                      driverLicenseStatus: status,
                       driverLicenseNote: reason || null,
                   };
 

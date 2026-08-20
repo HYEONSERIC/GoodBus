@@ -40,10 +40,9 @@ const createTripSchema = z.object({
 router.get('/', requireAuth, async (req, res) => {
     const { status } = req.query;
 
-    // 스키마에 없는 값은 Prisma가 런타임에 던지는데, 이 핸들러엔 try/catch가
-    // 없어(Express 4는 async 핸들러의 reject를 자동으로 안 잡음) 그대로 두면
-    // 응답 없이 요청이 무한 대기한다 — 관리자 전용도 아닌 모든 로그인 사용자가
-    // 트리거할 수 있어 admin.ts의 같은 패턴보다 노출 범위가 넓다.
+    // 스키마에 없는 값은 400으로 미리 걸러(아래 enum 캐스트가 Prisma까지
+    // 가지 않게) 방지하고, 그 아래 나머지 로직은 try/catch로 감싸 DB 순간
+    // 장애 등 예기치 못한 예외에도 무응답 무한대기 없이 500을 반환하게 한다.
     if (
         status !== undefined &&
         !Object.values(TripStatus).includes(status as TripStatus)
@@ -51,11 +50,12 @@ router.get('/', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Invalid status filter' });
     }
 
-    if (req.user!.role === UserRole.Passenger) {
-        await expireExpiredOpenTripsForPassenger(req.user!.userId);
-    }
+    try {
+        if (req.user!.role === UserRole.Passenger) {
+            await expireExpiredOpenTripsForPassenger(req.user!.userId);
+        }
 
-    const trips = await prisma.trip.findMany({
+        const trips = await prisma.trip.findMany({
         where: status ? { status: status as TripStatus } : undefined,
         include: {
             passenger: {
@@ -91,28 +91,32 @@ router.get('/', requireAuth, async (req, res) => {
         orderBy: { createdAt: 'desc' },
     });
 
-    // Calculate minimum bid price for each trip using AGGREGATE query
-    const tripsWithMinBid = await Promise.all(
-        trips.map(async (trip) => {
-            // AGGREGATE query: Find minimum bid price for open bids
-            const minBidResult = await prisma.bid.aggregate({
-                where: {
-                    tripId: trip.id,
-                    status: 'open',
-                },
-                _min: {
-                    price: true,
-                },
-            });
-
-            return {
-                ...trip,
-                minBidPrice: minBidResult._min.price
-                    ? Number(minBidResult._min.price)
-                    : null,
-            };
-        })
+    // trip마다 별도 aggregate를 날리던 N+1을 단일 groupBy로 축소 — 쿼리 수가
+    // trip 개수와 무관하게 1회로 고정된다. (페이지네이션 자체는 이 엔드포인트를
+    // 쓰는 3개 대시보드 훅이 전량 조회를 전제하고, 왕복 여정 매칭(tripGroupsCore)도
+    // 전체 목록을 봐야 동작해서 이번 범위에서는 보류.)
+    const minBidRows =
+        trips.length > 0
+            ? await prisma.bid.groupBy({
+                  by: ['tripId'],
+                  where: {
+                      tripId: { in: trips.map((trip) => trip.id) },
+                      status: 'open',
+                  },
+                  _min: { price: true },
+              })
+            : [];
+    const minBidByTripId = new Map(
+        minBidRows.map((row) => [row.tripId, row._min.price])
     );
+
+    const tripsWithMinBid = trips.map((trip) => {
+        const minPrice = minBidByTripId.get(trip.id);
+        return {
+            ...trip,
+            minBidPrice: minPrice != null ? Number(minPrice) : null,
+        };
+    });
 
     // Admin sub-roles like CustomerSupport can see trips (for support/
     // moderation) but not revenue — mask bid prices the same way the
@@ -153,15 +157,19 @@ router.get('/', requireAuth, async (req, res) => {
           }))
         : tripsWithMinBid;
 
-    res.json({
-        trips: maskRevenue
-            ? tripsWithBidderMasking.map((trip) => ({
-                  ...trip,
-                  minBidPrice: null,
-                  bids: trip.bids.map((bid) => ({ ...bid, price: 0 })),
-              }))
-            : tripsWithBidderMasking,
-    });
+        res.json({
+            trips: maskRevenue
+                ? tripsWithBidderMasking.map((trip) => ({
+                      ...trip,
+                      minBidPrice: null,
+                      bids: trip.bids.map((bid) => ({ ...bid, price: 0 })),
+                  }))
+                : tripsWithBidderMasking,
+        });
+    } catch (error) {
+        console.error('List trips error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 router.post(

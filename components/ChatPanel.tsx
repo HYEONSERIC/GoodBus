@@ -223,6 +223,10 @@ export function ChatPanel({
 
     useEffect(() => {
         loadInitialData();
+        // loadInitialData는 useCallback으로 안정화되어 있지 않아 deps에 넣으면
+        // 매 렌더마다(자기 자신이 setState하므로) 재호출되는 루프가 생긴다 —
+        // 마운트 시 1회만 실행되어야 하므로 의도적으로 제외.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -251,6 +255,10 @@ export function ChatPanel({
         }, 3000);
 
         return () => clearInterval(interval);
+        // loadMessages도 위와 동일한 이유로 deps에서 의도적으로 제외 — 방을
+        // 바꿀 때만 폴링을 재설정하면 되고, 안정화되지 않은 함수 참조를 넣으면
+        // 메시지가 갱신될 때마다 재구독 루프가 생긴다.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedRoomId]);
 
     useEffect(() => {
