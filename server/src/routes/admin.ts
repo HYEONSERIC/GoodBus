@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth, requireRole, requireAdminRole, canViewRevenue } from '../middleware/auth';
 import {
@@ -65,6 +66,21 @@ function parseEnumQuery<T extends Record<string, string>>(
         ? (value as T[keyof T])
         : undefined;
 }
+
+const updateUserStatusSchema = z.object({
+    status: z.enum(['Active', 'Blocked']),
+});
+
+const reviewVerificationSchema = z.object({
+    status: z.enum(['approved', 'rejected']),
+    reason: z.string().trim().max(1000).optional(),
+});
+
+const createAdminSchema = z.object({
+    email: z.string().email(),
+    password: z.string().min(1),
+    adminRole: z.enum(['Super', 'CustomerSupport', 'Operations', 'Finance']),
+});
 
 router.get('/overview', requireAuth, requireRole(UserRole.Admin), async (req, res) => {
     const activeTripWhere = { status: { not: TripStatus.cancelled } };
@@ -335,56 +351,62 @@ router.patch(
     requireAuth,
     requireRole(UserRole.Admin),
     async (req, res) => {
-        const { status } = req.body as { status?: 'Active' | 'Blocked' };
+        try {
+            const { status } = updateUserStatusSchema.parse(req.body);
 
-        if (!status || !['Active', 'Blocked'].includes(status)) {
-            return res.status(400).json({ error: 'Invalid status' });
-        }
-
-        const target = await prisma.user.findUnique({
-            where: { id: req.params.id },
-            select: { role: true, adminRole: true, status: true },
-        });
-
-        if (!target) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        if (target.role === UserRole.Admin) {
-            const actor = await prisma.user.findUnique({
-                where: { id: req.user!.userId },
-                select: { adminRole: true },
+            const target = await prisma.user.findUnique({
+                where: { id: req.params.id },
+                select: { role: true, adminRole: true, status: true },
             });
 
-            if (actor?.adminRole !== AdminRole.Super) {
-                return res
-                    .status(403)
-                    .json({ error: 'Only super admins can modify admin accounts' });
+            if (!target) {
+                return res.status(404).json({ error: 'User not found' });
             }
+
+            if (target.role === UserRole.Admin) {
+                const actor = await prisma.user.findUnique({
+                    where: { id: req.user!.userId },
+                    select: { adminRole: true },
+                });
+
+                if (actor?.adminRole !== AdminRole.Super) {
+                    return res
+                        .status(403)
+                        .json({ error: 'Only super admins can modify admin accounts' });
+                }
+            }
+
+            const user = await prisma.user.update({
+                where: { id: req.params.id },
+                data: { status },
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    status: true,
+                    adminRole: true,
+                    createdAt: true,
+                },
+            });
+
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'user.status.update',
+                targetType: 'User',
+                targetId: user.id,
+                metadata: { from: target.status, to: status, email: user.email },
+            });
+
+            res.json({ user });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res
+                    .status(400)
+                    .json({ error: 'Invalid input', details: error.errors });
+            }
+            console.error('Update user status error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        const user = await prisma.user.update({
-            where: { id: req.params.id },
-            data: { status },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                status: true,
-                adminRole: true,
-                createdAt: true,
-            },
-        });
-
-        void recordAdminAudit({
-            actorId: req.user!.userId,
-            action: 'user.status.update',
-            targetType: 'User',
-            targetId: user.id,
-            metadata: { from: target.status, to: status, email: user.email },
-        });
-
-        res.json({ user });
     }
 );
 
@@ -773,69 +795,72 @@ router.patch(
     requireAuth,
     requireRole(UserRole.Admin),
     async (req, res) => {
-        const type = String(req.query.type || 'driver');
-        const { status, reason } = req.body as {
-            status?: 'approved' | 'rejected';
-            reason?: string;
-        };
+        try {
+            const type = String(req.query.type || 'driver');
+            const { status, reason } = reviewVerificationSchema.parse(req.body);
 
-        if (!status || !['approved', 'rejected'].includes(status)) {
-            return res.status(400).json({ error: 'Invalid status' });
+            const data =
+                type === 'company'
+                    ? {
+                          companyRegistrationStatus: status,
+                          companyRegistrationNote: reason || null,
+                      }
+                    : {
+                          driverLicenseStatus: status,
+                          driverLicenseNote: reason || null,
+                      };
+
+            const user = await prisma.user.update({
+                where: { id: req.params.id },
+                data,
+                select: {
+                    id: true,
+                    email: true,
+                    phoneNumber: true,
+                    displayName: true,
+                    companyName: true,
+                    role: true,
+                    driverLicenseStatus: true,
+                    companyRegistrationStatus: true,
+                },
+            });
+
+            await prisma.notification.create({
+                data: {
+                    userId: user.id,
+                    type:
+                        status === 'approved'
+                            ? 'VERIFICATION_APPROVED'
+                            : 'VERIFICATION_REJECTED',
+                    title:
+                        status === 'approved'
+                            ? '인증 승인 완료'
+                            : '인증 반려',
+                    message:
+                        status === 'approved'
+                            ? '제출한 서류가 승인되었습니다.'
+                            : `인증이 반려되었습니다. 사유: ${reason || '사유 없음'}`,
+                },
+            });
+
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'verification.review',
+                targetType: 'User',
+                targetId: user.id,
+                metadata: { type, status, reason: reason || null, email: user.email },
+            });
+
+            res.json({ user });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res
+                    .status(400)
+                    .json({ error: 'Invalid input', details: error.errors });
+            }
+            console.error('Verification review error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        const data =
-            type === 'company'
-                ? {
-                      companyRegistrationStatus: status,
-                      companyRegistrationNote: reason || null,
-                  }
-                : {
-                      driverLicenseStatus: status,
-                      driverLicenseNote: reason || null,
-                  };
-
-        const user = await prisma.user.update({
-            where: { id: req.params.id },
-            data,
-            select: {
-                id: true,
-                email: true,
-                phoneNumber: true,
-                displayName: true,
-                companyName: true,
-                role: true,
-                driverLicenseStatus: true,
-                companyRegistrationStatus: true,
-            },
-        });
-
-        await prisma.notification.create({
-            data: {
-                userId: user.id,
-                type:
-                    status === 'approved'
-                        ? 'VERIFICATION_APPROVED'
-                        : 'VERIFICATION_REJECTED',
-                title:
-                    status === 'approved'
-                        ? '인증 승인 완료'
-                        : '인증 반려',
-                message:
-                    status === 'approved'
-                        ? '제출한 서류가 승인되었습니다.'
-                        : `인증이 반려되었습니다. 사유: ${reason || '사유 없음'}`,
-            },
-        });
-
-        void recordAdminAudit({
-            actorId: req.user!.userId,
-            action: 'verification.review',
-            targetType: 'User',
-            targetId: user.id,
-            metadata: { type, status, reason: reason || null, email: user.email },
-        });
-
-        res.json({ user });
     }
 );
 
@@ -1006,57 +1031,61 @@ router.post(
     requireRole(UserRole.Admin),
     requireAdminRole(AdminRole.Super),
     async (req, res) => {
-        const { email, password, adminRole } = req.body as {
-            email?: string;
-            password?: string;
-            adminRole?: 'Super' | 'CustomerSupport' | 'Operations' | 'Finance';
-        };
+        try {
+            const { email, password, adminRole } = createAdminSchema.parse(
+                req.body,
+            );
 
-        if (!email || !password || !adminRole) {
-            return res.status(400).json({ error: 'Missing required fields' });
+            if (adminRole === 'Super') {
+                return res
+                    .status(400)
+                    .json({ error: 'Creating another super admin is disabled' });
+            }
+
+            const existing = await prisma.user.findUnique({ where: { email } });
+            if (existing) {
+                return res.status(400).json({ error: 'Email already exists' });
+            }
+
+            const bcrypt = await import('bcrypt');
+            const passwordHash = await bcrypt.hash(password, 10);
+
+            const admin = await prisma.user.create({
+                data: {
+                    email,
+                    passwordHash,
+                    role: UserRole.Admin,
+                    status: 'Active',
+                    adminRole,
+                },
+                select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    status: true,
+                    adminRole: true,
+                    createdAt: true,
+                },
+            });
+
+            void recordAdminAudit({
+                actorId: req.user!.userId,
+                action: 'admin.create',
+                targetType: 'User',
+                targetId: admin.id,
+                metadata: { email: admin.email, adminRole: admin.adminRole },
+            });
+
+            res.status(201).json({ admin });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res
+                    .status(400)
+                    .json({ error: 'Invalid input', details: error.errors });
+            }
+            console.error('Create admin error:', error);
+            res.status(500).json({ error: 'Internal server error' });
         }
-
-        if (adminRole === 'Super') {
-            return res
-                .status(400)
-                .json({ error: 'Creating another super admin is disabled' });
-        }
-
-        const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) {
-            return res.status(400).json({ error: 'Email already exists' });
-        }
-
-        const bcrypt = await import('bcrypt');
-        const passwordHash = await bcrypt.hash(password, 10);
-
-        const admin = await prisma.user.create({
-            data: {
-                email,
-                passwordHash,
-                role: UserRole.Admin,
-                status: 'Active',
-                adminRole,
-            },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-                status: true,
-                adminRole: true,
-                createdAt: true,
-            },
-        });
-
-        void recordAdminAudit({
-            actorId: req.user!.userId,
-            action: 'admin.create',
-            targetType: 'User',
-            targetId: admin.id,
-            metadata: { email: admin.email, adminRole: admin.adminRole },
-        });
-
-        res.status(201).json({ admin });
     }
 );
 
