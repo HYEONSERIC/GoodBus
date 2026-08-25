@@ -98,6 +98,14 @@ export default function CompanyPage() {
                                     649-86-03636
                                 </dd>
                             </div>
+                            <div>
+                                <dt className="text-stone-400">
+                                    통신판매업신고번호
+                                </dt>
+                                <dd className="mt-1 font-medium text-stone-900">
+                                    제2026-대구동구-0964호
+                                </dd>
+                            </div>
                             <div className="sm:col-span-2">
                                 <dt className="text-stone-400">주소</dt>
                                 <dd className="mt-1 font-medium text-stone-900">
