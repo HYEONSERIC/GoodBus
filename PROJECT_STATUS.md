@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-08-19
+**최종 갱신:** 2026-08-25
 
 ---
 
@@ -24,7 +24,7 @@
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
 - **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
 - **커스텀 도메인 연결(2026-08-18)**: 카페24 콘솔의 "대표 도메인" 지정은 DNS 연결만 해줄 뿐 서버 Nginx/인증서는 자동 반영되지 않아 처음엔 `busrent.co.kr` 접속 시 Nginx 기본 404가 떴음 — `certbot --expand`로 인증서 확장 + Nginx `server_name`/리다이렉트 규칙 수동 추가로 해결, `NEXT_PUBLIC_SITE_URL`도 새 도메인으로 갱신 후 재빌드(sitemap·OG태그·JSON-LD가 이제 `busrent.co.kr` 기준). 절차는 `DEPLOYMENT.md` "10-6" 참고. 카카오맵 API 허용 도메인은 등록 완료(사용자 확인)
-- **아직 안 됨:** Kakao 키 재발급 여부 미확인(Toss는 2026-08-16 재발급 완료), Toss 허용 도메인에 새 도메인 등록 여부 미확인, Phase 3(Cloudflare 전체 프록시 — 도메인 구매라는 전제조건은 이제 충족됨)
+- **Phase 3(Cloudflare 전체 프록시) 2026-08-25 완료** — 네임서버를 Cloudflare로 이관(`cody.ns.cloudflare.com`/`paloma.ns.cloudflare.com`), DNS Proxied(오렌지 클라우드), SSL/TLS 모드 Full (strict). Nginx에 Cloudflare 엣지 IP `set_real_ip_from`+`real_ip_header CF-Connecting-IP` 추가해 레이트리밋·`X-Real-IP`가 Cloudflare IP 하나로 뭉쳐지는 문제 방지, 추가로 `busrent.co.kr` 직접 원본 IP 우회 접속을 nginx `geo`+호스트 매치로 차단(`goodbus0716.mycafe24.com`은 UptimeRobot 의존성 때문에 의도적으로 예외). 전부 라이브 curl로 검증 완료 — 자세한 내용은 아래 "완료됨" 2026-08-25 항목 참고. **Kakao/Toss 관련 남은 항목도 같은 날 해소** — 상세는 아래 참고.
 
 ---
 
@@ -212,9 +212,9 @@
     - 로그인(`/auth/login`)·회원가입(`/auth/signup`)·전화로그인(`/auth/phone/login`)에도 IP 레이트리밋 확장(`server/src/utils/ipRateLimit.ts`로 공용화), 로그인 실패를 `[SECURITY] failed login ip=... email=...` 형식으로 로그 — VPS의 fail2ban 커스텀 jail이 이 포맷을 그대로 사용 예정. 실제 curl로 20회에서 429 걸리는 것, 실패 로그 찍히는 것 확인 완료
     - 업로드 매직바이트 검증 추가(`server/src/utils/uploadFileFilter.ts`) — 지금까지 파일 확장자를 클라이언트가 신고한 `Content-Type`만으로 결정해서, 위조된 mimetype으로 임의 파일이 이미지인 척 저장될 수 있었음. 실제 첫 바이트 시그니처(JPEG/PNG/WEBP/GIF)를 재검증하도록 `services/storage.ts`에서 강제. 이 과정에서 `verification.ts`(신분증·사업자등록증 업로드)가 다른 라우트들과 다르게 `multer.diskStorage`를 직접 쓰고 있어 검증을 못 걸던 것도 발견해 `memoryStorage`+공용 `storage.saveFile`로 통일(부수적으로 누락돼 있던 try/catch도 같이 해결). 위조 파일 거부(400)·정상 파일 통과(200) 둘 다 실제 curl로 검증
     - Nginx에 알려진 스캐너 UA(sqlmap/nikto/nmap 등)·빈 UA·흔한 취약점 스캔 경로(`/wp-admin`, `/.env`, `/.git` 등) 차단(`444`, 무응답 종료) 추가 — Docker로 실제 요청 보내 정상 트래픽은 통과, 스캐너 패턴은 연결 즉시 종료되는 것 확인. UA 위조는 쉬워서 진짜 방어선이 아니라 노이즈 감소용임을 명시
-    - `profile.ts`·`chats.ts`에 Zod 스키마 적용(admin.ts는 크래시 유발 패턴 재확인 결과 이미 없어서 보류, CSRF도 GET 기반 상태변경 라우트 없음 재확인)
-    - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키 발급(무료 Cloudflare 계정 가입)은 아직 안 됨** — 키 없으면 위젯 자체가 안 뜨고 서버 검증도 스킵되는 상태로 당분간 유지
-    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **2026-08-16에 전부 완료 — 아래 항목 참고.** **Phase 3(안정화 후 별도, 미착수)**: 도메인 구매→Cloudflare 전체 프록시(무료 DDoS 완화+WAF+Bot Fight Mode), Turnstile 키 실제 발급
+    - `profile.ts`·`chats.ts`에 Zod 스키마 적용(CSRF도 GET 기반 상태변경 라우트 없음 재확인). **당시 admin.ts는 "크래시 유발 패턴 없음"으로 판단해 보류했으나, 2026-08-25 재점검 결과 이 판단이 틀렸던 것으로 확인됨** — 아래 2026-08-25 항목 참고
+    - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키는 2026-08-25 발급·반영 완료** — 아래 항목 참고
+    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **2026-08-16에 전부 완료 — 아래 항목 참고.** **Phase 3(Cloudflare 전체 프록시): 2026-08-25 완료** — 아래 항목 참고
 - **실제 프로덕션 배포 + 인프라 보안 강화 완료** (2026-08-16)
     - `DEPLOYMENT.md` 순서대로 `goodbus0716.mycafe24.com`에 실제 배포. 문서에 없던 인프라 이슈 5건을 배포 중 새로 발견·수정(카페24 starter 앱의 포트 3000 선점, 네이티브 Postgres 5432 충돌, `/uploads` 프록시 누락, welcome 페이지 우선순위, Nginx `add_header` 상속 버그로 인한 HSTS 미노출) — 전부 `DEPLOYMENT.md` "10. 배포 후 체크리스트"/트러블슈팅 표에 반영
     - **fail2ban**: 카페24가 이미 설치해둔 fail2ban + `nginx-http-auth`/`nginx-limit-req`/`nginx-botsearch` 필터를 활성화하고, 우리 앱 전용 `goodbus-login` jail(로그인 실패 로그 기반) 추가. 과정에서 `backend=auto`가 조용히 journald만 보고 지정한 로그 파일은 무시하는 버그를 발견 — `backend=polling`으로 전 jail 수정. 실제 8회 실패 로그인으로 밴 발생시키고 해제까지 라이브 검증(`DEPLOYMENT.md` "10-4")
@@ -245,6 +245,13 @@
     - 알리고 SMS 단독 발송을 로컬·프로덕션 `.env`에 실제로 연동(`ALIGO_API_KEY`/`ALIGO_USER_ID`/`ALIGO_SENDER`) — 발송 서버 IP(`172.237.7.249`)가 알리고 화이트리스트에 등록돼 있어야만 성공한다는 걸 로컬 머신에서 직접 테스트하다 발견(로컬 공인 IP로는 `-101 인증오류` 거부당함, VPS IP로는 정상 발송). 실제 문자 수신까지 확인
     - 수신한 SMS 문구에 구 브랜드명 "GoodBus"가 그대로 남아있던 걸 발견 — `server/src/utils/aligo.ts`의 SMS/알림톡 문구를 "버스대절"로 수정(`fa65b00`), 프로덕션에도 재배포
     - `/verify` 스킬로 로컬에서 승객/기사/버스회사 3개 역할 가입→로그인 전체 플로우, 역할별 필수 필드 검증, 번호당 다중 역할(같은 번호로 승객+기사 계정 동시 보유), 관리자 이메일/비밀번호 로그인을 전부 실제 구동해 검증하던 중 — **승객 가입 OTP를 받자마자 같은 번호로 기사·회사 가입 OTP를 요청하면 불필요하게 60초 쿨다운에 걸리는 문제**를 발견. 원인은 `PhoneVerification` 테이블과 `otp.ts`(발급/검증)가 `accountType` 개념 자체가 없어 쿨다운·일일한도·코드조회가 전부 `(phoneNumber, purpose)`로만 묶여있었기 때문(번호당 다중 역할 기능을 추가하면서 그 아래 OTP 인프라는 안 건드렸던 게 원인) — `PhoneVerification`에 `accountType`(`PhoneAccountType` enum, nullable) 컬럼을 추가하고 `issueOtp`/`consumeOtp` 시그니처와 3개 호출부(`auth.ts`)에 반영해 `(phoneNumber, purpose, accountType)`로 완전히 분리. 로컬에서 승객→기사 OTP 연속 요청이 쿨다운 없이 각각 발급되는 것과 각자 코드로 가입 완료되는 것까지 재검증 후 프로덕션에 배포
+- **Cloudflare 전체 프록시(Phase 3) + Turnstile 키 발급 + Kakao 키 재발급 + Toss 웹훅 등록 + admin.ts Zod 검증** (2026-08-25)
+    - **Cloudflare 전체 프록시**: Free 플랜 가입, 네임서버를 카페24(`ns1/ns2.cafe24.*`)에서 Cloudflare(`cody.ns.cloudflare.com`/`paloma.ns.cloudflare.com`)로 이관, `busrent.co.kr`/`www`/`*` DNS 레코드 Proxied(오렌지 클라우드) 전환, SSL/TLS 모드 **Full (strict)**(기존 Let's Encrypt 정품 인증서로 검증 통과). VPS nginx에 `/etc/nginx/conf.d/goodbus-cloudflare.conf` 신설 — Cloudflare 엣지 IP 대역 `set_real_ip_from`+`real_ip_header CF-Connecting-IP`로 레이트리밋(`req_general`/`goodbus_auth` 존)·`X-Real-IP`가 방문자 IP 대신 Cloudflare IP 하나로 뭉치는 문제 방지. 여기에 `geo $realip_remote_addr $goodbus_is_cloudflare {...}` 맵 + `sites-available/GoodBus`의 호스트 매치 `if` 블록으로 **`busrent.co.kr` 원본 IP(`172.237.7.249`) 직접 우회 접속을 차단**(444) — `goodbus0716.mycafe24.com`은 UptimeRobot 모니터(`https://goodbus0716.mycafe24.com/api/health`)가 의존하고 있어 의도적으로 이 차단에서 제외. **프로덕션 nginx는 저장소 `deploy/nginx/goodbus.conf`와 별개로 관리됨**(카페24 재설치 이후 `sites-available/GoodBus`+`conf.d/*.conf` 구조로 갈라섬) — 향후 nginx 변경은 저장소 파일을 배포하는 게 아니라 VPS에서 직접 반영해야 함. curl로 라이브 검증: Cloudflare 경유 200, 원본 IP 직접 접속(`busrent.co.kr`/`www.busrent.co.kr` Host) 연결 거부, 포트 80 직접 접속은 차단 없이 리다이렉트만(앱 데이터 노출 없음), `goodbus0716.mycafe24.com` 직접 접속 그대로 200, 접속 로그에 실제 방문자 IP 정상 기록.
+    - **Cloudflare Turnstile 키 발급**: 위 Cloudflare 계정 생성으로 막혀있던 전제조건 해소 — 위젯 `busrent_bs`(Managed 모드, 호스트 `busrent.co.kr`) 생성해 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`를 로컬·프로덕션 env에 반영, 프론트 재빌드(`NEXT_PUBLIC_*`는 빌드 타임에 박히므로 env만 바꿔선 반영 안 됨) + `pm2 restart` 양쪽 다. 라이브 검증: `turnstileToken` 없이 `POST /api/auth/signup`(role=Driver)을 보내면 이제 `400`으로 거부됨(키 발급 전엔 시크릿 미설정으로 이 검증이 조용히 항상 통과였음) — OTP 소비·DB 저장 전 단계에서 걸러지는 것까지 코드로 확인해 부작용 없이 라이브로 검증.
+    - **Kakao REST API 키 재발급**: 침해사고 이후 미확인 상태였던 키를 Kakao Developers 콘솔에서 재발급(`KAKAO_REST_API_KEY`=`KAKAO_MOBILITY_API_KEY`, 동일 키 공유가 정상 동작). 로컬·프로덕션 env 반영, 백엔드 재시작, 서버의 낡은 `.env.bak`(2026-08-16 스냅샷, 옛날 키 값 포함)까지 찾아서 삭제. `/api/kakao/places` 실제 카카오 장소검색 호출로 라이브 검증. 콘솔 쪽 옛날 키 삭제는 사용자가 직접 해야 하는 남은 절차.
+    - **Toss Payments 테스트 웹훅 + API 키 접근 정책(IP 화이트리스트) 등록**: `server/src/routes/paymentsWebhook.ts`+`TOSS_WEBHOOK_SECRET`가 2026-08-16부터 코드/env엔 있었지만 Toss 대시보드에 웹훅 자체가 한 번도 등록된 적이 없어 실제로 호출된 적이 없었던 상태를 발견 — `busrent_pay`(`https://busrent.co.kr/api/payments/webhook`, 이벤트 `PAYMENT_STATUS_CHANGED`만, 코드가 실제로 처리하는 것과 일치) 등록, API 키 접근 정책 `busrent_prod`(허용 IP `172.237.7.249`)도 등록. 둘 다 "테스트" 탭 기준(공유 샌드박스 MID `tvivarepublica`) — 실 사업자 라이브 키 전환 시 "라이브" 탭에 동일 작업 재등록 필요. 라이브 검증: 서명 없는/깨진 바디 요청 모두 `400 Invalid signature`로 깔끔히 거부(500 아님).
+    - **`admin.ts` Zod 검증 추가**: `PATCH /users/:id/status`, `PATCH /verifications/:id`, `POST /admins` 세 라우트가 `req.body as {...}` 캐스팅만 하고 `try/catch`가 없던 것을 Zod 스키마+`try/catch`로 교체(`auth.ts`/`trips.ts`와 동일 패턴). 특히 `POST /admins`는 `adminRole`을 검증 없이 그대로 `prisma.user.create`에 넘겨서, 스키마 밖 값을 보내면 `PrismaClientValidationError`가 잡히지 않고 새는 실제 크래시 경로였음(2026-08-15에 "이미 없다"고 판단했던 게 오판이었음, 위 참고). 로컬 시드 관리자 계정으로 실제 HTTP 라우트를 직접 호출해 라이브 검증 — `adminRole: "HackerRole"` 등 악의적 입력이 이제 `400`으로 깔끔히 막히는 것, 정상 입력은 여전히 `201`로 실제 DB에 관리자가 생성되는 것, 인접한(안 건드린) `support-posts` 라우트가 회귀 없이 그대로 동작하는 것까지 확인.
+    - **부수 발견(오늘 변경과 무관, 기존 이슈)**: `X-Frame-Options`/`X-Content-Type-Options`/`Referrer-Policy` 헤더가 `next.config.ts`와 nginx 양쪽에서 중복 설정돼 응답에 두 번씩 찍힘 — 해롭진 않으나 언젠가 한쪽으로 정리 필요.
 
 ## 미완료 / 실서비스 갭
 
@@ -259,7 +266,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **여전히 남은 것**: Kakao API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것). 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키도 2026-08-25 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
     - **UptimeRobot + Sentry 완료, 브라우저 에러 캡처 버그 발견·수정** (2026-08-16) — UptimeRobot에 `/api/health` 5분 간격 모니터 등록(이메일 알림). Sentry는 백엔드(`node-express`)·프론트(`javascript-nextjs`) 프로젝트 2개 생성해 DSN 반영, 실제 에러 발생시켜 둘 다 라이브 검증. 이 과정에서 **`sentry.client.config.ts`가 8/10 Sentry 도입 이후 계속 무시되고 있던 버그**를 발견 — `@sentry/nextjs` 10.x+Next 16은 브라우저 초기화를 `instrumentation-client.ts` 파일명으로 찾는데 구 컨벤션 파일명만 있어서 빌드 에러/경고 없이 조용히 누락되고 있었음(서버 에러는 정상 수집 중이었지만 사용자 브라우저 JS 에러는 한 번도 안 잡히고 있었음). 파일명 변경으로 해결, 브라우저에서 실제 미처리 예외를 던져 Sentry로 200 응답 나가는 것까지 확인(`DEPLOYMENT.md` "10-3" 참고)
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
@@ -309,12 +316,12 @@
 
 1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
 2. ~~SSH 키 인증 전환~~ **2026-08-16 완료** (`DEPLOYMENT.md` "10-2")
-3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — 남은 건 Kakao 키 재발급 여부 확인뿐
+3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — ~~Kakao 키 재발급~~ **2026-08-25 완료**(콘솔에서 옛날 키 삭제만 사용자 몫으로 남음)
 4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
 5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
 6. ~~휴대전화 OTP 로그인 API·UI~~ ~~전 역할(승객/기사/버스회사) 전화번호 전용으로 전면 개편·구현·테스트 완료(2026-08-19)~~ **프로덕션 배포 + SMS 단독 실발송까지 완료(2026-08-20)** — 남은 건 카카오 알림톡 심사뿐(`.claude/roadmap.md` 참고)
 7. 랜딩 정리, 실 가격 확정 (~~약관 정리~~ 페이지는 2026-08-14 추가 완료, 법률 검토·통신판매업 신고번호 반영은 남음)
 8. ~~PG 신청·결제·빌링키(카드 등록)·멤버십 서버 연동~~ **테스트 키로 구현·테스트 완료(2026-08-13), 프로덕션 반영·동작 확인도 2026-08-16 완료** — 토스페이먼츠 가맹심사 통과 후 env만 교체하면 실 결제 전환
 9. 관리자 콘솔에 결제/구독 조회·환불 UI 추가
-10. Phase 3 — Cloudflare 전체 프록시 (미착수, 여전히 다음 후보). **도메인 구매는 2026-08-18에 완료**(`busrent.co.kr`, 위 "호스팅" 섹션 참고) — 전제조건은 충족됐으니 남은 건 네임서버를 Cloudflare로 이관하는 작업뿐. Cloudflare의 볼류메트릭 DDoS 완화·Bot Fight Mode는 카페24엔 없는 기능(현재 켜둔 플랫폼 방화벽은 포트 단위 차단일 뿐, 트래픽 양 자체를 흡수해주진 않음)
-11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `admin.ts` 전체 Zod 스키마화
+10. ~~Phase 3 — Cloudflare 전체 프록시~~ **2026-08-25 완료**(네임서버 이관, DNS Proxied, SSL Full strict, 원본 IP 우회 차단까지 — 위 "완료됨" 참고)
+11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `X-Frame-Options` 등 보안 헤더 nginx/next.config.ts 중복 정리. ~~`admin.ts` 전체 Zod 스키마화~~ **2026-08-25 완료**(위 "완료됨" 참고)
