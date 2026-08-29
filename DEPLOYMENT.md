@@ -272,9 +272,17 @@ cd /var/www/goodbus
 ```bash
 git pull
 npm ci && cd server && npm ci && cd ..
+(cd server && npm run db:push)
 npm run build:prod
 pm2 restart all
 ```
+
+`deploy.sh`는 2026-08-29부터 `db:push`를 빌드 전 단계에 자동으로 포함한다(마이그레이션
+파일 없이 `schema.prisma` 기준으로 DB를 맞추는 방식이라 별도 마이그레이션 실행 단계가
+없음). 데이터 손실이 있는 변경은 `--accept-data-loss` 플래그 없이는 여기서 그냥
+실패하고 스크립트가 중단되므로(`set -e`), 위험한 스키마 변경(컬럼 삭제·타입 변경 등)은
+자동으로 밀리지 않고 배포 자체가 멈춘다 — 그 경우에만 수동으로 내용을 확인하고
+`--accept-data-loss`를 붙여 직접 실행할 것.
 
 배포 시 **1~2분** 서비스 중단 가능 (허용 범위).
 
