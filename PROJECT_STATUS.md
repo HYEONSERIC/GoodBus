@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-08-25
+**최종 갱신:** 2026-08-29
 
 ---
 
@@ -252,6 +252,8 @@
     - **Toss Payments 테스트 웹훅 + API 키 접근 정책(IP 화이트리스트) 등록**: `server/src/routes/paymentsWebhook.ts`+`TOSS_WEBHOOK_SECRET`가 2026-08-16부터 코드/env엔 있었지만 Toss 대시보드에 웹훅 자체가 한 번도 등록된 적이 없어 실제로 호출된 적이 없었던 상태를 발견 — `busrent_pay`(`https://busrent.co.kr/api/payments/webhook`, 이벤트 `PAYMENT_STATUS_CHANGED`만, 코드가 실제로 처리하는 것과 일치) 등록, API 키 접근 정책 `busrent_prod`(허용 IP `172.237.7.249`)도 등록. 둘 다 "테스트" 탭 기준(공유 샌드박스 MID `tvivarepublica`) — 실 사업자 라이브 키 전환 시 "라이브" 탭에 동일 작업 재등록 필요. 라이브 검증: 서명 없는/깨진 바디 요청 모두 `400 Invalid signature`로 깔끔히 거부(500 아님).
     - **`admin.ts` Zod 검증 추가**: `PATCH /users/:id/status`, `PATCH /verifications/:id`, `POST /admins` 세 라우트가 `req.body as {...}` 캐스팅만 하고 `try/catch`가 없던 것을 Zod 스키마+`try/catch`로 교체(`auth.ts`/`trips.ts`와 동일 패턴). 특히 `POST /admins`는 `adminRole`을 검증 없이 그대로 `prisma.user.create`에 넘겨서, 스키마 밖 값을 보내면 `PrismaClientValidationError`가 잡히지 않고 새는 실제 크래시 경로였음(2026-08-15에 "이미 없다"고 판단했던 게 오판이었음, 위 참고). 로컬 시드 관리자 계정으로 실제 HTTP 라우트를 직접 호출해 라이브 검증 — `adminRole: "HackerRole"` 등 악의적 입력이 이제 `400`으로 깔끔히 막히는 것, 정상 입력은 여전히 `201`로 실제 DB에 관리자가 생성되는 것, 인접한(안 건드린) `support-posts` 라우트가 회귀 없이 그대로 동작하는 것까지 확인.
     - **부수 발견(오늘 변경과 무관, 기존 이슈)**: `X-Frame-Options`/`X-Content-Type-Options`/`Referrer-Policy` 헤더가 `next.config.ts`와 nginx 양쪽에서 중복 설정돼 응답에 두 번씩 찍힘 — 해롭진 않으나 언젠가 한쪽으로 정리 필요.
+- **Kakao REST API 키 재발급** (2026-08-29) — Kakao Developers 콘솔에서 다시 재발급(`KAKAO_REST_API_KEY`=`KAKAO_MOBILITY_API_KEY`, 동일 키 공유). 로컬·프로덕션 `.env` 양쪽 반영 후 백엔드 재시작(로컬/`pm2 restart goodbus-api`), `/api/kakao/places` 실제 장소검색 호출로 라이브 동작 확인까지 완료.
+- **"견적등록 알림" 동의 서버화 + "마케팅 수신동의" 제거** (2026-08-29) — `components/Notifications.tsx`의 알림 설정 다이얼로그가 두 토글(견적등록 알림/마케팅 수신동의) 모두 서버 저장 없이 `localStorage`에만 상태를 저장하던 스텁이었던 것을 발견 — "견적등록 알림"을 `User.quoteAlertConsent`(`Boolean @default(true)`, 승객·기사·회사 전 역할 공용) 필드로 승격하고 `PATCH /notifications/consent/quote-alert`(role 제한 없음) 신규 추가, `/auth/me`·회원가입·전화로그인 응답에 노출. "마케팅 수신동의"는 친구톡/광고 메시지 트랙(알림톡과 별개 심사·채널 친구 추가 필요)이라 이번 스코프에서 제외하기로 하고 UI·로컬스토리지 코드 전부 삭제. 로컬에서 기사 계정으로 실제 로그인 → 벨 아이콘 토글 클릭 → 새로고침 후 서버측 영속 확인, 백엔드를 강제로 내린 상태에서 토글해 낙관적 업데이트가 실패 시 자동 롤백되는 것까지 브라우저로 라이브 검증(`/verify` 스킬). 로컬 `db:push` 반영 완료 — **프로덕션 DB는 배포 시 별도로 `db:push` 필요**(deploy.sh가 자동으로 돌리지 않음).
 
 ## 미완료 / 실서비스 갭
 
@@ -266,7 +268,7 @@
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키도 2026-08-25 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키는 2026-08-25에 이어 2026-08-29에 한 번 더 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
     - **UptimeRobot + Sentry 완료, 브라우저 에러 캡처 버그 발견·수정** (2026-08-16) — UptimeRobot에 `/api/health` 5분 간격 모니터 등록(이메일 알림). Sentry는 백엔드(`node-express`)·프론트(`javascript-nextjs`) 프로젝트 2개 생성해 DSN 반영, 실제 에러 발생시켜 둘 다 라이브 검증. 이 과정에서 **`sentry.client.config.ts`가 8/10 Sentry 도입 이후 계속 무시되고 있던 버그**를 발견 — `@sentry/nextjs` 10.x+Next 16은 브라우저 초기화를 `instrumentation-client.ts` 파일명으로 찾는데 구 컨벤션 파일명만 있어서 빌드 에러/경고 없이 조용히 누락되고 있었음(서버 에러는 정상 수집 중이었지만 사용자 브라우저 JS 에러는 한 번도 안 잡히고 있었음). 파일명 변경으로 해결, 브라우저에서 실제 미처리 예외를 던져 Sentry로 200 응답 나가는 것까지 확인(`DEPLOYMENT.md` "10-3" 참고)
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
@@ -316,7 +318,7 @@
 
 1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
 2. ~~SSH 키 인증 전환~~ **2026-08-16 완료** (`DEPLOYMENT.md` "10-2")
-3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — ~~Kakao 키 재발급~~ **2026-08-25 완료**(콘솔에서 옛날 키 삭제만 사용자 몫으로 남음)
+3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — ~~Kakao 키 재발급~~ **2026-08-25 완료, 2026-08-29 한 번 더 재발급**(콘솔에서 옛날 키 삭제만 사용자 몫으로 남음)
 4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
 5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
 6. ~~휴대전화 OTP 로그인 API·UI~~ ~~전 역할(승객/기사/버스회사) 전화번호 전용으로 전면 개편·구현·테스트 완료(2026-08-19)~~ **프로덕션 배포 + SMS 단독 실발송까지 완료(2026-08-20)** — 남은 건 카카오 알림톡 심사뿐(`.claude/roadmap.md` 참고)

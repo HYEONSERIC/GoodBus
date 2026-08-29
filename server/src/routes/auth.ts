@@ -171,6 +171,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
                 phoneNumber: true,
                 createdAt: true,
                 status: true,
+                quoteAlertConsent: true,
             },
         });
         if (existingPhone) {
@@ -206,6 +207,7 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
                 companyName: true,
                 phoneNumber: true,
                 createdAt: true,
+                quoteAlertConsent: true,
             },
         });
 
@@ -367,6 +369,7 @@ router.post('/phone/login', loginRateLimiter, async (req, res) => {
                 companyName: user.companyName,
                 phoneNumber: user.phoneNumber,
                 createdAt: user.createdAt,
+                quoteAlertConsent: user.quoteAlertConsent,
             },
         });
     } catch (error) {
@@ -473,6 +476,7 @@ router.get('/me', requireAuth, async (req, res) => {
             vehicleImageUrls: true,
             membershipPlan: true,
             minBidAddonPurchased: true,
+            quoteAlertConsent: true,
         },
     });
 

@@ -77,6 +77,7 @@ export type DashboardSessionUser = DashboardBidderRef & {
     phoneNumber?: string | null;
     companyRegistrationUrl?: string | null;
     driverLicenseUrl?: string | null;
+    quoteAlertConsent?: boolean | null;
 };
 
 /** 기사·회사 인증 서류 상태 — /verification/me 응답 중 실제로 쓰는 필드만 */

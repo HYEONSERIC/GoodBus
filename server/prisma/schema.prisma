@@ -130,6 +130,7 @@ model User {
   companyRegistrationNote String?
   membershipPlan MembershipPlan @default(Basic)
   minBidAddonPurchased Boolean @default(false)
+  quoteAlertConsent Boolean @default(true)
   createdAt   DateTime @default(now())
 
   tripsAsPassenger Trip[] @relation("PassengerTrips")

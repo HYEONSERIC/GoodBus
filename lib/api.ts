@@ -282,6 +282,11 @@ export const notificationsAPI = {
         fetchAPI('/notifications/history', {
             method: 'DELETE',
         }),
+    updateQuoteAlertConsent: async (quoteAlertConsent: boolean) =>
+        fetchAPI('/notifications/consent/quote-alert', {
+            method: 'PATCH',
+            body: JSON.stringify({ quoteAlertConsent }),
+        }),
 };
 
 export const adminAPI = {
