@@ -4,7 +4,7 @@ import type { PassengerBidderProfile } from '@/types/passenger';
 /** 기사·회사 대시보드 입찰자 참조 */
 export type DashboardBidderRef = {
     id: string;
-    email: string;
+    email: string | null;
     role: string;
 };
 
@@ -41,7 +41,7 @@ export type DashboardBidderTrip = Omit<OpenTripLike, 'bids' | 'status'> &
 
 export type DashboardPassengerRef = {
     id: string;
-    email: string;
+    email: string | null;
     role: string;
 };
 
@@ -72,8 +72,12 @@ export type MyBidDetailState<
 
 /** 로그인한 사용자(승객/기사/회사) 세션 정보 — /auth/me 응답 중 실제로 쓰는 필드만 */
 export type DashboardSessionUser = DashboardBidderRef & {
+    displayName?: string | null;
+    companyName?: string | null;
+    phoneNumber?: string | null;
     companyRegistrationUrl?: string | null;
     driverLicenseUrl?: string | null;
+    quoteAlertConsent?: boolean | null;
 };
 
 /** 기사·회사 인증 서류 상태 — /verification/me 응답 중 실제로 쓰는 필드만 */

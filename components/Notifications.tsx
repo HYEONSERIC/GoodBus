@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,17 +10,17 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-
-const QUOTE_ALERT_CONSENT_KEY = 'goodbus_alert_consent_quote';
-const MARKETING_ALERT_CONSENT_KEY = 'goodbus_alert_consent_marketing';
+import { authAPI, notificationsAPI } from '@/lib/api';
 
 function ConsentRow({
     label,
     checked,
+    disabled,
     onToggle,
 }: {
     label: string;
     checked: boolean;
+    disabled?: boolean;
     onToggle: () => void;
 }) {
     return (
@@ -32,7 +32,8 @@ function ConsentRow({
                 aria-checked={checked}
                 aria-label={`${label} ${checked ? '켜짐' : '꺼짐'}`}
                 onClick={onToggle}
-                className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
+                disabled={disabled}
+                className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
                     checked ? 'justify-end' : 'justify-start'
                 } ${
                     checked ? 'bg-gray-900' : 'bg-gray-300'
@@ -48,40 +49,37 @@ function ConsentRow({
 
 export function Notifications() {
     const [open, setOpen] = useState(false);
-    const [quoteAlertConsent, setQuoteAlertConsent] = useState(() => {
-        try {
-            return localStorage.getItem(QUOTE_ALERT_CONSENT_KEY) === 'true';
-        } catch {
-            return false;
-        }
-    });
-    const [marketingAlertConsent, setMarketingAlertConsent] = useState(() => {
-        try {
-            return (
-                localStorage.getItem(MARKETING_ALERT_CONSENT_KEY) === 'true'
-            );
-        } catch {
-            return false;
-        }
-    });
+    const [quoteAlertConsent, setQuoteAlertConsent] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    function toggleQuoteAlertConsent() {
+    useEffect(() => {
+        let cancelled = false;
+        authAPI
+            .getMe()
+            .then((data) => {
+                if (cancelled) return;
+                setQuoteAlertConsent(Boolean(data.user?.quoteAlertConsent));
+                setLoaded(true);
+            })
+            .catch(() => {
+                // 로그인 세션이 아직 없는 등 실패 시 토글은 조용히 비활성 상태로 둠
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    async function toggleQuoteAlertConsent() {
         const next = !quoteAlertConsent;
         setQuoteAlertConsent(next);
+        setSaving(true);
         try {
-            localStorage.setItem(QUOTE_ALERT_CONSENT_KEY, String(next));
+            await notificationsAPI.updateQuoteAlertConsent(next);
         } catch {
-            // ignore localStorage failures
-        }
-    }
-
-    function toggleMarketingAlertConsent() {
-        const next = !marketingAlertConsent;
-        setMarketingAlertConsent(next);
-        try {
-            localStorage.setItem(MARKETING_ALERT_CONSENT_KEY, String(next));
-        } catch {
-            // ignore localStorage failures
+            setQuoteAlertConsent(!next);
+        } finally {
+            setSaving(false);
         }
     }
 
@@ -104,17 +102,9 @@ export function Notifications() {
                     <ConsentRow
                         label="견적등록 알림"
                         checked={quoteAlertConsent}
+                        disabled={!loaded || saving}
                         onToggle={toggleQuoteAlertConsent}
                     />
-                    <ConsentRow
-                        label="마케팅 수신동의"
-                        checked={marketingAlertConsent}
-                        onToggle={toggleMarketingAlertConsent}
-                    />
-                    <p className="px-1 text-xs text-gray-500">
-                        현재는 기기 로컬에 저장됩니다. 추후 카카오 알림 연동 시 서버
-                        동의 상태와 연동됩니다.
-                    </p>
                 </div>
             </DialogContent>
         </Dialog>

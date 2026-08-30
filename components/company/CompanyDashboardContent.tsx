@@ -1,10 +1,12 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
+import { PaymentHistoryPanel } from '@/components/PaymentHistoryPanel';
 import { OpenTripBidDialog } from '@/components/OpenTripBidDialog';
 import { BidderAwardedTripsList } from '@/components/contracts/BidderAwardedTripsList';
 import { BidderMyBidDetailOverlay } from '@/components/bidder/BidderMyBidDetailOverlay';
@@ -36,6 +38,13 @@ import { useCompanyDashboard } from '@/hooks/useCompanyDashboard';
 
 export function CompanyDashboardContent() {
     const c = useCompanyDashboard();
+    // filterTrips 자체는 useCallback으로 안정화되어 있지만 호출 결과는 매번
+    // 새 배열이라, JSX에서 바로 호출하면 OpenTripsList의 useMemo가 무력화된다
+    // — 실제 입력(trips)이 바뀔 때만 재계산되도록 여기서 감싼다.
+    const filteredOpenTrips = useMemo(
+        () => c.tripFilters.filterTrips(c.trips),
+        [c.tripFilters, c.trips],
+    );
 
     return (
         <>
@@ -48,7 +57,9 @@ export function CompanyDashboardContent() {
                     c.setActiveTab(
                         c.activeTab === 'paymentCards'
                             ? c.paymentCardsPrevTab
-                            : c.membershipPrevTab,
+                            : c.activeTab === 'paymentHistory'
+                              ? c.paymentHistoryPrevTab
+                              : c.membershipPrevTab,
                     )
                 }
                 onHome={() => c.setActiveTab('available')}
@@ -56,7 +67,8 @@ export function CompanyDashboardContent() {
                 bottomTabs={
                     c.activeTab !== 'profile' &&
                     c.activeTab !== 'profileEdit' &&
-                    c.activeTab !== 'paymentCards'
+                    c.activeTab !== 'paymentCards' &&
+                    c.activeTab !== 'paymentHistory'
                         ? {
                               tabs: [
                                   { id: 'available', label: '주문' },
@@ -151,7 +163,7 @@ export function CompanyDashboardContent() {
                             <OpenTripsList
                                 trips={c.trips}
                                 allTrips={c.openTripsPool}
-                                filteredTrips={c.tripFilters.filterTrips(c.trips)}
+                                filteredTrips={filteredOpenTrips}
                                 distanceByTripId={c.distanceByTripId}
                                 onBid={c.handleBidButtonClick}
                                 emptyWhenNoTrips="입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다."
@@ -336,6 +348,8 @@ export function CompanyDashboardContent() {
                     <PaymentCardsPanel userId={c.user?.id} />
                 )}
 
+                {c.activeTab === 'paymentHistory' && <PaymentHistoryPanel />}
+
                 {c.activeTab === 'membership' && (
                     <MembershipPlansPanel
                         userId={c.user?.id}
@@ -409,6 +423,21 @@ export function CompanyDashboardContent() {
                                 }}
                             >
                                 결제카드
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                                onClick={() => {
+                                    c.setPaymentHistoryPrevTab(
+                                        c.activeTab === 'paymentHistory'
+                                            ? 'available'
+                                            : c.activeTab,
+                                    );
+                                    c.setActiveTab('paymentHistory');
+                                    c.setMenuOpen(false);
+                                }}
+                            >
+                                결제 내역
                             </button>
                             <button
                                 type="button"

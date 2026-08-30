@@ -1,9 +1,6 @@
 import { MembershipPlan } from '@prisma/client';
+import { CONCURRENT_BID_LIMITS as CONCURRENT_BID_LIMITS_CORE } from './membershipLimitsCore';
 
-// 프론트 lib/membershipLimits.ts와 값 동기화 유지
-export const CONCURRENT_BID_LIMITS: Record<MembershipPlan, number> = {
-    Basic: 10,
-    Plus: 15,
-    Premium: 20,
-    Business: 25,
-};
+// 값은 membershipLimitsCore.ts(프론트 lib/membershipLimits.ts와 공용)에서 온다.
+export const CONCURRENT_BID_LIMITS =
+    CONCURRENT_BID_LIMITS_CORE as Record<MembershipPlan, number>;

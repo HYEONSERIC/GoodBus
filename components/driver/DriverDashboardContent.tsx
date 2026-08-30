@@ -1,10 +1,12 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChatPanel } from '@/components/ChatPanel';
 import { SupportCustomerCenter } from '@/components/SupportCustomerCenter';
 import { PaymentCardsPanel } from '@/components/PaymentCardsPanel';
+import { PaymentHistoryPanel } from '@/components/PaymentHistoryPanel';
 import {
     BidderProfileTabPanel,
     formatBidderRatingLine,
@@ -36,6 +38,13 @@ import { useDriverDashboard } from '@/hooks/useDriverDashboard';
 
 export function DriverDashboardContent() {
     const d = useDriverDashboard();
+    // filterTrips 자체는 useCallback으로 안정화되어 있지만 호출 결과는 매번
+    // 새 배열이라, JSX에서 바로 호출하면 OpenTripsList의 useMemo가 무력화된다
+    // — 실제 입력(trips)이 바뀔 때만 재계산되도록 여기서 감싼다.
+    const filteredOpenTrips = useMemo(
+        () => d.tripFilters.filterTrips(d.trips),
+        [d.tripFilters, d.trips],
+    );
 
     return (
         <>
@@ -48,7 +57,9 @@ export function DriverDashboardContent() {
                     d.setActiveTab(
                         d.activeTab === 'paymentCards'
                             ? d.paymentCardsPrevTab
-                            : d.membershipPrevTab,
+                            : d.activeTab === 'paymentHistory'
+                              ? d.paymentHistoryPrevTab
+                              : d.membershipPrevTab,
                     )
                 }
                 onHome={() => d.setActiveTab('available')}
@@ -56,7 +67,8 @@ export function DriverDashboardContent() {
                 bottomTabs={
                     d.activeTab !== 'profile' &&
                     d.activeTab !== 'profileEdit' &&
-                    d.activeTab !== 'paymentCards'
+                    d.activeTab !== 'paymentCards' &&
+                    d.activeTab !== 'paymentHistory'
                         ? {
                               tabs: [
                                   { id: 'available', label: '주문' },
@@ -153,7 +165,7 @@ export function DriverDashboardContent() {
                             <OpenTripsList
                                 trips={d.trips}
                                 allTrips={d.openTripsPool}
-                                filteredTrips={d.tripFilters.filterTrips(d.trips)}
+                                filteredTrips={filteredOpenTrips}
                                 distanceByTripId={d.distanceByTripId}
                                 onBid={d.handleBidButtonClick}
                                 roundOptions={d.DRIVER_ROUND_OPTS}
@@ -337,6 +349,8 @@ export function DriverDashboardContent() {
                     <PaymentCardsPanel userId={d.user?.id} />
                 )}
 
+                {d.activeTab === 'paymentHistory' && <PaymentHistoryPanel />}
+
                 {d.activeTab === 'membership' && (
                     <MembershipPlansPanel
                         userId={d.user?.id}
@@ -410,6 +424,21 @@ export function DriverDashboardContent() {
                                 }}
                             >
                                 결제카드
+                            </button>
+                            <button
+                                type="button"
+                                className="w-full px-2 py-3 text-sm text-left hover:bg-gray-100 transition"
+                                onClick={() => {
+                                    d.setPaymentHistoryPrevTab(
+                                        d.activeTab === 'paymentHistory'
+                                            ? 'available'
+                                            : d.activeTab,
+                                    );
+                                    d.setActiveTab('paymentHistory');
+                                    d.setMenuOpen(false);
+                                }}
+                            >
+                                결제 내역
                             </button>
                             <button
                                 type="button"

@@ -238,6 +238,11 @@ function useAdminDashboardState() {
                 tripId: nav.tripId,
             });
         }
+        // loadUserDetails/runBidSearch는 useCallback으로 안정화되어 있지 않아
+        // deps에 넣으면 매 렌더마다 이 effect가 재실행된다 — 하지만
+        // initialNavApplied 렌더 최초 1회만 실행되도록 이미 가드하고 있어
+        // 실질적인 정확성 문제는 없다(단발성 딥링크 진입 처리).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loading]);
 
     const overviewRefreshSkipRef = useRef(true);
@@ -248,7 +253,7 @@ function useAdminDashboardState() {
             return;
         }
         void refreshOverview();
-    }, [activeTab]);
+    }, [activeTab, loading]);
 
     useEffect(() => {
         setError('');
@@ -278,12 +283,21 @@ function useAdminDashboardState() {
         ) {
             void loadAuditLog(1);
         }
+        // 탭 전환 시 "아직 안 불러왔으면 1회 로드"하는 지연 로딩 패턴이라
+        // activeTab에만 반응해야 한다 — handleBidSearch 등은 useCallback으로
+        // 안정화되어 있지 않아 deps에 그대로 넣으면 각 로드 결과로 길이가
+        // 바뀔 때마다(0 -> N) effect가 재실행돼 반복 호출 루프가 생긴다.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
     useEffect(() => {
         if (activeTab === 'verification') {
             loadVerifications();
         }
+        // loadVerifications도 위와 동일한 이유로 deps에서 의도적으로 제외 —
+        // 필터가 바뀔 때만 재조회하면 되고, 안정화되지 않은 함수 참조를 넣으면
+        // 매 렌더 재호출 루프 위험이 있다.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [verificationType, verificationStatus]);
 
     useEffect(() => {
@@ -351,6 +365,10 @@ function useAdminDashboardState() {
     useEffect(() => {
         if (activeTab !== 'faq' || faqSectionTab !== 'inquiries') return;
         void loadSupportInquiries({ take: 300 });
+        // loadSupportInquiries는 useCallback으로 안정화되어 있지 않다 — deps에
+        // 넣으면 조회 결과로 state가 바뀔 때마다 재호출되는 루프 위험이 있어
+        // 위 4개 값이 바뀔 때만 재조회하도록 의도적으로 제외.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, faqSectionTab, inquiryStatusFilter, inquirySort]);
 
     useEffect(() => {
@@ -373,7 +391,7 @@ function useAdminDashboardState() {
 
     const handleLogout = async () => {
         await authAPI.logout();
-        router.push('/login');
+        router.push('/admin/login');
     };
 
     const handleFilter = async () => {
@@ -484,17 +502,18 @@ function useAdminDashboardState() {
 
     const openBidsForBidder = async (opts: {
         bidderId: string;
-        email: string;
+        email: string | null;
         bidStatus?: string;
         highlightBidId?: string;
     }) => {
         setActiveTab('bids');
-        setBidSearch(opts.email);
+        const search = opts.email ?? '';
+        setBidSearch(search);
         if (opts.bidStatus !== undefined) {
             setBidStatusFilter(opts.bidStatus);
         }
         await runBidSearch({
-            search: opts.email,
+            search,
             bidderId: opts.bidderId,
             bidStatus: opts.bidStatus,
             highlightBidId: opts.highlightBidId ?? null,
@@ -504,12 +523,13 @@ function useAdminDashboardState() {
 
     const openBidsForPassenger = async (opts: {
         passengerId: string;
-        email: string;
+        email: string | null;
     }) => {
         setActiveTab('bids');
-        setBidSearch(opts.email);
+        const search = opts.email ?? '';
+        setBidSearch(search);
         await runBidSearch({
-            search: opts.email,
+            search,
             passengerId: opts.passengerId,
             highlightBidId: null,
             take: 50,

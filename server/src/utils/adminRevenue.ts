@@ -1,8 +1,8 @@
 import { BidStatus, TripStatus } from '@prisma/client';
 import prisma from './db';
+import { DEFAULT_PLATFORM_COMMISSION_RATE } from './platformCommissionCore';
 
-/** 입찰 UI와 동일: 전세버스 주문 광고 수수료 */
-export const DEFAULT_PLATFORM_COMMISSION_RATE = 0.1;
+export { DEFAULT_PLATFORM_COMMISSION_RATE };
 
 const awardedBidSelect = {
     id: true,
@@ -30,7 +30,7 @@ type AwardedBidRow = {
     id: string;
     price: unknown;
     bidder: {
-        email: string;
+        email: string | null;
         displayName: string | null;
         companyName: string | null;
         role: string;
@@ -63,7 +63,7 @@ export type RevenueAwardRow = {
     awardedAt: string | null;
     countedAt: string;
     usedCreatedAtFallback: boolean;
-    bidderEmail: string;
+    bidderEmail: string | null;
     bidderDisplayName: string;
     bidderRole: string;
 };
@@ -127,7 +127,8 @@ function bidderDisplayName(bidder: AwardedBidRow['bidder']) {
     return (
         bidder.displayName?.trim() ||
         bidder.companyName?.trim() ||
-        bidder.email
+        bidder.email ||
+        '기사'
     );
 }
 

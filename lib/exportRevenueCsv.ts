@@ -1,6 +1,5 @@
 import type { AdminRevenueAwardRow } from '@/types/admin';
-
-const DEFAULT_COMMISSION_RATE = 0.1;
+import { DEFAULT_PLATFORM_COMMISSION_RATE as DEFAULT_COMMISSION_RATE } from '../server/src/utils/platformCommissionCore';
 
 export type RevenueCsvExportOptions = {
     /** 예: 2026-01 ~ 2026-06 */
@@ -86,7 +85,7 @@ export function buildRevenueAwardsCsv(
         a.origin,
         a.destination,
         a.bidderDisplayName,
-        a.bidderEmail,
+        a.bidderEmail ?? '',
         a.bidderRole,
         a.priceManWon,
     ]);

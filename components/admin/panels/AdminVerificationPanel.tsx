@@ -5,14 +5,6 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 import { AdminAsyncContent } from '@/components/admin/AdminAsyncContent';
@@ -23,6 +15,7 @@ import {
     verificationStatusTone,
 } from '@/lib/adminStatusLabels';
 import { verificationDisplayForUser } from '@/lib/adminVerification';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 export function AdminVerificationPanel() {
   const {
@@ -113,7 +106,9 @@ export function AdminVerificationPanel() {
                                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                                     <div className="space-y-1.5 min-w-0">
                                                         <p className="break-all text-sm font-medium text-slate-900">
-                                                            {user.email}
+                                                            {adminPersonLabel(
+                                                                user,
+                                                            )}
                                                         </p>
                                                         <p className="text-xs text-slate-500">
                                                             {roleLabel} ·{' '}

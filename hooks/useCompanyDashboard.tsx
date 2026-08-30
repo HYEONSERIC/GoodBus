@@ -2,6 +2,7 @@
 
 import {
     createContext,
+    useCallback,
     useContext,
     useEffect,
     useMemo,
@@ -50,6 +51,7 @@ const CompanyDashboardContext =
 function useCompanyDashboardState() {
     const [user, setUser] = useState<DashboardSessionUser | null>(null);
     const profile = useBidderProfile('company', { userEmail: user?.email });
+    const { applyFromUser } = profile;
     const [membershipPlan, setMembershipPlan] =
         useState<DashboardMembershipPlan | null>(null);
     const [trips, setTrips] = useState<Trip[]>([]);
@@ -74,6 +76,7 @@ function useCompanyDashboardState() {
         | 'support'
         | 'membership'
         | 'paymentCards'
+        | 'paymentHistory'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -93,6 +96,7 @@ function useCompanyDashboardState() {
         | 'chat'
         | 'support'
         | 'paymentCards'
+        | 'paymentHistory'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -102,6 +106,17 @@ function useCompanyDashboardState() {
         | 'chat'
         | 'support'
         | 'membership'
+        | 'paymentHistory'
+        | 'profile'
+        | 'profileEdit'
+    >('available');
+    const [paymentHistoryPrevTab, setPaymentHistoryPrevTab] = useState<
+        | 'available'
+        | 'contract'
+        | 'chat'
+        | 'support'
+        | 'membership'
+        | 'paymentCards'
         | 'profile'
         | 'profileEdit'
     >('available');
@@ -137,58 +152,12 @@ function useCompanyDashboardState() {
             ? '인증완료'
             : '미인증';
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    useEffect(() => {
-        if (activeTab === 'contract' || activeTab === 'available') {
-            loadData();
-        }
-    }, [activeTab]);
-
-    useEffect(() => {
-        const refreshOnFocus = () => {
-            if (activeTab === 'available') {
-                loadData();
-            }
-        };
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                refreshOnFocus();
-            }
-        };
-        window.addEventListener('focus', refreshOnFocus);
-        document.addEventListener('visibilitychange', onVisibility);
-        return () => {
-            window.removeEventListener('focus', refreshOnFocus);
-            document.removeEventListener('visibilitychange', onVisibility);
-        };
-    }, [activeTab]);
-
-    useEffect(() => {
-        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
-        reviewsAPI
-            .getDriverMe()
-            .then((data) => {
-                setDriverReviews(data.reviews || []);
-                setDriverReviewStats({
-                    avgRating: data.avgRating ?? null,
-                    count: data.count ?? 0,
-                });
-            })
-            .catch(() => {
-                setDriverReviews([]);
-                setDriverReviewStats({ avgRating: null, count: 0 });
-            });
-    }, [activeTab]);
-
-    async function loadData() {
+    const loadData = useCallback(async () => {
         try {
             const userData = await authAPI.getMe();
             setUser(userData.user);
             setMembershipPlan(userData.user?.membershipPlan || null);
-            profile.applyFromUser(userData.user);
+            applyFromUser(userData.user);
             try {
                 const verificationData = await verificationAPI.getMe();
                 setVerification(verificationData.verification);
@@ -246,7 +215,53 @@ function useCompanyDashboardState() {
             console.error('Error loading data:', error);
             window.location.href = '/login';
         }
-    }
+    }, [applyFromUser]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    useEffect(() => {
+        if (activeTab === 'contract' || activeTab === 'available') {
+            loadData();
+        }
+    }, [activeTab, loadData]);
+
+    useEffect(() => {
+        const refreshOnFocus = () => {
+            if (activeTab === 'available') {
+                loadData();
+            }
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                refreshOnFocus();
+            }
+        };
+        window.addEventListener('focus', refreshOnFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('focus', refreshOnFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [activeTab, loadData]);
+
+    useEffect(() => {
+        if (activeTab !== 'profile' && activeTab !== 'profileEdit') return;
+        reviewsAPI
+            .getDriverMe()
+            .then((data) => {
+                setDriverReviews(data.reviews || []);
+                setDriverReviewStats({
+                    avgRating: data.avgRating ?? null,
+                    count: data.count ?? 0,
+                });
+            })
+            .catch(() => {
+                setDriverReviews([]);
+                setDriverReviewStats({ avgRating: null, count: 0 });
+            });
+    }, [activeTab]);
 
     async function handleLogout() {
         try {
@@ -465,13 +480,17 @@ function useCompanyDashboardState() {
             ? 'membership'
             : activeTab === 'paymentCards'
               ? 'paymentCards'
-              : 'menu';
+              : activeTab === 'paymentHistory'
+                ? 'paymentHistory'
+                : 'menu';
     const headerTitle =
         activeTab === 'membership'
             ? '멤버십'
             : activeTab === 'paymentCards'
               ? '결제카드'
-              : 'GOODBUS';
+              : activeTab === 'paymentHistory'
+                ? '결제 내역'
+                : '버스대절';
 
     return {
         COMPANY_ROUND_OPTS,
@@ -506,6 +525,8 @@ function useCompanyDashboardState() {
         setMembershipPrevTab,
         paymentCardsPrevTab,
         setPaymentCardsPrevTab,
+        paymentHistoryPrevTab,
+        setPaymentHistoryPrevTab,
         menuOpen,
         setMenuOpen,
         tripFilters,

@@ -272,9 +272,17 @@ cd /var/www/goodbus
 ```bash
 git pull
 npm ci && cd server && npm ci && cd ..
+(cd server && npm run db:push)
 npm run build:prod
 pm2 restart all
 ```
+
+`deploy.sh`는 2026-08-29부터 `db:push`를 빌드 전 단계에 자동으로 포함한다(마이그레이션
+파일 없이 `schema.prisma` 기준으로 DB를 맞추는 방식이라 별도 마이그레이션 실행 단계가
+없음). 데이터 손실이 있는 변경은 `--accept-data-loss` 플래그 없이는 여기서 그냥
+실패하고 스크립트가 중단되므로(`set -e`), 위험한 스키마 변경(컬럼 삭제·타입 변경 등)은
+자동으로 밀리지 않고 배포 자체가 멈춘다 — 그 경우에만 수동으로 내용을 확인하고
+`--accept-data-loss`를 붙여 직접 실행할 것.
 
 배포 시 **1~2분** 서비스 중단 가능 (허용 범위).
 
@@ -299,42 +307,51 @@ pm2 restart all
 - [x] Toss 카드 등록 동작 확인 — `NEXT_PUBLIC_TOSS_CLIENT_KEY` 반영 후 첫 시도에서 401(Unauthorized)로 실패, 원인은 로컬→서버로 값을 옮기며 클라이언트 키 끝자리를 **대문자 O를 숫자 0으로 오독**한 오타(`...RGZwXL0` vs 실제 `...RGZwXLO`) — Toss 개발자센터에서 원본 대조 후 정정, 재빌드 후 실제 카드 등록 위젯("실제 결제가 안되는 테스트입니다" 배지)까지 뜨는 것 확인
 - [x] 관리자 로그인 — Admin 계정 생성 후 API 로그인 200 확인(2026-08-16). **관리자 콘솔 UI(매출 탭 등)는 브라우저로 아직 미확인**
 - [x] `curl https://도메인/api/health` — `{"status":"ok"}` 200 확인(2026-08-16)
-- [ ] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정했다면, 의도적으로 에러를 한 번 발생시켜 Sentry 대시보드에 리포트가 뜨는지 확인 — **아직 두 값 다 서버에 없음**(OS 재설치로 새로 만들어진 env 파일이라 항목 자체가 비어있는 게 아니라 아예 안 적혀 있음), 에러 트래킹이 현재 꺼져 있는 상태
+- [x] `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 설정 + 실제 에러 발생시켜 Sentry 대시보드 리포트 확인 — 2026-08-16 완료. 이 과정에서 브라우저 에러가 8/10부터 계속 안 잡히고 있던 버그(`sentry.client.config.ts` → `instrumentation-client.ts`)를 발견·수정함(아래 "10-3" 참고)
 
 ### 10-1. 보안 침해사고 이후 강화 항목 (2026-08-14 RCE 사고 대응)
 
 2026-08-14 Next.js 취약점을 통한 RCE로 서버가 침해돼 OS 재설치로 복구한 사고가 있었음(전체 경위는 `PROJECT_STATUS.md` 참고). 그때 드러난 운영 공백들:
 
 - [x] **DB 자동 백업** — 2026-08-15 스크립트 작성, **2026-08-16 crontab 실제 등록 + 실행 검증 완료**(위 "8-2" 참고). `crontab -l`에 03:00 등록 확인, 수동 1회 실행으로 만든 덤프(`goodbus_2026-08-16_162355.sql.gz`)의 gzip 무결성과 `CREATE TABLE public."User"` 포함 여부까지 확인
-- [ ] **SSH 비밀번호 인증만 있음** — 2026-08-16 재확인 결과 아직 그대로(`PasswordAuthentication yes`, `PermitRootLogin yes`). 아래 "10-2" 절차대로 전환 필요 (락아웃 위험이 있는 작업이라 VPS에서 직접, 순서 지켜서) — **다른 인프라 항목이 다 끝난 지금 우선순위가 가장 높은 잔여 항목**
+- [x] **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no` + `PermitRootLogin prohibit-password` 적용 후, 키 로그인 유지 + 비밀번호 인증이 프롬프트 없이 즉시 거부되는 것까지 라이브 검증(아래 "10-2" 참고)
 - [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고 (UptimeRobot 가입 여전히 안 함)
 - [x] **GitHub Dependabot/vulnerability alerts** — 2026-08-15, 꺼져 있는 것으로 확인(`gh api` 조회 결과), `gh api -X PUT repos/HYEONSERIC/GoodBus/vulnerability-alerts`와 `.../automated-security-fixes`로 활성화 완료. `.github/dependabot.yml` 추가(root+server 주간 스캔)
 - [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
-- [~] Kakao/Toss API 키가 프로덕션 서버에 반영되고 실제 동작까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 이게 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)/[Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 후 교체 권장
+- [x] **Toss Secret Key/Webhook Secret 재발급 완료** (2026-08-16) — [Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 받아 `server/.env` 갱신 → `pm2 restart goodbus-api`, 헬스체크·에러 로그로 정상 기동 확인. Client key(`NEXT_PUBLIC_TOSS_CLIENT_KEY`)는 공개 키라 재발급 대상 아님, 기존 값 유지
+- [~] Kakao API 키는 프로덕션 서버에 반영되고 실제 동작(장소검색)까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)에서 재발급 후 교체 권장
 - [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities
 
-### 10-2. SSH 하드닝 (사용자가 VPS에서 직접 — 락아웃 위험, 순서 준수)
+### 10-2. SSH 하드닝 (2026-08-16 완료 + 라이브 검증)
 
-1. 로컬 mac: `ssh-keygen -t ed25519 -C "goodbus-vps-2026-08"` (기존 키 재사용 금지 — 침해 기간 노출 가능성 배제)
-2. `ssh-copy-id -i ~/.ssh/goodbus_vps.pub <user>@<서버IP>` — 비밀번호 인증이 아직 살아있을 때만 가능
-3. **새 터미널 창**을 열어 `ssh -i ~/.ssh/goodbus_vps <user>@<서버IP>`로 키 로그인이 실제로 되는지 확인. 기존 비밀번호 세션은 그대로 열어둔 채로 둔다(안전장치)
-4. `/etc/ssh/sshd_config`: `PasswordAuthentication no`, `PermitRootLogin no`(또는 `prohibit-password`), `PubkeyAuthentication yes`
-5. `sudo systemctl restart sshd`
-6. 다시 새 터미널에서 키 로그인 확인 + 비밀번호 로그인이 실제로 거부되는지 확인
-7. `fail2ban-client status sshd`로 fail2ban이 살아있는지 확인 (트러블슈팅 절 참고 — 이미 동작 중일 가능성 높음)
-8. 카페24 콘솔의 웹 기반 서버 접속(VNC/시리얼 콘솔) 방법을 미리 확인해둔다 — 키를 잃어버려도 이걸로 복구 가능
+카페24 자동설치가 `/etc/ssh/sshd_config.d/99-cafe24-harden.conf`를 이미 깔아둔다(`MaxAuthTries 3`, `LoginGraceTime 30`, 포워딩 차단 등) — 단, **비밀번호 인증 차단은 빠져있어서** 이 부분만 별도 drop-in으로 추가한다. `sshd_config`의 `Include /etc/ssh/sshd_config.d/*.conf`가 파일 앞부분에 있어 나중에 오는 메인 설정과 충돌 안 남.
+
+1. `authorized_keys`에 재설치 이후 새로 만든 키(`goodbus-vps-2026-08`, `ssh-copy-id`로 등록 완료)만 있는지 먼저 확인 — 침해 기간 이전 키가 남아있지 않아야 함
+2. `/etc/ssh/sshd_config.d/90-goodbus-keyonly.conf` 신설:
+   ```ini
+   PasswordAuthentication no
+   PermitRootLogin prohibit-password
+   PubkeyAuthentication yes
+   ```
+   **주의**: `PermitRootLogin no`가 아니라 **`prohibit-password`**를 써야 한다 — root로 키 접속하는 구조라 `no`를 쓰면 root 로그인 자체가(키 포함) 완전히 막혀 락아웃된다. `prohibit-password`는 "root는 키로만" 허용.
+3. `sshd -t`로 문법 검증 → **먼저 검증하고** 나서 재시작(순서 중요)
+4. `systemctl restart ssh` — Ubuntu 24.04는 유닛명이 `sshd`가 아니라 **`ssh`**(`sshd`로 하면 "Unit sshd.service not found")
+5. 재시작 직후 곧바로 두 가지 확인: ① 기존 키로 새 연결이 되는지 ② `-o PreferredAuthentications=password -o PubkeyAuthentication=no -o BatchMode=yes`로 비밀번호 인증을 강제한 연결이 프롬프트도 없이 즉시 `Permission denied (publickey)`로 거부되는지
+6. `fail2ban-client status sshd`로 fail2ban이 살아있는지 확인 — 이미 실제 브루트포스 시도를 자동 차단한 이력 있음(위 "10-4" 참고)
+7. 카페24 콘솔의 웹 기반 서버 접속(VNC/시리얼 콘솔) 방법을 미리 확인해둔다 — 키를 잃어버려도 이걸로 복구 가능
 
 여러 기기에서 접속해야 하면 각 기기의 공개키를 `authorized_keys`에 추가로 등록하면 된다.
 
-### 10-3. 다운타임 모니터링 (사용자가 제3자 서비스 가입 필요)
+### 10-3. 다운타임 모니터링 + 에러 트래킹 (2026-08-16 완료 + 라이브 검증)
 
 Sentry는 애플리케이션이 살아서 에러를 던질 때만 잡는다 — 프로세스가 죽거나(크립토마이너가 CPU를 다 먹는 등) 크래시 루프에 빠지면 감지 못 한다. 별도 외부 핑 모니터링이 필요:
 
-1. [UptimeRobot](https://uptimerobot.com) (또는 동급 무료 서비스) 가입
-2. 모니터 대상: `https://<도메인>/api/health` — Next → Express 프록시 경로라 두 계층을 동시에 검증(Express만 죽어도, Next만 죽어도 이 경로가 실패함)
-3. 타입: HTTP(s) Keyword 모니터, 응답 바디에 `"status":"ok"` 포함 여부까지 체크(단순 200 응답이 아니라 실제 정상 JSON인지까지 확인 — 타임아웃과 502를 둘 다 잡음), 5분 간격
-4. 알림 채널: 이메일 + (선택) Slack/텔레그램 — 최소 2개 채널 권장(이메일 서버 자체 장애 시 단일 채널이면 무용지물)
-5. 프로덕션 `server/.env`/`.env.local`의 `SENTRY_DSN`이 실제로 채워져 있는지도 함께 확인 — OS 재설치 이후 처음부터 다시 만들어진 파일이라 "선택 항목"으로 표시된 값이 누락됐을 가능성이 있음. 없으면 각 Sentry 프로젝트에서 재발급해 채우고 `pm2 restart all`
+1. **UptimeRobot** 가입 완료. 모니터 대상은 `https://<도메인>/api/health`(Next → Express 프록시 경로라 두 계층을 동시에 검증 — Express만 죽어도, Next만 죽어도 이 경로가 실패함), 5분 간격, 이메일 알림 등록 확인. SMS/전화는 유료 크레딧 기반이라 스킵(무료 25건 제공되지만 굳이 안 씀)
+2. **Sentry 프로젝트 2개** 생성 완료 — 백엔드(`node-express`, Express 플랫폼), 프론트(`javascript-nextjs`, Next.js 플랫폼). 각 DSN을 `server/.env`의 `SENTRY_DSN`, `.env.local`의 `NEXT_PUBLIC_SENTRY_DSN`에 반영
+
+**⚠️ 발견한 버그 — `sentry.client.config.ts`가 8/10 도입 이후 계속 무시되고 있었음**: `@sentry/nextjs`(현재 10.x) + Next.js 16 조합은 브라우저 쪽 초기화를 Next.js의 공식 client instrumentation 훅 파일(**`instrumentation-client.ts`**, 프로젝트 루트)로 찾는데, 이 레포는 예전 컨벤션 파일명(`sentry.client.config.ts`)만 있어서 빌드 시 조용히 무시되고 있었다 — 빌드 로그에 에러도 경고도 전혀 없어서 `.next/static/chunks/*.js`를 직접 grep해서 "sentry" 문자열이 0개라는 걸로 확인했다. 즉 **서버(Express)/Next 서버사이드 에러는 계속 정상 수집되고 있었지만, 실제 사용자 브라우저에서 나는 JS 에러는 한 번도 Sentry에 안 잡히고 있었다.** `git mv sentry.client.config.ts instrumentation-client.ts`로 해결 — 파일 내용(단순 `Sentry.init({...})` 호출)은 그대로 재사용 가능, 재빌드하면 클라이언트 청크에 SDK가 포함되는 것으로 확인.
+
+**라이브 검증 순서**: ① `dist/loadEnv.js`를 먼저 `require`하지 않고 `dist/instrument.js`만 단독 실행하면 `SENTRY_DSN`이 로드 안 된 상태라 `Sentry.flush()`가 "성공"을 리턴해도 실제로는 아무것도 안 보낸 거짓 양성이 나온다(env 로딩 순서 확인 필수) ② 백엔드는 `loadEnv.js` → `instrument.js` 순서로 로드 후 `captureException`+`flush`로 Sentry Issues에 실제로 뜨는 것 확인 ③ 프론트는 브라우저에서 직접 `setTimeout(() => { throw new Error(...) }, 100)`으로 미처리 예외를 발생시켜 네트워크 탭에서 `ingest.us.sentry.io/.../envelope/` POST가 200으로 나가는 것까지 확인 — 두 프로젝트 Issues 탭에 실제로 이슈가 뜨는 것으로 최종 확정
 
 ### 10-4. 봇/브루트포스 방어 확장 (2026-08-16, 실제 배포 시 적용 + 라이브 검증 완료)
 
@@ -408,6 +425,101 @@ cat /etc/apt/apt.conf.d/20auto-upgrades   # Update-Package-Lists/Unattended-Upgr
 `/etc/apt/apt.conf.d/50unattended-upgrades`에서 `Unattended-Upgrade::Automatic-Reboot "false";`를 **주석 해제해서 명시적으로 켜기**(기존엔 주석 처리라 암묵적 기본값에 의존하고 있었음) — 커널 업데이트로 재부팅이 필요해지면 자동 재부팅 대신 "10-3 다운타임 모니터링"(UptimeRobot)이 감지하게 하고, 재부팅은 직접 확인 후 진행한다(자동 재부팅 중 pm2/Docker가 안 살아나는 걸 아무도 모르는 상태로 방치하는 게 더 위험).
 
 **라이브 검증(2026-08-16)**: `unattended-upgrade --dry-run --debug`로 실행해 `-security`/ESM 오리진만 후보로 잡고 일반 `-updates` 오리진은 의도대로 건너뛰는 것 확인, `apt-daily.timer`/`apt-daily-upgrade.timer` 둘 다 enabled 확인.
+
+### 10-6. 커스텀 도메인 연결 (busrent.co.kr, 2026-08-18 완료 + 라이브 검증)
+
+카페24 콘솔에서 도메인을 구매해 "대표 도메인"으로 지정하는 것은 **DNS를 VPS IP로 연결하는 것뿐**이고, 서버의 Nginx/인증서에는 자동 반영되지 않는다. DNS가 이미 VPS를 가리키고 있는데도(`dig busrent.co.kr` → VPS IP) `http://busrent.co.kr`가 Nginx 기본 404를 뱉는다면 이 절차가 누락된 것 — Nginx `server_name`에 새 도메인이 없으면 포트 80 블록의 `return 404;`(certbot이 생성한 catch-all)에 걸린다.
+
+**주의**: 이 서버는 `deploy/nginx/goodbus.conf`(이 레포의 템플릿)를 직접 심볼릭 링크한 게 아니라, 카페24 자동설치가 만들어둔 자체 템플릿(`/etc/nginx/sites-available/GoodBus`, `location = /` welcome fallback·`/etc/nginx/cafe24-proxy.conf` include 등 구조가 다름)을 실사용 중이다. 아래 절차는 **실제 운영 파일 기준**이며, 레포의 `deploy/nginx/goodbus.conf`는 최초 셋업 참고용 초안일 뿐 실서버와 100% 동일하지 않다는 점을 감안한다.
+
+```bash
+# 1) 인증서를 기존 도메인 + 신규 도메인까지 포함하도록 확장 발급
+#    (기존 계정 재사용, --expand로 goodbus0716.mycafe24.com 인증서에 SAN 추가)
+certbot --nginx -d goodbus0716.mycafe24.com -d busrent.co.kr -d www.busrent.co.kr \
+  --expand --non-interactive --agree-tos
+
+# 인증서 발급/설치는 성공하지만, busrent.co.kr에 매칭되는 server 블록이 없어서
+# "Could not automatically find a matching server block for busrent.co.kr" 경고가 뜬다 —
+# 인증서 자체(SAN)는 이미 3개 도메인 다 포함된 상태이므로, 아래 2)만 하면 된다.
+
+# 2) /etc/nginx/sites-available/GoodBus 수동 수정 (편집 전 반드시 백업)
+cp /etc/nginx/sites-available/GoodBus /etc/nginx/sites-available/GoodBus.bak-$(date +%Y%m%d%H%M%S)
+```
+
+수정 내용 (443 블록과 80 블록 둘 다):
+
+- `server_name goodbus0716.mycafe24.com;` → `server_name goodbus0716.mycafe24.com busrent.co.kr www.busrent.co.kr;`
+- 80번 포트 블록의 `if ($host = goodbus0716.mycafe24.com) { return 301 https://$host$request_uri; }` 바로 아래에, 같은 패턴으로 `busrent.co.kr`/`www.busrent.co.kr`용 `if` 블록을 하나씩 추가(certbot이 도메인을 추가로 인식했을 때 자동 생성하는 것과 동일한 패턴)
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+**라이브 검증(2026-08-18)**: `curl -I http://busrent.co.kr/`(301→https), `curl -I https://busrent.co.kr/`·`https://www.busrent.co.kr/`(200), `openssl s_client`로 인증서 SAN에 3개 도메인 전부 포함 확인, 기존 `goodbus0716.mycafe24.com`도 그대로 정상 동작 확인.
+
+**부수 작업 — `NEXT_PUBLIC_SITE_URL` 반영**: `lib/siteConfig.ts`의 `SITE_URL`(sitemap/robots/OG태그/JSON-LD의 기준 URL)이 이 값 없으면 `goodbus0716.mycafe24.com`로 폴백한다. 커스텀 도메인 연결 후 `.env.local`에 `NEXT_PUBLIC_SITE_URL=https://busrent.co.kr` 추가 → **`NEXT_PUBLIC_*`는 빌드 타임에 굽는 값이라 `.env.local`만 고치면 반영 안 됨, 반드시 재빌드 필요**:
+
+```bash
+cd /var/www/goodbus
+npm run build:prod
+pm2 restart all
+```
+
+재빌드 후 `curl https://busrent.co.kr/sitemap.xml`·`/robots.txt`와 홈페이지 `og:url`/JSON-LD `url` 필드가 전부 `busrent.co.kr` 기준으로 나오는 것 확인(2026-08-18).
+
+**아직 안 한 것**: 카카오맵 API는 허용 도메인에 `busrent.co.kr` 등록 완료(사용자 확인, 2026-08-18). 토스페이먼츠 쪽 허용 도메인(있다면)은 미확인 — 실 키 전환 시점에 함께 확인 필요. Cloudflare 전체 프록시(Phase 3)는 여전히 미착수 — 이번 도메인 구매로 전제조건은 충족됐으므로 다음 후보 작업.
+
+**추가 후속 조치 — 옛 도메인 하드코딩 정리 + 모니터링 (2026-08-18 완료 + 라이브 검증)**: 도메인 연결 자체는 끝났지만, 코드/외부 서비스에 옛 도메인이 하드코딩된 곳이 몇 군데 더 있었다. 전체 리포 `grep`으로 훑고, 실제 UptimeRobot/Sentry 대시보드까지 직접 열어 확인함:
+
+- `NEXT_PUBLIC_API_URL`(`.env.local`) — 업로드 이미지(`hooks/use*Dashboard.tsx`, `components/ChatPanel.tsx` 등) 절대경로 생성에 쓰임. 옛 도메인이 계속 살아있어 당장 깨지진 않지만 새 도메인으로 갱신. `NEXT_PUBLIC_*`라 마찬가지로 재빌드 필요.
+- `CORS_ORIGIN`(`server/.env`) — Express `cors()` 설정. 브라우저는 `app/api/[...path]/route.ts`가 서버사이드로 Express를 프록시하는 same-origin 구조라 옛 값이어도 실제로 브라우저에 영향은 없었지만(프록시 라우트가 `access-control-allow-*` 헤더를 반환 전에 삭제), 값 자체가 맞지 않는 상태를 방치할 이유가 없어 함께 갱신.
+
+```bash
+# .env.local / server/.env 값 교체 후
+cd /var/www/goodbus
+npm run build:prod
+pm2 restart all
+```
+
+재빌드 후 `.next/static/chunks/*.js`를 `grep`해서 옛 도메인 문자열이 0건, 새 도메인 문자열만 남은 것 확인. `/api/auth/login`·`/api/health` 응답 정상 확인.
+
+- **UptimeRobot**: 기존 모니터가 `goodbus0716.mycafe24.com` 하나뿐이었음(실제 대시보드에서 직접 확인) — 두 도메인이 같은 서버를 가리켜도 이번 사고처럼 도메인 단위로 따로 깨질 수 있으므로, `busrent.co.kr/api/health` 모니터를 동일 패턴(5분 간격, 이메일 알림)으로 신규 추가.
+- **Sentry**: `javascript-nextjs`/`node-express` 두 프로젝트의 Inbound Filters·Client Keys를 직접 열어 확인 — 도메인/오리진 화이트리스트가 전혀 없어 DSN은 도메인과 무관하게 동작함. **조치 불필요**로 결론.
+- **확인은 했지만 코드 조치 없음**: JWT 쿠키는 `domain` 속성이 없는 host-only 쿠키라 도메인별로 자연스럽게 분리됨(기존 세션 재사용 불가는 정상, 재로그인 필요). Toss 결제창 `successUrl`/`failUrl`은 `window.location.origin` 기반이라 하드코딩 없음.
+- **여전히 코드 밖에서 확인 필요**: Toss Payments 대시보드의 웹훅 URL/허용 도메인 설정 — 로그인 필요해 이번엔 미확인, 가맹심사 통과·실 키 전환 시점에 같이 볼 것.
+
+### 10-7. 옛 도메인(goodbus0716.mycafe24.com) 브라우저 트래픽을 새 도메인으로 리다이렉트 (2026-08-18 완료 + 라이브 검증)
+
+커스텀 도메인이 생긴 뒤에도 카페24 기본 서브도메인(`goodbus0716.mycafe24.com`)이 완전히 동일한 사이트를 계속 서빙하면 사용자 입장에서 "사이트가 2개"로 보이고, `<link rel="canonical">`이 없는 상태라 검색엔진 중복 콘텐츠로 잡힐 여지도 있었다(`og:url`만 새 도메인을 가리키는 건 약한 신호). Vercel(`*.vercel.app`)·Heroku(`*.herokuapp.com`) 등이 흔히 쓰는 패턴대로, 기본 서브도메인은 살려두되 **사람이 보는 페이지만 커스텀 도메인으로 301 리다이렉트**하기로 함.
+
+**주의해서 뺀 것 — `/api/*`는 리다이렉트 대상에서 제외**: 웹훅(예: Toss)은 POST인데, 클라이언트에 따라 301 응답을 받으면 POST 바디를 안 실어 나르거나 재시도를 안 하는 경우가 있어 조용히 유실될 수 있다. `/api/*`(헬스체크·백엔드 프록시 전부 포함)는 옛 도메인에서도 그대로 직접 응답하도록 남겨뒀다 — 실제로 기존 UptimeRobot 모니터가 처음부터 `/api/health`를 보고 있었다는 것도 이번에 확인(root `/`가 아니었음), 그래서 이 모니터도 영향 없음.
+
+`/etc/nginx/sites-available/GoodBus`의 443 서버 블록, `# --- Method whitelist ---` 바로 아래에 추가(플래그 변수 방식 — `if`를 하나로 합치는 대신 두 단계로 나눠 host 매치→api 경로면 취소 순으로 처리):
+
+```nginx
+set $redirect_to_new 0;
+if ($host = goodbus0716.mycafe24.com) {
+    set $redirect_to_new 1;
+}
+if ($uri ~ ^/api/) {
+    set $redirect_to_new 0;
+}
+if ($redirect_to_new) {
+    return 301 https://busrent.co.kr$request_uri;
+}
+```
+
+```bash
+cp /etc/nginx/sites-available/GoodBus /etc/nginx/sites-available/GoodBus.bak-$(date +%Y%m%d%H%M%S)
+# (수정)
+nginx -t && systemctl reload nginx
+```
+
+**라이브 검증(2026-08-18)**:
+- `curl https://goodbus0716.mycafe24.com/`, `/company` → 301, `Location: https://busrent.co.kr/...` (경로 보존)
+- `curl https://goodbus0716.mycafe24.com/api/health` → 200 직접 응답(리다이렉트 없음), `busrent.co.kr`/`www.busrent.co.kr`도 그대로 정상
+- **인증서 자동 갱신 재검증**: 리다이렉트 로직 추가 전/후 두 번 다 `certbot renew --dry-run --cert-name goodbus0716.mycafe24.com` → `Congratulations, all simulated renewals succeeded`. (걱정했던 지점: `if`는 location 매칭보다 먼저 처리되는 rewrite phase라 ACME 챌린지 요청도 가로챌 수 있는데, 이 서버는 3개 도메인이 **하나의 공유 서버 블록**에 있어서 certbot이 갱신 시 넣는 `location = /.well-known/acme-challenge/...` 응답 블록이 어느 호스트로 리졸브되든 같은 블록 안에 이미 존재함 — 그래서 리다이렉트를 한 번 더 타도 문제없이 검증됨. 도메인마다 서버 블록이 분리된 구성이라면 이 가정이 깨지니 그대로 복붙하지 말 것.)
+- UptimeRobot의 기존 `goodbus0716.mycafe24.com` 모니터(`/api/health` 대상) — 리다이렉트 적용 전후 응답시간 그래프 끊김 없이 정상, 0 incidents
 
 ---
 

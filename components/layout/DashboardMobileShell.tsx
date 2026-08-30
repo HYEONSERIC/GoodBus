@@ -8,13 +8,17 @@ import {
     type BottomTabItem,
 } from '@/components/layout/DashboardBottomTabs';
 
-export type DashboardHeaderVariant = 'menu' | 'membership' | 'paymentCards';
+export type DashboardHeaderVariant =
+    | 'menu'
+    | 'membership'
+    | 'paymentCards'
+    | 'paymentHistory';
 
 export function DashboardMobileShell<T extends string>({
     children,
     showHeader = true,
     headerVariant = 'menu',
-    headerTitle = 'GOODBUS',
+    headerTitle = '버스대절',
     onMenuClick,
     onBack,
     onHome,
@@ -50,7 +54,8 @@ export function DashboardMobileShell<T extends string>({
                 <div className="border-b border-gray-200 bg-white/90 backdrop-blur">
                     <div className="relative flex w-full items-center justify-center px-3 py-4 sm:px-4">
                         {headerVariant === 'membership' ||
-                        headerVariant === 'paymentCards' ? (
+                        headerVariant === 'paymentCards' ||
+                        headerVariant === 'paymentHistory' ? (
                             <>
                                 <div className="absolute left-3 sm:left-4">
                                     <button

@@ -68,18 +68,22 @@ async function resolveTripEndpoints(trip: TripWithCoords) {
 export async function calculateTripDistancesRecord(
     trips: TripWithCoords[],
 ): Promise<Record<string, number | null>> {
-    const results: Record<string, number | null> = {};
-    for (const trip of trips) {
-        const { originPoint, destinationPoint } =
-            await resolveTripEndpoints(trip);
-        if (!originPoint || !destinationPoint) {
-            results[trip.id] = null;
-            continue;
-        }
-        results[trip.id] = await fetchDrivingDistanceKm(
-            originPoint,
-            destinationPoint,
-        );
-    }
-    return results;
+    // 여정마다 순차 await하면 N배 지연이 그대로 체감 로딩 시간이 된다 —
+    // 서로 독립적인 조회라 Promise.all로 병렬화한다. 대시보드 한 화면에
+    // 표시되는 여정 수는 제한적이라 카카오 API 초당 호출 한도 위험은 낮음.
+    const entries = await Promise.all(
+        trips.map(async (trip) => {
+            const { originPoint, destinationPoint } =
+                await resolveTripEndpoints(trip);
+            if (!originPoint || !destinationPoint) {
+                return [trip.id, null] as const;
+            }
+            const km = await fetchDrivingDistanceKm(
+                originPoint,
+                destinationPoint,
+            );
+            return [trip.id, km] as const;
+        }),
+    );
+    return Object.fromEntries(entries);
 }

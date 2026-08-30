@@ -41,11 +41,6 @@ export default function DashboardPage() {
         }
     }, [user, loading, router]);
 
-    const handleLogout = async () => {
-        await authAPI.logout();
-        router.push('/login');
-    };
-
     if (loading) {
         return <div className="p-8">로딩 중...</div>;
     }

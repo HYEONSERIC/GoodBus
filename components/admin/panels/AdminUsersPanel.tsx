@@ -5,14 +5,6 @@ import { useAdminDashboard } from '@/hooks/useAdminDashboard';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import {
     formatBidStatusLabel,
@@ -24,6 +16,7 @@ import { AdminDeepLink } from '@/components/admin/AdminDeepLink';
 import { AdminLoadingSkeleton } from '@/components/admin/AdminLoadingSkeleton';
 import { AdminStatusBadge } from '@/components/admin/AdminStatusBadge';
 import { formatManWon } from '@/lib/adminRevenueDisplay';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 export function AdminUsersPanel() {
   const {
@@ -67,6 +60,10 @@ export function AdminUsersPanel() {
         document
             .getElementById('admin-user-detail')
             ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // selectedUser 객체 전체가 아니라 id만 의존성으로 둔다 — 상세 데이터가
+        // 스트리밍되며 같은 사용자의 selectedUser 객체가 갱신될 때마다 다시
+        // 스크롤되는 것을 막기 위함(같은 사용자를 보는 동안 반복 스크롤 방지).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedUser?.id, detailLoading]);
 
   return (
@@ -100,7 +97,7 @@ export function AdminUsersPanel() {
                             <Input
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                            placeholder="이메일 검색"
+                            placeholder="이름·이메일·전화번호 검색"
                             />
                         </AdminFilterField>
                         <Button variant="outline" onClick={handleFilter}>
@@ -126,7 +123,7 @@ export function AdminUsersPanel() {
                                             colSpan={5}
                                             className="py-8 text-center text-sm text-slate-500"
                                         >
-                                            조건에 맞는 회원이 없습니다. 역할·상태 필터나 이메일 검색어를 조정해 보세요.
+                                            조건에 맞는 회원이 없습니다. 역할·상태 필터나 검색어를 조정해 보세요.
                                         </td>
                                     </tr>
                                 ) : null}
@@ -139,7 +136,7 @@ export function AdminUsersPanel() {
                                             loadUserDetails(user.id, 10);
                                         }}
                                     >
-                                        <td className="py-3 pr-4 pl-4 text-slate-900">{user.email}</td>
+                                        <td className="py-3 pr-4 pl-4 text-slate-900">{adminPersonLabel(user)}</td>
                                         <td className="py-3 pr-4 text-slate-600">{user.role}</td>
                                         <td className="py-3 pr-4">
                                             <AdminStatusBadge
@@ -196,10 +193,18 @@ export function AdminUsersPanel() {
                         )}
                         {selectedUser && (
                             <div className="space-y-2 text-sm">
-                                <div>
-                                    <span className="font-medium">이메일:</span>{' '}
-                                    {selectedUser.email}
-                                </div>
+                                {selectedUser.email ? (
+                                    <div>
+                                        <span className="font-medium">
+                                            이메일:
+                                        </span>{' '}
+                                        {selectedUser.email}
+                                    </div>
+                                ) : (
+                                    <div className="text-slate-500">
+                                        전화번호 전용 가입 계정 (이메일 없음)
+                                    </div>
+                                )}
                                 {(selectedUser.displayName ||
                                     selectedUser.companyName ||
                                     selectedUser.phoneNumber ||

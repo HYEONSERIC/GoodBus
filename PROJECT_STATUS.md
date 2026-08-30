@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-08-16
+**최종 갱신:** 2026-08-29
 
 ---
 
@@ -16,27 +16,31 @@
 
 ---
 
-## 호스팅 (카페24) — 2026-08-16 실제 프로덕션 배포 완료
+## 호스팅 (카페24) — 2026-08-16 실제 프로덕션 배포 완료, 2026-08-18 커스텀 도메인 연결
 
-- **운영 중:** `goodbus0716.mycafe24.com`, 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원
+- **운영 중:** `busrent.co.kr`(대표 도메인, 2026-08-18 연결) / `www.busrent.co.kr`, 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원. `goodbus0716.mycafe24.com`은 브라우저 페이지 접속 시 새 도메인으로 301 리다이렉트(2026-08-18, `/api/*`는 웹훅 등 고려해 예외), 사이트가 두 곳으로 보이는 문제 해소
 - **스택:** Ubuntu 24.04, Node.js(pm2 fork 모드), Docker Postgres(네이티브 PostgreSQL 17은 `systemctl disable`로 끔), Nginx + certbot
-- **SSL:** Let's Encrypt(certbot) 적용, HSTS 포함 보안 헤더 응답 확인
+- **SSL:** Let's Encrypt(certbot) 적용, 3개 도메인 모두 포함하는 멀티도메인(SAN) 인증서로 확장 발급(2026-08-18), HSTS 포함 보안 헤더 응답 확인
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
 - **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
-- **아직 안 됨:** SSH 키 인증 전환(비밀번호 인증 여전히 열려있음), UptimeRobot 다운타임 모니터링, Sentry DSN 미설정
+- **커스텀 도메인 연결(2026-08-18)**: 카페24 콘솔의 "대표 도메인" 지정은 DNS 연결만 해줄 뿐 서버 Nginx/인증서는 자동 반영되지 않아 처음엔 `busrent.co.kr` 접속 시 Nginx 기본 404가 떴음 — `certbot --expand`로 인증서 확장 + Nginx `server_name`/리다이렉트 규칙 수동 추가로 해결, `NEXT_PUBLIC_SITE_URL`도 새 도메인으로 갱신 후 재빌드(sitemap·OG태그·JSON-LD가 이제 `busrent.co.kr` 기준). 절차는 `DEPLOYMENT.md` "10-6" 참고. 카카오맵 API 허용 도메인은 등록 완료(사용자 확인)
+- **Phase 3(Cloudflare 전체 프록시) 2026-08-25 완료** — 네임서버를 Cloudflare로 이관(`cody.ns.cloudflare.com`/`paloma.ns.cloudflare.com`), DNS Proxied(오렌지 클라우드), SSL/TLS 모드 Full (strict). Nginx에 Cloudflare 엣지 IP `set_real_ip_from`+`real_ip_header CF-Connecting-IP` 추가해 레이트리밋·`X-Real-IP`가 Cloudflare IP 하나로 뭉쳐지는 문제 방지, 추가로 `busrent.co.kr` 직접 원본 IP 우회 접속을 nginx `geo`+호스트 매치로 차단(`goodbus0716.mycafe24.com`은 UptimeRobot 의존성 때문에 의도적으로 예외). 전부 라이브 curl로 검증 완료 — 자세한 내용은 아래 "완료됨" 2026-08-25 항목 참고. **Kakao/Toss 관련 남은 항목도 같은 날 해소** — 상세는 아래 참고.
 
 ---
 
-## 인증 — 휴대전화 / 알림톡 (코드 구현 완료, 실발송은 외부 심사 대기)
+## 인증 — 휴대전화 / 알림톡 (2026-08-20 SMS 단독 발송 프로덕션 적용 완료, 알림톡은 외부 심사 대기)
 
-### 현재 코드 상태 (2026-08-11 구현·테스트 완료)
+### 현재 코드 상태 (2026-08-19 전 역할 전화번호 전용으로 전면 개편)
 
-- 로그인(`app/login/page.tsx`)·회원가입(`app/signup/page.tsx`) 모두 전화번호 입력 → 인증 요청 → 코드(4자리) 입력 → 로그인/가입까지 실제로 동작함 (더미 alert 아님)
-- 승객 회원가입은 이메일/비밀번호 그대로 필수 + **전화번호도 필수**(가입 시 OTP 인증). 기사/버스회사는 기존과 동일(전화번호는 나중에 "나의 정보"에서), 관리자는 이메일/비밀번호만 유지(전화 로그인 대상 아님)
-- `User.phoneNumber`에 `@unique` + `phoneVerifiedAt` 추가, `PhoneVerification` 테이블(코드 bcrypt 해시, 만료 5분, 재전송 쿨다운 60초, 일일 5회/검증 5회 제한) 신설
-- `server/src/utils/aligo.ts`가 env 변수 유무에 따라 **개발 모드(서버 콘솔 출력) → SMS 단독 → 카카오 알림톡+SMS 자동대체(`failover=Y`)** 순으로 자동 전환 — 코드 수정 없이 `.env`만 채우면 전환됨
-- 지금은 알리고/카카오 관련 env가 전혀 없어서 개발 모드로 동작 중(서버 로그에 인증번호 출력)
-- **다음 세션 시작 시 바로 이어갈 방법**: `.claude/roadmap.md`의 "다음 세션 시작 가이드" 참고 — 알리고 가입/카카오 채널 승인 후 env 채우는 순서와 확인 방법이 정리되어 있음
+- **승객/기사/버스회사 전 역할이 이메일·비밀번호 없이 전화번호+OTP만으로 가입·로그인** — 로그인(`app/login/page.tsx`)·회원가입(`app/signup/page.tsx`, `app/signup-business/page.tsx`) 모두 전화번호 입력 → 인증 요청 → 코드 입력 → 로그인/가입까지 실제로 동작함. 승객은 전화번호만, 기사는 이름+전화번호, 버스회사는 회사명+담당자 이름+전화번호가 필수
+- `/login`에는 "승객 로그인" / "기사·회사 로그인" 두 버튼(=`accountType`)이 있어 같은 화면에서 계정 유형을 먼저 선택 후 전화번호+OTP로 로그인
+- **관리자는 별도 페이지 `/admin/login`에서 기존과 동일하게 이메일/비밀번호 로그인**(공개 로그인 페이지와 완전히 분리, 헤더 없음) — 전화 로그인 대상 아님
+- **같은 전화번호로 승객 계정과 기사/회사 계정을 각각 만들 수 있음** — `User.phoneNumber` 단일 `@unique`를 없애고 `@@unique([phoneNumber, role])`로 전환, `accountType`(`'passenger' | 'business'`) 파라미터로 승객 그룹과 기사·회사 그룹을 구분(기사·회사는 같은 그룹으로 취급되어 한 번호에 하나만 허용, 앱 코드 레벨에서 강제)
+- `User.email`/`passwordHash`가 nullable로 전환됨에 따라 관리자 콘솔 전 구간(목록·검색·상세 7개 패널 + 채팅 + 승객 대시보드)의 email-non-null 가정을 전수 수정, `lib/adminPersonLabel.ts`(신규)로 `displayName || companyName || email || phoneNumber || fallback` 표시 순서 통일, 검색도 이름/전화번호까지 확장
+- 기존 이메일/비밀번호 계정은 **마이그레이션하지 않음** — 실제 배포 시점에 프로덕션 `User` 테이블을 초기화하기로 결정(사용자 확정 사항). **2026-08-20 프로덕션에 실제로 반영 완료**: 기존 계정(Passenger 1·Driver 2·Admin 1, 연결된 Trip 1·Bid 1·AdminAuditLog 2) 삭제, 공지사항(`SupportPost`)은 작성자만 null로 바뀌고 보존, 새 관리자 계정(`admin@busrent.co.kr`) 재발급
+- `User.phoneVerifiedAt` + `PhoneVerification` 테이블(코드 bcrypt 해시, 만료 5분, 재전송 쿨다운 60초, 일일 5회/검증 5회 제한)은 기존 그대로. **2026-08-20에 `accountType`(`PhoneAccountType` enum, nullable) 컬럼 추가** — 쿨다운/일일한도/코드조회가 전부 `(phoneNumber, purpose)`로만 구분되던 걸 `(phoneNumber, purpose, accountType)`로 세분화. 승객 가입 OTP를 받자마자 같은 번호로 기사·회사 가입 OTP를 요청하면 불필요하게 60초 쿨다운에 걸리던 버그를 해소(번호당 다중 역할 기능이 실사용에서 막 걸리는 걸 실사용 중 발견해서 수정)
+- `server/src/utils/aligo.ts`가 env 변수 유무에 따라 **개발 모드(서버 콘솔 출력) → SMS 단독 → 카카오 알림톡+SMS 자동대체(`failover=Y`)** 순으로 자동 전환 — 코드 수정 없이 `.env`만 채우면 전환됨. **2026-08-20부터 로컬·프로덕션 모두 SMS 단독 발송 모드로 실제 전환**(`ALIGO_API_KEY`/`ALIGO_USER_ID`/`ALIGO_SENDER` 3개 값 반영, 발송 서버 IP `172.237.7.249` 알리고 화이트리스트 등록 완료), 실제 문자 수신 확인함(문구: `[버스대절] 인증번호는 {code} 입니다. 5분 내에 입력해주세요` — SMS/알림톡 문구에 구 브랜드명 "GoodBus"가 남아있던 걸 이번에 발견해 "버스대절"로 수정)
+- **다음 세션 시작 시 바로 이어갈 방법**: `.claude/roadmap.md`의 "다음 세션 시작 가이드" 참고 — 카카오 채널 승인 후 알림톡 env 채우는 순서와 확인 방법이 정리되어 있음(SMS 단독은 이미 완료)
 
 ### 목표 방식
 
@@ -53,7 +57,7 @@
 | 알림톡 **템플릿** | **필수** | 문구마다 카카오 심사 (보통 4~5일) |
 | 알리고 가입 + API 키 | **필수** | `server/.env`의 `ALIGO_API_KEY`/`ALIGO_USER_ID` (카카오 지도 API와 별도) |
 | 발신번호 등록 | **필수** | 서류 심사, `ALIGO_SENDER` |
-| SMS만 먼저 켤 경우 | 카카오 채널 불필요 | 발신번호 + 알리고 가입만으로 가능 (더 빠름) |
+| SMS만 먼저 켤 경우 | 카카오 채널 불필요 | 발신번호 + 알리고 가입만으로 가능 (더 빠름) — **2026-08-20 완료, 로컬·프로덕션 모두 실발송 확인됨** |
 
 ### 왜 알림톡을 쓰는지 (SMS 단독 대비)
 
@@ -82,7 +86,7 @@
 
 1. **가맹 심사 신청** → 실 키 발급 후 env 값만 교체(코드 변경 없음)
 2. 실 가격 확정 (현재 100/200/300/400원은 테스트용 placeholder)
-3. 관리자 콘솔에 결제/구독/환불 조회 화면 (현재 `PaymentTransaction`은 DB에만 쌓이고 관리자 UI 없음)
+3. 관리자 콘솔에 결제/구독/환불 조회 화면 (2026-08-19에 기사/회사용 개인 결제 내역 화면은 추가됨 — 아래 "완료됨" 참고. 관리자가 전체를 조회하는 화면은 여전히 없음)
 4. `AdminRevenuePanel`의 GMV×10% "추정 매출"이 실제 `PaymentTransaction`(platform_commission) 기록과 별개로 계산됨 — 실 결제 도입 후 두 수치 정합화(reconcile) 필요
 
 ---
@@ -91,7 +95,7 @@
 
 1. **호스팅** — 카페24 VPS, 도메인·SSL, pm2, 스모크 테스트
 2. **병행 신청** — 카카오 비즈니스 채널, 알리고 가입, 알림톡 템플릿, 토스페이먼츠 가맹심사
-3. **휴대전화 로그인** — OTP API·UI는 **구현·테스트 완료**(2026-08-11), 심사 통과 후 `server/.env`에 알리고/카카오 값만 채우면 실발송 전환 (`.claude/roadmap.md`의 "다음 세션 시작 가이드" 참고)
+3. **휴대전화 로그인** — 전 역할(승객/기사/버스회사) 전화번호 전용 가입·로그인 **프로덕션 배포·SMS 단독 실발송까지 완료**(2026-08-20), 카카오 심사 통과 후 `server/.env`에 알림톡 값만 채우면 전환 (`.claude/roadmap.md`의 "다음 세션 시작 가이드" 참고)
 4. **출시 전 정리** — 랜딩 가짜 지표·플레이스홀더 제거, 실 가격 확정 (~~약관·개인정보~~ 페이지는 2026-08-14 추가 완료, 법률 검토는 남음)
 5. **결제 실 키 전환** — 토스페이먼츠 가맹심사 통과 후 env 값 교체 (기능 자체는 테스트 키로 구현·테스트 완료, **2026-08-13**)
 
@@ -208,9 +212,9 @@
     - 로그인(`/auth/login`)·회원가입(`/auth/signup`)·전화로그인(`/auth/phone/login`)에도 IP 레이트리밋 확장(`server/src/utils/ipRateLimit.ts`로 공용화), 로그인 실패를 `[SECURITY] failed login ip=... email=...` 형식으로 로그 — VPS의 fail2ban 커스텀 jail이 이 포맷을 그대로 사용 예정. 실제 curl로 20회에서 429 걸리는 것, 실패 로그 찍히는 것 확인 완료
     - 업로드 매직바이트 검증 추가(`server/src/utils/uploadFileFilter.ts`) — 지금까지 파일 확장자를 클라이언트가 신고한 `Content-Type`만으로 결정해서, 위조된 mimetype으로 임의 파일이 이미지인 척 저장될 수 있었음. 실제 첫 바이트 시그니처(JPEG/PNG/WEBP/GIF)를 재검증하도록 `services/storage.ts`에서 강제. 이 과정에서 `verification.ts`(신분증·사업자등록증 업로드)가 다른 라우트들과 다르게 `multer.diskStorage`를 직접 쓰고 있어 검증을 못 걸던 것도 발견해 `memoryStorage`+공용 `storage.saveFile`로 통일(부수적으로 누락돼 있던 try/catch도 같이 해결). 위조 파일 거부(400)·정상 파일 통과(200) 둘 다 실제 curl로 검증
     - Nginx에 알려진 스캐너 UA(sqlmap/nikto/nmap 등)·빈 UA·흔한 취약점 스캔 경로(`/wp-admin`, `/.env`, `/.git` 등) 차단(`444`, 무응답 종료) 추가 — Docker로 실제 요청 보내 정상 트래픽은 통과, 스캐너 패턴은 연결 즉시 종료되는 것 확인. UA 위조는 쉬워서 진짜 방어선이 아니라 노이즈 감소용임을 명시
-    - `profile.ts`·`chats.ts`에 Zod 스키마 적용(admin.ts는 크래시 유발 패턴 재확인 결과 이미 없어서 보류, CSRF도 GET 기반 상태변경 라우트 없음 재확인)
-    - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키 발급(무료 Cloudflare 계정 가입)은 아직 안 됨** — 키 없으면 위젯 자체가 안 뜨고 서버 검증도 스킵되는 상태로 당분간 유지
-    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **2026-08-16에 전부 완료 — 아래 항목 참고.** **Phase 3(안정화 후 별도, 미착수)**: 도메인 구매→Cloudflare 전체 프록시(무료 DDoS 완화+WAF+Bot Fight Mode), Turnstile 키 실제 발급
+    - `profile.ts`·`chats.ts`에 Zod 스키마 적용(CSRF도 GET 기반 상태변경 라우트 없음 재확인). **당시 admin.ts는 "크래시 유발 패턴 없음"으로 판단해 보류했으나, 2026-08-25 재점검 결과 이 판단이 틀렸던 것으로 확인됨** — 아래 2026-08-25 항목 참고
+    - **Cloudflare Turnstile 도입**(무료, 도메인 구매 불필요) — `signup-business`(기사/버스회사 가입)가 전화인증 비용장벽이 없는 유일한 가입 경로라 가장 취약했음. `server/src/utils/turnstile.ts`(시크릿 미설정 시 항상 통과 — Aligo/Sentry와 동일한 "옵션 env 없으면 기능 꺼짐" 패턴), `components/auth/TurnstileWidget.tsx` 신설. **실제 사이트/시크릿 키는 2026-08-25 발급·반영 완료** — 아래 항목 참고
+    - **Phase 2(재설치 완료 후 VPS 배포 시 반영)**: 네이티브 PostgreSQL 17 끄기(Docker와 5432 충돌), fail2ban jail 확장(nginx-http-auth/nginx-limit-req/nginx-botsearch + 위 로그인 실패 로그 기반 커스텀 jail), unattended-upgrades. **2026-08-16에 전부 완료 — 아래 항목 참고.** **Phase 3(Cloudflare 전체 프록시): 2026-08-25 완료** — 아래 항목 참고
 - **실제 프로덕션 배포 + 인프라 보안 강화 완료** (2026-08-16)
     - `DEPLOYMENT.md` 순서대로 `goodbus0716.mycafe24.com`에 실제 배포. 문서에 없던 인프라 이슈 5건을 배포 중 새로 발견·수정(카페24 starter 앱의 포트 3000 선점, 네이티브 Postgres 5432 충돌, `/uploads` 프록시 누락, welcome 페이지 우선순위, Nginx `add_header` 상속 버그로 인한 HSTS 미노출) — 전부 `DEPLOYMENT.md` "10. 배포 후 체크리스트"/트러블슈팅 표에 반영
     - **fail2ban**: 카페24가 이미 설치해둔 fail2ban + `nginx-http-auth`/`nginx-limit-req`/`nginx-botsearch` 필터를 활성화하고, 우리 앱 전용 `goodbus-login` jail(로그인 실패 로그 기반) 추가. 과정에서 `backend=auto`가 조용히 journald만 보고 지정한 로그 파일은 무시하는 버그를 발견 — `backend=polling`으로 전 jail 수정. 실제 8회 실패 로그인으로 밴 발생시키고 해제까지 라이브 검증(`DEPLOYMENT.md` "10-4")
@@ -219,7 +223,37 @@
     - **카페24 플랫폼 방화벽**: ON 전환 + INBOUND 22/80/443 허용 규칙 추가, 나머지 전부 차단. 콘솔 UI가 직관적이지 않아 절차를 `DEPLOYMENT.md`에 기록
     - **Kakao/Toss API 키**: 프로덕션 서버에 반영하고 실제 동작(카카오 장소검색 API 호출 성공, Toss 카드 등록 위젯 노출)까지 확인. 반영 과정에서 Toss 클라이언트 키 오타(문자 O ↔ 숫자 0) 하나로 실제 401 에러가 발생했고, 브라우저 네트워크 탭으로 원인 특정 후 수정
     - **nodemailer 취약점 발견·수정**: 위 8/15 npm audit 정리 때 보류됐던 `nodemailer`(당시 breaking major라 후순위)를 재점검 — high severity 8건(SMTP 인젝션, addressparser DoS, TLS 검증 미흡 등) 중 실제 사용 패턴(`server/src/utils/email.ts`, 단순 `createTransport`+`sendMail`)에서 트리거 가능한 건 주소 파싱 관련 2건으로 좁혀 확인 후 `^6.9.8`→`^9.0.5` 업그레이드. 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과, `npm audit` 결과 root+server 둘 다 0 vulnerabilities
-    - **재확인 결과 아직 안 된 것**: SSH 비밀번호 인증이 여전히 열려있음(`PasswordAuthentication yes`), UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
+    - **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no`+`PermitRootLogin prohibit-password` 적용, 키 로그인 유지·비밀번호 인증 즉시거부 라이브 검증 완료. Cafe24가 이미 깔아둔 `sshd_config.d/99-cafe24-harden.conf`(MaxAuthTries 등)에 이 두 항목만 빠져있어 별도 drop-in으로 추가
+    - **재확인 결과 아직 안 된 것**: UptimeRobot 미가입, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 프로덕션에 미설정(OS 재설치로 새로 만들어진 env라 값 자체가 없음)
+- **구매안전서비스 비적용대상 증빙자료 대응 + 결제 내역 화면 신설** (2026-08-19)
+    - 동구청 민생경제과의 통신판매업 신고 심사 대응용 — "당사는 버스 이용대금을 수납하지 않고, 고객은 배차 확정된 버스업체/기사에게 직접 지급하며, 당사는 중개수수료만 별도로 정산받는다"는 안내문구를 입찰 팝업(`components/openTripBid/OpenTripBidFeeStep.tsx`, 기사/회사 대시보드 공용)에 추가
+    - 기사/회사 대시보드에 신규 "결제 내역" 탭 추가 — `GET /payments/transactions`(본인 스코프, enum 쿼리 파라미터는 `admin.ts`의 `parseEnumQuery` 패턴으로 검증) + `components/PaymentHistoryPanel.tsx`(일시/항목/금액/상태를 일반 텍스트로 표시, 상태는 "결제완료/결제대기/결제실패/결제취소"). 위 "결제·멤버십" 남은 작업 3번의 사용자 측 절반을 해소 — 관리자가 전체를 조회하는 화면은 여전히 없음
+    - 실제 승객→기사 입찰→낙찰 플로우를 시연해 커미션(10%) 결제 1건을 실제로 성공시키고 결제 내역 화면에서 확인까지 완료(증빙 스크린샷 확보)
+    - 공지사항(`SupportPost`) 등록은 관리자 콘솔에서 수동으로 하는 콘텐츠 작업이라 이번 범위에서 제외 — 프로덕션 관리자 계정 확보 후 동일 문구로 별도 등록 필요
+- **잔여 "GOODBUS" 브랜드명 정리** (2026-08-19)
+    - "버스대절"로 상호 변경 이후에도 대시보드 헤더 기본값, 입찰 팝업 제목, 승객 견적 등록 안내문 등 5곳에 구 브랜드명("GOODBUS"/"굿버스")이 남아있던 것을 전부 "버스대절"로 교체(`DashboardMobileShell.tsx`, `useDriverDashboard.tsx`/`useCompanyDashboard.tsx`, `OpenTripBidFeeStep.tsx`, `PassengerQuoteRequestSection.tsx`). 관리자 전용 CSV 파일명 접두사·localStorage 내부 키는 사용자에게 노출되지 않아 그대로 유지
+- **전화번호 전용 인증 전면 개편 + 관리자 로그인 분리 + 번호당 다중 역할 지원** (2026-08-19)
+    - 승객/기사/버스회사 전 역할이 이메일·비밀번호 없이 **전화번호+OTP만으로 가입·로그인**하도록 재설계(위 "인증 — 휴대전화 / 알림톡" 섹션 참고). 승객은 전화번호만, 기사는 이름+전화번호, 버스회사는 회사명+담당자 이름+전화번호가 필수. 기존 이메일/비밀번호 계정은 마이그레이션하지 않고, 실제 배포 시점에 `User` 테이블을 초기화하기로 결정(로컬 코드는 완료, 프로덕션 반영은 보류)
+    - `User.email`/`passwordHash`를 nullable로 전환하면서 `tsc --noEmit`으로 드러난 관리자 콘솔 전 구간의 email-non-null 가정을 전수 수정 — 목록/검색/상세 화면 7개 패널 + 채팅 + 승객 대시보드까지 `person.displayName || companyName || email || phoneNumber || fallback` 패턴(`lib/adminPersonLabel.ts`, 신규)으로 통일하고, 검색 로직도 이름/전화번호까지 포함하도록 확장
+    - 관리자 로그인을 공개 로그인 페이지에서 분리 — 관리자는 `/admin/login`(이메일/비밀번호, 헤더 없음)으로, 일반 사용자는 `/login`(전화 OTP 전용, 승객/기사·회사 버튼으로 계정 유형 선택)으로 완전히 나뉨
+    - 전화번호를 역할 그룹 단위로만 유일하게 만듦(`@@unique([phoneNumber, role])`, `accountType` 파라미터로 승객 그룹과 기사·회사 그룹을 구분) — 같은 번호로 승객 계정과 기사/회사 계정을 각각 만들 수 있게 됨(기사·회사끼리는 여전히 한 번호에 하나만 허용)
+    - `/verify` 스킬로 로컬 서버(:3000/:4000) 기준 전체 흐름 검증 — 승객 사이드바 빈 이름 표시 버그, 채팅 `isMine` 판정의 안전하지 않은 email 동등비교 등을 발견해 함께 수정
+    - `aligo` 브랜치에 커밋·푸시 완료(`7c54321`) — ~~프로덕션 서버에는 아직 미반영~~ **2026-08-20 프로덕션 배포 완료** (아래 2026-08-20 항목 참고)
+- **전화번호 전용 인증 프로덕션 배포 + 알리고 SMS 실발송 연동 + 번호당 다중 역할 쿨다운 버그 수정** (2026-08-20)
+    - 위 2026-08-19 전화번호 인증 개편 코드(`7c54321`, `bfec260`)를 실제 프로덕션(`busrent.co.kr`, 카페24 VPS)에 배포 — `git pull` → DB 백업 스냅샷 → `AdminAuditLog`/`Trip`/`User` 순서로 FK 제약 지키며 삭제(공지사항 `SupportPost`는 작성자만 null로 바뀌고 내용은 보존) → `prisma db push`로 스키마 반영(email/passwordHash nullable, `@@unique([phoneNumber, role])`) → 백엔드·프론트 빌드 → `pm2 restart`. 헬스체크·실제 페이지 서빙(`/login` 새 UI, `/admin/login`)까지 라이브 확인
+    - 삭제로 사라진 관리자 계정을 새로 재발급(`admin@busrent.co.kr`, `adminRole: Super`) — 비밀번호는 최초 로그인 후 관리자 콘솔에서 직접 변경 필요
+    - 알리고 SMS 단독 발송을 로컬·프로덕션 `.env`에 실제로 연동(`ALIGO_API_KEY`/`ALIGO_USER_ID`/`ALIGO_SENDER`) — 발송 서버 IP(`172.237.7.249`)가 알리고 화이트리스트에 등록돼 있어야만 성공한다는 걸 로컬 머신에서 직접 테스트하다 발견(로컬 공인 IP로는 `-101 인증오류` 거부당함, VPS IP로는 정상 발송). 실제 문자 수신까지 확인
+    - 수신한 SMS 문구에 구 브랜드명 "GoodBus"가 그대로 남아있던 걸 발견 — `server/src/utils/aligo.ts`의 SMS/알림톡 문구를 "버스대절"로 수정(`fa65b00`), 프로덕션에도 재배포
+    - `/verify` 스킬로 로컬에서 승객/기사/버스회사 3개 역할 가입→로그인 전체 플로우, 역할별 필수 필드 검증, 번호당 다중 역할(같은 번호로 승객+기사 계정 동시 보유), 관리자 이메일/비밀번호 로그인을 전부 실제 구동해 검증하던 중 — **승객 가입 OTP를 받자마자 같은 번호로 기사·회사 가입 OTP를 요청하면 불필요하게 60초 쿨다운에 걸리는 문제**를 발견. 원인은 `PhoneVerification` 테이블과 `otp.ts`(발급/검증)가 `accountType` 개념 자체가 없어 쿨다운·일일한도·코드조회가 전부 `(phoneNumber, purpose)`로만 묶여있었기 때문(번호당 다중 역할 기능을 추가하면서 그 아래 OTP 인프라는 안 건드렸던 게 원인) — `PhoneVerification`에 `accountType`(`PhoneAccountType` enum, nullable) 컬럼을 추가하고 `issueOtp`/`consumeOtp` 시그니처와 3개 호출부(`auth.ts`)에 반영해 `(phoneNumber, purpose, accountType)`로 완전히 분리. 로컬에서 승객→기사 OTP 연속 요청이 쿨다운 없이 각각 발급되는 것과 각자 코드로 가입 완료되는 것까지 재검증 후 프로덕션에 배포
+- **Cloudflare 전체 프록시(Phase 3) + Turnstile 키 발급 + Kakao 키 재발급 + Toss 웹훅 등록 + admin.ts Zod 검증** (2026-08-25)
+    - **Cloudflare 전체 프록시**: Free 플랜 가입, 네임서버를 카페24(`ns1/ns2.cafe24.*`)에서 Cloudflare(`cody.ns.cloudflare.com`/`paloma.ns.cloudflare.com`)로 이관, `busrent.co.kr`/`www`/`*` DNS 레코드 Proxied(오렌지 클라우드) 전환, SSL/TLS 모드 **Full (strict)**(기존 Let's Encrypt 정품 인증서로 검증 통과). VPS nginx에 `/etc/nginx/conf.d/goodbus-cloudflare.conf` 신설 — Cloudflare 엣지 IP 대역 `set_real_ip_from`+`real_ip_header CF-Connecting-IP`로 레이트리밋(`req_general`/`goodbus_auth` 존)·`X-Real-IP`가 방문자 IP 대신 Cloudflare IP 하나로 뭉치는 문제 방지. 여기에 `geo $realip_remote_addr $goodbus_is_cloudflare {...}` 맵 + `sites-available/GoodBus`의 호스트 매치 `if` 블록으로 **`busrent.co.kr` 원본 IP(`172.237.7.249`) 직접 우회 접속을 차단**(444) — `goodbus0716.mycafe24.com`은 UptimeRobot 모니터(`https://goodbus0716.mycafe24.com/api/health`)가 의존하고 있어 의도적으로 이 차단에서 제외. **프로덕션 nginx는 저장소 `deploy/nginx/goodbus.conf`와 별개로 관리됨**(카페24 재설치 이후 `sites-available/GoodBus`+`conf.d/*.conf` 구조로 갈라섬) — 향후 nginx 변경은 저장소 파일을 배포하는 게 아니라 VPS에서 직접 반영해야 함. curl로 라이브 검증: Cloudflare 경유 200, 원본 IP 직접 접속(`busrent.co.kr`/`www.busrent.co.kr` Host) 연결 거부, 포트 80 직접 접속은 차단 없이 리다이렉트만(앱 데이터 노출 없음), `goodbus0716.mycafe24.com` 직접 접속 그대로 200, 접속 로그에 실제 방문자 IP 정상 기록.
+    - **Cloudflare Turnstile 키 발급**: 위 Cloudflare 계정 생성으로 막혀있던 전제조건 해소 — 위젯 `busrent_bs`(Managed 모드, 호스트 `busrent.co.kr`) 생성해 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY`를 로컬·프로덕션 env에 반영, 프론트 재빌드(`NEXT_PUBLIC_*`는 빌드 타임에 박히므로 env만 바꿔선 반영 안 됨) + `pm2 restart` 양쪽 다. 라이브 검증: `turnstileToken` 없이 `POST /api/auth/signup`(role=Driver)을 보내면 이제 `400`으로 거부됨(키 발급 전엔 시크릿 미설정으로 이 검증이 조용히 항상 통과였음) — OTP 소비·DB 저장 전 단계에서 걸러지는 것까지 코드로 확인해 부작용 없이 라이브로 검증.
+    - **Kakao REST API 키 재발급**: 침해사고 이후 미확인 상태였던 키를 Kakao Developers 콘솔에서 재발급(`KAKAO_REST_API_KEY`=`KAKAO_MOBILITY_API_KEY`, 동일 키 공유가 정상 동작). 로컬·프로덕션 env 반영, 백엔드 재시작, 서버의 낡은 `.env.bak`(2026-08-16 스냅샷, 옛날 키 값 포함)까지 찾아서 삭제. `/api/kakao/places` 실제 카카오 장소검색 호출로 라이브 검증. 콘솔 쪽 옛날 키 삭제는 사용자가 직접 해야 하는 남은 절차.
+    - **Toss Payments 테스트 웹훅 + API 키 접근 정책(IP 화이트리스트) 등록**: `server/src/routes/paymentsWebhook.ts`+`TOSS_WEBHOOK_SECRET`가 2026-08-16부터 코드/env엔 있었지만 Toss 대시보드에 웹훅 자체가 한 번도 등록된 적이 없어 실제로 호출된 적이 없었던 상태를 발견 — `busrent_pay`(`https://busrent.co.kr/api/payments/webhook`, 이벤트 `PAYMENT_STATUS_CHANGED`만, 코드가 실제로 처리하는 것과 일치) 등록, API 키 접근 정책 `busrent_prod`(허용 IP `172.237.7.249`)도 등록. 둘 다 "테스트" 탭 기준(공유 샌드박스 MID `tvivarepublica`) — 실 사업자 라이브 키 전환 시 "라이브" 탭에 동일 작업 재등록 필요. 라이브 검증: 서명 없는/깨진 바디 요청 모두 `400 Invalid signature`로 깔끔히 거부(500 아님).
+    - **`admin.ts` Zod 검증 추가**: `PATCH /users/:id/status`, `PATCH /verifications/:id`, `POST /admins` 세 라우트가 `req.body as {...}` 캐스팅만 하고 `try/catch`가 없던 것을 Zod 스키마+`try/catch`로 교체(`auth.ts`/`trips.ts`와 동일 패턴). 특히 `POST /admins`는 `adminRole`을 검증 없이 그대로 `prisma.user.create`에 넘겨서, 스키마 밖 값을 보내면 `PrismaClientValidationError`가 잡히지 않고 새는 실제 크래시 경로였음(2026-08-15에 "이미 없다"고 판단했던 게 오판이었음, 위 참고). 로컬 시드 관리자 계정으로 실제 HTTP 라우트를 직접 호출해 라이브 검증 — `adminRole: "HackerRole"` 등 악의적 입력이 이제 `400`으로 깔끔히 막히는 것, 정상 입력은 여전히 `201`로 실제 DB에 관리자가 생성되는 것, 인접한(안 건드린) `support-posts` 라우트가 회귀 없이 그대로 동작하는 것까지 확인.
+    - **부수 발견(오늘 변경과 무관, 기존 이슈)**: `X-Frame-Options`/`X-Content-Type-Options`/`Referrer-Policy` 헤더가 `next.config.ts`와 nginx 양쪽에서 중복 설정돼 응답에 두 번씩 찍힘 — 해롭진 않으나 언젠가 한쪽으로 정리 필요.
+- **Kakao REST API 키 재발급** (2026-08-29) — Kakao Developers 콘솔에서 다시 재발급(`KAKAO_REST_API_KEY`=`KAKAO_MOBILITY_API_KEY`, 동일 키 공유). 로컬·프로덕션 `.env` 양쪽 반영 후 백엔드 재시작(로컬/`pm2 restart goodbus-api`), `/api/kakao/places` 실제 장소검색 호출로 라이브 동작 확인까지 완료.
+- **"견적등록 알림" 동의 서버화 + "마케팅 수신동의" 제거** (2026-08-29) — `components/Notifications.tsx`의 알림 설정 다이얼로그가 두 토글(견적등록 알림/마케팅 수신동의) 모두 서버 저장 없이 `localStorage`에만 상태를 저장하던 스텁이었던 것을 발견 — "견적등록 알림"을 `User.quoteAlertConsent`(`Boolean @default(true)`, 승객·기사·회사 전 역할 공용) 필드로 승격하고 `PATCH /notifications/consent/quote-alert`(role 제한 없음) 신규 추가, `/auth/me`·회원가입·전화로그인 응답에 노출. "마케팅 수신동의"는 친구톡/광고 메시지 트랙(알림톡과 별개 심사·채널 친구 추가 필요)이라 이번 스코프에서 제외하기로 하고 UI·로컬스토리지 코드 전부 삭제. 로컬에서 기사 계정으로 실제 로그인 → 벨 아이콘 토글 클릭 → 새로고침 후 서버측 영속 확인, 백엔드를 강제로 내린 상태에서 토글해 낙관적 업데이트가 실패 시 자동 롤백되는 것까지 브라우저로 라이브 검증(`/verify` 스킬). 로컬 `db:push` 반영 완료 — **프로덕션 DB는 배포 시 별도로 `db:push` 필요**(deploy.sh가 자동으로 돌리지 않음).
 
 ## 미완료 / 실서비스 갭
 
@@ -228,19 +262,20 @@
     - CI(lint+build+test)는 GitHub Actions로 도입됐지만, 배포 자동화(CD)는 없음 — 여전히 수동 배포(`deploy/scripts/deploy.sh` 또는 수동 `git pull`+`build:prod`+`pm2 restart`)
     - `DEPLOYMENT.md` "10. 배포 후 체크리스트" 중 미완료 항목: 승객 견적 생성→기사 입찰→승객 낙찰 전체 흐름 브라우저 검증, 관리자 콘솔 UI(매출 탭 등) 브라우저 검증, Sentry 에러 리포트 실제 확인
 - **휴대전화 로그인**
-    - 코드(스키마·API·UI) **구현·테스트 완료**, 현재는 개발 모드(서버 로그 출력)로 동작 — 자세한 내용은 위 "인증 — 휴대전화 / 알림톡" 섹션 참고
-    - 실제 알림톡/SMS 발송은 알리고 가입·카카오 채널·템플릿 심사 **대기/예정** (외부 절차, 코드 아님)
+    - 전 역할(승객/기사/버스회사) 전화번호 전용 가입·로그인으로 전면 개편(스키마·API·UI) **구현·테스트·프로덕션 배포까지 전부 완료**(2026-08-19 구현, 2026-08-20 배포) — 자세한 내용은 위 "인증 — 휴대전화 / 알림톡" 섹션 참고
+    - **SMS 단독 실발송도 프로덕션에서 완료**(2026-08-20) — 알림톡(카카오 채널·템플릿 심사)만 아직 **대기/예정** (외부 절차, 코드 아님)
 - **보안 강화** (2026-08-15에 코드 레벨 갭 다수 해소 — 위 "완료됨"의 "보안 강화 — 백엔드 취약점 5건 수정" 참고)
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
-    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 대부분의 인프라 항목(백업 cron 실제 등록, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer)은 2026-08-15~16에 완료(위 "완료됨" 참고). **여전히 남은 것**: ① **SSH 키 인증 전환** — 2026-08-16 재확인 결과 `PasswordAuthentication yes`/`PermitRootLogin yes` 그대로, 다른 항목이 다 끝난 지금 우선순위 1순위(절차는 `DEPLOYMENT.md` "10-2") ② UptimeRobot 등 다운타임 모니터링 가입("10-3") ③ Kakao/Toss API 키가 실제로 침해사고 이후 재발급된 값인지 미확인(현재 반영된 값은 로컬 개발 `.env`에서 그대로 가져온 것) ④ 프로덕션 `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` 여전히 미설정(OS 재설치로 env가 새로 만들어져 빈 상태). 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키는 2026-08-25에 이어 2026-08-29에 한 번 더 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
+    - **UptimeRobot + Sentry 완료, 브라우저 에러 캡처 버그 발견·수정** (2026-08-16) — UptimeRobot에 `/api/health` 5분 간격 모니터 등록(이메일 알림). Sentry는 백엔드(`node-express`)·프론트(`javascript-nextjs`) 프로젝트 2개 생성해 DSN 반영, 실제 에러 발생시켜 둘 다 라이브 검증. 이 과정에서 **`sentry.client.config.ts`가 8/10 Sentry 도입 이후 계속 무시되고 있던 버그**를 발견 — `@sentry/nextjs` 10.x+Next 16은 브라우저 초기화를 `instrumentation-client.ts` 파일명으로 찾는데 구 컨벤션 파일명만 있어서 빌드 에러/경고 없이 조용히 누락되고 있었음(서버 에러는 정상 수집 중이었지만 사용자 브라우저 JS 에러는 한 번도 안 잡히고 있었음). 파일명 변경으로 해결, 브라우저에서 실제 미처리 예외를 던져 Sentry로 200 응답 나가는 것까지 확인(`DEPLOYMENT.md` "10-3" 참고)
 - **OAuth / SSO**
     - Google/Kakao 등 소셜 로그인 없음
 - **결제** (2026-08-13에 토스페이먼츠 + 낙찰 수수료 자동화로 대부분 구현 — 위 "결제·멤버십" 섹션 참고)
     - 아직 **테스트 키** — 실 가맹심사·키 전환 전
     - 실 가격 미정 (현재 100~400원대 placeholder)
-    - 관리자 콘솔에 결제/구독/수수료 내역 조회 UI 없음(`PaymentTransaction`은 DB에만 존재) — 환불 자체는 취소 흐름에서 자동화됨
+    - 관리자 콘솔에 결제/구독/수수료 내역 조회 UI 없음 (기사/회사 개인용 결제 내역 화면은 2026-08-19 추가됨 — 위 "완료됨" 참고) — 환불 자체는 취소 흐름에서 자동화됨
     - 영수증 발급 흐름 없음
 - **관측성**
     - Sentry로 에러 추적은 도입됨(위 "완료됨" 참고), 다만 중앙 로깅·메트릭(응답시간, 처리량 등)은 여전히 없음
@@ -264,12 +299,12 @@
 ## 알려진 버그 / 결정 사항 (2026-08-06 논의)
 
 - **회원가입 "이름" 필드 미저장 — 저장 자체는 2026-08-10에 수정 완료.** `authAPI.signup`이 이제 `displayName`을 서버로 전달하고 `User.displayName`에 저장됨. 다만 사이드바 등 화면은 아직 `user.email`을 그대로 표시하므로(예: `components/passenger/PassengerDashboardContent.tsx`), "이름 우선 → 없으면 이메일 fallback" 표시 로직은 여전히 후속 작업으로 남아 있음.
-- **휴대전화 로그인 설계 방향 확정 — 2026-08-11에 이 방향대로 구현·테스트까지 완료**
-    - 승객 회원가입은 계속 이메일 기반, 단 **전화번호도 필수 입력**으로 추가 → 가입 후 이메일 로그인 / 전화번호(OTP) 로그인 **둘 다** 가능한 단일 계정
-    - 관리자 로그인은 SMS 업체 장애 대비를 위해 **이메일/비밀번호 유지** (전화번호 로그인 미적용)
-    - 기사/버스회사는 기존 "나의 정보" 화면에 이미 전화번호 입력란이 있어 별도 화면 불필요
-    - 별도의 "전화번호만으로 간편가입" 경로는 만들지 않기로 함 (기존 승객 전원 재등록 부담 + 관리자 fallback 필요성 때문)
-    - SMS 발송은 **알리고(Aligo)** 사용 예정, 알림톡 우선 + SMS 폴백(카카오 채널·템플릿 심사 대기 중에는 개발모드로 서버 로그에 인증번호 출력)
+- ~~휴대전화 로그인 설계 방향 확정 — 2026-08-11에 이 방향대로 구현·테스트까지 완료~~ **2026-08-19에 아래 방향으로 재결정·재구현** (기사/버스회사 쪽도 이메일 회원가입 화면이 임시 상태였고, 승객과 마찬가지로 전화번호만으로 충분하다고 판단)
+    - ~~승객 회원가입은 계속 이메일 기반, 단 전화번호도 필수 입력으로 추가~~ → **승객/기사/버스회사 전 역할이 이메일·비밀번호 없이 전화번호+OTP만으로 가입·로그인**(역할별 필수 필드는 위 "인증 — 휴대전화 / 알림톡" 참고)
+    - 관리자 로그인은 그대로 **이메일/비밀번호 유지**(SMS 업체 장애 대비), 단 공개 로그인 페이지에서 분리해 `/admin/login`으로 이동
+    - ~~별도의 "전화번호만으로 간편가입" 경로는 만들지 않기로 함~~ → 정반대로 결정 뒤집힘: 기존 이메일/비밀번호 계정은 마이그레이션하지 않고, 배포 시점에 `User` 테이블을 새로 밀어서 없애기로 함(사용자 확정, "기존 계정은 새로 디비 밀고 없애면 되잖아") — 재등록 부담보다 마이그레이션 로직 유지 비용이 더 크다고 판단
+    - 같은 전화번호로 승객과 기사/회사 계정을 각각 만들 수 있어야 한다는 점이 뒤늦게 드러나 `@@unique([phoneNumber, role])` + `accountType` 구분으로 해결(위 참고)
+    - SMS 발송은 **알리고(Aligo)** 사용 예정, 알림톡 우선 + SMS 폴백(카카오 채널·템플릿 심사 대기 중에는 개발모드로 서버 로그에 인증번호 출력) — 변경 없음
 
 ## 기술 메모
 
@@ -282,13 +317,13 @@
 ## 다음 단계
 
 1. ~~카페24 VPS 결제·SSH → 도메인·SSL → `build:prod` + pm2 + Nginx~~ **2026-08-16 실제 배포 완료** (위 "호스팅" 섹션 참고)
-2. **SSH 키 인증 전환** — 유일하게 남은 인프라 보안 항목, 락아웃 위험 있어 절차대로 순서 준수 (`DEPLOYMENT.md` "10-2")
-3. UptimeRobot 가입, Sentry DSN 재발급, Kakao/Toss 키 재발급 여부 확인 — 전부 사용자가 콘솔에서 직접 해야 하는 절차
+2. ~~SSH 키 인증 전환~~ **2026-08-16 완료** (`DEPLOYMENT.md` "10-2")
+3. ~~UptimeRobot 가입, Sentry DSN 재발급, Toss 키 재발급~~ **2026-08-16 완료** — ~~Kakao 키 재발급~~ **2026-08-25 완료, 2026-08-29 한 번 더 재발급**(콘솔에서 옛날 키 삭제만 사용자 몫으로 남음)
 4. `DEPLOYMENT.md` "10. 배포 후 체크리스트" 나머지 — 견적→입찰→낙찰 전체 흐름, 관리자 콘솔 UI 브라우저 검증
 5. 카카오 비즈니스 채널 + 알리고 신청, 알림톡 인증 템플릿 심사 (병행)
-6. ~~휴대전화 OTP 로그인 API·UI~~ **구현·테스트 완료(2026-08-11)** — 심사 통과 후 env만 채우면 개발 모드 → 실발송 전환 (`.claude/roadmap.md` 참고)
+6. ~~휴대전화 OTP 로그인 API·UI~~ ~~전 역할(승객/기사/버스회사) 전화번호 전용으로 전면 개편·구현·테스트 완료(2026-08-19)~~ **프로덕션 배포 + SMS 단독 실발송까지 완료(2026-08-20)** — 남은 건 카카오 알림톡 심사뿐(`.claude/roadmap.md` 참고)
 7. 랜딩 정리, 실 가격 확정 (~~약관 정리~~ 페이지는 2026-08-14 추가 완료, 법률 검토·통신판매업 신고번호 반영은 남음)
 8. ~~PG 신청·결제·빌링키(카드 등록)·멤버십 서버 연동~~ **테스트 키로 구현·테스트 완료(2026-08-13), 프로덕션 반영·동작 확인도 2026-08-16 완료** — 토스페이먼츠 가맹심사 통과 후 env만 교체하면 실 결제 전환
 9. 관리자 콘솔에 결제/구독 조회·환불 UI 추가
-10. Phase 3 — 도메인 구매 + Cloudflare 전체 프록시 (미착수)
-11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `admin.ts` 전체 Zod 스키마화
+10. ~~Phase 3 — Cloudflare 전체 프록시~~ **2026-08-25 완료**(네임서버 이관, DNS Proxied, SSL Full strict, 원본 IP 우회 차단까지 — 위 "완료됨" 참고)
+11. 남은 보안·운영 과제: 로그인 등 OTP 외 라우트 레이트리밋, `adminRole` API 전면 RBAC, 감사 로그 필터, 사이드바 이름 표시 fallback, `X-Frame-Options` 등 보안 헤더 nginx/next.config.ts 중복 정리. ~~`admin.ts` 전체 Zod 스키마화~~ **2026-08-25 완료**(위 "완료됨" 참고)

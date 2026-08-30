@@ -13,12 +13,15 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendBidReceivedEmail(
-    passengerEmail: string,
+    passengerEmail: string | null | undefined,
     tripOrigin: string,
     tripDestination: string,
     bidPrice: number,
-    bidderEmail: string
+    bidderEmail: string | null | undefined
 ) {
+    if (!passengerEmail) {
+        return;
+    }
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         console.warn('Email not configured. Skipping email send.');
         return;
@@ -36,7 +39,7 @@ export async function sendBidReceivedEmail(
                     <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
                         <p><strong>Route:</strong> ${tripOrigin} → ${tripDestination}</p>
                         <p><strong>Bid Amount:</strong> ${bidPrice}만원</p>
-                        <p><strong>From:</strong> ${bidderEmail}</p>
+                        <p><strong>From:</strong> ${bidderEmail || '(no email on file)'}</p>
                     </div>
                     <p>Log in to your dashboard to view and manage all bids.</p>
                     <p style="color: #666; font-size: 12px; margin-top: 30px;">
@@ -52,12 +55,15 @@ export async function sendBidReceivedEmail(
 }
 
 export async function sendBidAwardedEmail(
-    bidderEmail: string,
+    bidderEmail: string | null | undefined,
     tripOrigin: string,
     tripDestination: string,
     bidPrice: number,
-    passengerEmail: string
+    passengerEmail: string | null | undefined
 ) {
+    if (!bidderEmail) {
+        return;
+    }
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
         console.warn('Email not configured. Skipping email send.');
         return;
@@ -75,7 +81,7 @@ export async function sendBidAwardedEmail(
                     <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #28a745;">
                         <p><strong>Route:</strong> ${tripOrigin} → ${tripDestination}</p>
                         <p><strong>Your Bid Amount:</strong> ${bidPrice}만원</p>
-                        <p><strong>Passenger:</strong> ${passengerEmail}</p>
+                        <p><strong>Passenger:</strong> ${passengerEmail || '(no email on file)'}</p>
                     </div>
                     <p>Please contact the passenger to finalize the trip details.</p>
                     <p>Log in to your dashboard to view trip details.</p>

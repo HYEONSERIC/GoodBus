@@ -17,7 +17,7 @@
 
 ### Step 2 — 카카오 알림톡까지 켜기 (채널+템플릿 승인 후)
 1. 승인된 발신 프로필키(`ALIGO_KAKAO_SENDERKEY`), 템플릿 코드(`ALIGO_ALIMTALK_TPL_CODE`)를 알리고에서 확보
-2. 카카오가 승인한 템플릿 문구를 그대로 `ALIGO_ALIMTALK_TEMPLATE`에 넣기, 인증번호 자리만 `{{CODE}}`로 표시 (예: `[GoodBus] 인증번호는 {{CODE}} 입니다. 5분 이내에 입력해주세요.`)
+2. 카카오가 승인한 템플릿 문구를 그대로 `ALIGO_ALIMTALK_TEMPLATE`에 넣기, 인증번호 자리만 `{{CODE}}`로 표시 (예: `[버스대절] 인증번호는 {{CODE}} 입니다. 5분 이내에 입력해주세요.`)
 3. `server/.env`에 이 3개 추가 (Step 1의 3개는 그대로 유지 — SMS 폴백용으로 계속 씀)
 4. 서버 재시작 후 다시 실제 번호로 테스트 → 카카오톡 메시지로 오는지 확인
 5. **가장 중요**: 알림톡 API 응답 파라미터명(`result_code` 등)은 2026-08-07 리서치 기록을 그대로 코드에 반영한 것이라 실제 응답과 다를 수 있음. 처음 실발송 테스트할 때 서버 로그의 `Aligo AlimTalk rejected`/`error` 내용을 꼭 확인하고, 다르면 `server/src/utils/aligo.ts`의 `sendViaAlimtalk` 함수만 수정하면 됨(OTP 발급/검증/DB 로직은 전혀 안 건드려도 됨)

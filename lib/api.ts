@@ -5,13 +5,24 @@ const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL ||
     'http://localhost:4000';
 
+// 백엔드가 응답 없이 무한 대기할 수 있는 경로가 있어(Express4 async rejection
+// 미처리 등, CLAUDE.md 참고) 프론트가 영원히 로딩 상태로 남지 않도록 기본
+// 타임아웃을 둔다. 호출자가 이미 signal을 넘긴 경우는 그대로 존중한다.
+const DEFAULT_TIMEOUT_MS = 15000;
+
 async function fetchAPI(endpoint: string, options?: RequestInit) {
+    const timeoutController = options?.signal ? null : new AbortController();
+    const timeoutId = timeoutController
+        ? setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS)
+        : null;
+
     try {
         const isFormData =
             typeof FormData !== 'undefined' && options?.body instanceof FormData;
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             credentials: 'include',
+            signal: options?.signal ?? timeoutController?.signal,
             headers: {
                 ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
                 ...options?.headers,
@@ -37,13 +48,21 @@ async function fetchAPI(endpoint: string, options?: RequestInit) {
             throw new Error(errorMessage);
         }
 
-        const data = await response.json();
-        return data;
+        // 2xx여도 바디가 비어있을 수 있다(204 등) — response.json()을 바로
+        // 부르면 빈 바디에서 SyntaxError가 나서 그대로 노출되므로, 텍스트로
+        // 먼저 읽고 내용이 있을 때만 JSON 파싱한다.
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
     } catch (error: unknown) {
         if (error instanceof TypeError && error.message === 'Failed to fetch') {
             throw new Error('Cannot connect to server. Please check if the backend server is running.');
         }
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.');
+        }
         throw error;
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
     }
 }
 
@@ -60,27 +79,21 @@ function toQuery(params?: Record<string, string | number | undefined>) {
 }
 
 export const authAPI = {
-    signup: async (
-        email: string,
-        password: string,
-        role: 'Passenger' | 'Driver' | 'BusCompany',
-        displayName?: string,
-        phoneNumber?: string,
-        phoneOtpCode?: string,
-        turnstileToken?: string
-    ) =>
+    // All roles sign up by phone+OTP only. displayName is the Driver's name
+    // or the BusCompany's contact-person name; companyName is BusCompany-only.
+    signup: async (params: {
+        role: 'Passenger' | 'Driver' | 'BusCompany';
+        phoneNumber: string;
+        phoneOtpCode: string;
+        displayName?: string;
+        companyName?: string;
+        turnstileToken?: string;
+    }) =>
         fetchAPI('/auth/signup', {
             method: 'POST',
-            body: JSON.stringify({
-                email,
-                password,
-                role,
-                displayName,
-                phoneNumber,
-                phoneOtpCode,
-                turnstileToken,
-            }),
+            body: JSON.stringify(params),
         }),
+    // Email/password login is Admin-only now — public signup has no email/password.
     login: async (email: string, password: string) =>
         fetchAPI('/auth/login', {
             method: 'POST',
@@ -91,18 +104,25 @@ export const authAPI = {
             method: 'POST',
         }),
     getMe: async () => fetchAPI('/auth/me'),
+    // accountType: 승객/기사·회사는 같은 번호로 각각 계정을 만들 수 있어서, 어느
+    // 계정군을 찾는지 서버에 명시해야 함.
     requestPhoneOtp: async (
         phoneNumber: string,
-        purpose: 'signup' | 'login'
+        purpose: 'signup' | 'login',
+        accountType: 'passenger' | 'business'
     ) =>
         fetchAPI('/auth/phone/request-otp', {
             method: 'POST',
-            body: JSON.stringify({ phoneNumber, purpose }),
+            body: JSON.stringify({ phoneNumber, purpose, accountType }),
         }),
-    loginWithPhone: async (phoneNumber: string, code: string) =>
+    loginWithPhone: async (
+        phoneNumber: string,
+        code: string,
+        accountType: 'passenger' | 'business'
+    ) =>
         fetchAPI('/auth/phone/login', {
             method: 'POST',
-            body: JSON.stringify({ phoneNumber, code }),
+            body: JSON.stringify({ phoneNumber, code, accountType }),
         }),
 };
 
@@ -191,6 +211,11 @@ export const paymentsAPI = {
         fetchAPI('/payments/addon/min-bid/reactivate', {
             method: 'POST',
         }),
+    getTransactions: async (params?: {
+        kind?: string;
+        status?: string;
+        take?: number;
+    }) => fetchAPI(`/payments/transactions${toQuery(params)}`),
 };
 
 export const chatsAPI = {
@@ -256,6 +281,11 @@ export const notificationsAPI = {
     clearHistory: async () =>
         fetchAPI('/notifications/history', {
             method: 'DELETE',
+        }),
+    updateQuoteAlertConsent: async (quoteAlertConsent: boolean) =>
+        fetchAPI('/notifications/consent/quote-alert', {
+            method: 'PATCH',
+            body: JSON.stringify({ quoteAlertConsent }),
         }),
 };
 

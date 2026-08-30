@@ -1,18 +1,10 @@
 'use client';
 
 import { useAdminDashboard } from '@/hooks/useAdminDashboard';
+import { adminPersonLabel } from '@/lib/adminPersonLabel';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { AdminPanelCard } from '@/components/admin/AdminPanelCard';
 import { AdminFilterBar, AdminFilterField, ADMIN_SELECT_CLASS } from '@/components/admin/AdminFilterBar';
 import {
@@ -67,7 +59,7 @@ export function AdminBidsPanel() {
                             <Input
                                 value={bidSearch}
                                 onChange={(e) => setBidSearch(e.target.value)}
-                                placeholder="이메일/출발지/도착지"
+                                placeholder="이름·이메일·전화번호/출발지/도착지"
                             />
                         </AdminFilterField>
                         <AdminFilterField label="입찰 상태">
@@ -183,7 +175,9 @@ export function AdminBidsPanel() {
                                                     })
                                                 }
                                             >
-                                                {bid.trip.passenger.email}
+                                                {adminPersonLabel(
+                                                    bid.trip.passenger,
+                                                )}
                                             </AdminDeepLink>
                                             <span className="mx-1 text-slate-300">
                                                 ·
@@ -209,7 +203,7 @@ export function AdminBidsPanel() {
                                                     })
                                                 }
                                             >
-                                                {bid.bidder.email}
+                                                {adminPersonLabel(bid.bidder)}
                                             </AdminDeepLink>
                                             <span className="mx-1 text-slate-300">
                                                 ·

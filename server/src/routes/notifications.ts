@@ -1,4 +1,5 @@
 import express from 'express';
+import { z } from 'zod';
 import prisma from '../utils/db';
 import { requireAuth } from '../middleware/auth';
 import {
@@ -134,6 +135,35 @@ router.get('/unread-count', requireAuth, async (req, res) => {
         res.json({ count });
     } catch (error) {
         console.error('Get unread count error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+const updateQuoteAlertConsentSchema = z.object({
+    quoteAlertConsent: z.boolean(),
+});
+
+// Update "견적등록 알림" consent for the current user (all roles)
+router.patch('/consent/quote-alert', requireAuth, async (req, res) => {
+    try {
+        const { quoteAlertConsent } = updateQuoteAlertConsentSchema.parse(
+            req.body
+        );
+
+        const updated = await prisma.user.update({
+            where: { id: req.user!.userId },
+            data: { quoteAlertConsent },
+            select: { quoteAlertConsent: true },
+        });
+
+        res.json({ quoteAlertConsent: updated.quoteAlertConsent });
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            return res
+                .status(400)
+                .json({ error: 'Invalid input', details: error.errors });
+        }
+        console.error('Update quote alert consent error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

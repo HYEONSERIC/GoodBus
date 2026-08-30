@@ -104,7 +104,8 @@ export function SiteFooter() {
                     <div className="space-y-1.5 text-xs leading-relaxed text-stone-400">
                         <p>
                             버스대절 주식회사 | 대표 최덕현 | 사업자등록번호
-                            649-86-03636
+                            649-86-03636 | 통신판매업신고번호
+                            제2026-대구동구-0964호
                         </p>
                         <p className="flex items-start gap-1.5">
                             <MapPin className="mt-0.5 size-3.5 shrink-0" />

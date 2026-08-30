@@ -98,16 +98,21 @@ enum PhoneVerificationPurpose {
   login
 }
 
+enum PhoneAccountType {
+  passenger
+  business
+}
+
 model User {
   id          String   @id @default(cuid())
-  email       String   @unique
-  passwordHash String
+  email       String?  @unique
+  passwordHash String?
   role        UserRole
   status      UserStatus @default(Active)
   adminRole   AdminRole?
   displayName String?
   companyName String?
-  phoneNumber String? @unique
+  phoneNumber String?
   phoneVerifiedAt DateTime?
   garageAddress String?
   busNumber   String?
@@ -125,6 +130,7 @@ model User {
   companyRegistrationNote String?
   membershipPlan MembershipPlan @default(Basic)
   minBidAddonPurchased Boolean @default(false)
+  quoteAlertConsent Boolean @default(true)
   createdAt   DateTime @default(now())
 
   tripsAsPassenger Trip[] @relation("PassengerTrips")
@@ -143,19 +149,24 @@ model User {
   membershipSubscription MembershipSubscription?
   minBidAddonSubscription MinBidAddonSubscription?
   paymentTransactions  PaymentTransaction[]
+
+  // 같은 번호로 승객 계정 + 기사/회사 계정을 각각 만들 수 있게 role별로만 유일하게 잡음
+  // (기사/회사는 같은 번호로 Driver·BusCompany 둘 다는 못 만듦 — auth.ts에서 그룹으로 막음).
+  @@unique([phoneNumber, role])
 }
 
 model PhoneVerification {
   id          String                    @id @default(cuid())
   phoneNumber String
   purpose     PhoneVerificationPurpose
+  accountType PhoneAccountType?
   codeHash    String
   attempts    Int                       @default(0)
   consumedAt  DateTime?
   expiresAt   DateTime
   createdAt   DateTime                  @default(now())
 
-  @@index([phoneNumber, purpose, createdAt])
+  @@index([phoneNumber, purpose, accountType, createdAt])
 }
 
 model SupportPost {
@@ -219,6 +230,7 @@ model Trip {
   review TripReview?
 
   @@index([awardedAt])
+  @@index([passengerId])
 }
 
 model TripReview {
