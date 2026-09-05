@@ -87,7 +87,6 @@ export const authAPI = {
         phoneOtpCode: string;
         displayName?: string;
         companyName?: string;
-        turnstileToken?: string;
     }) =>
         fetchAPI('/auth/signup', {
             method: 'POST',

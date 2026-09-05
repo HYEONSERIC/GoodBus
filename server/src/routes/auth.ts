@@ -7,7 +7,6 @@ import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
 import { sendOtpSms } from '../utils/aligo';
 import { createIpRateLimiter, getClientIp } from '../utils/ipRateLimit';
-import { verifyTurnstileToken } from '../utils/turnstile';
 
 const router = express.Router();
 
@@ -45,7 +44,6 @@ const signupSchema = z.object({
     companyName: z.string().trim().min(1).max(100).optional(),
     phoneNumber: z.string().trim().min(1),
     phoneOtpCode: z.string().trim().min(1),
-    turnstileToken: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -106,7 +104,6 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
             companyName,
             phoneNumber: rawPhoneNumber,
             phoneOtpCode,
-            turnstileToken,
         } = signupSchema.parse(req.body);
 
         if (role === 'Driver' && !displayName) {
@@ -116,21 +113,6 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
             return res
                 .status(400)
                 .json({ error: '회사명과 담당자 이름을 입력해주세요' });
-        }
-
-        // Driver/BusCompany 가입에만 Turnstile 검증 적용(signup-business 전용).
-        // TURNSTILE_SECRET_KEY 미설정 시 verifyTurnstileToken은 항상 true를
-        // 반환하므로(Aligo/Sentry와 동일한 옵션 env 패턴) 키 발급 전에도 안전.
-        if (role !== 'Passenger') {
-            const turnstileOk = await verifyTurnstileToken(
-                turnstileToken,
-                getClientIp(req)
-            );
-            if (!turnstileOk) {
-                return res
-                    .status(400)
-                    .json({ error: '보안 인증에 실패했습니다. 다시 시도해주세요' });
-            }
         }
 
         const phoneNumber = normalizePhoneNumber(rawPhoneNumber);
