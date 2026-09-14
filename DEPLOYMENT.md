@@ -4,6 +4,27 @@ PG(결제) 없이 **베타·파일럿**을 올리는 것을 기준으로 한 설
 
 > 이 문서는 원래 AWS Lightsail 기준으로 작성됐다가, 실제 배포처가 **카페24 VPS**로 정해지면서 카페24 스택(자동설치로 Node/PostgreSQL/Nginx/PM2가 미리 깔림)에 맞춰 다시 정리했습니다. 핵심 차이는 두 가지입니다: ① DB는 카페24가 깔아준 네이티브 PostgreSQL 대신 **Docker Postgres를 그대로 유지**(기존 코드/스크립트 변경 최소화), ② HTTPS는 Caddy 대신 **Nginx + certbot**을 씁니다.
 
+## 0. 현재 실제 배포 현황 (2026-09-14, 최신 — 여기가 fact)
+
+옛 서버(카페24 개발언어 VPS DEV B, IP `172.237.7.249`)가 **호스팅 만료로 완전히 죽어서**(자동연장 미설정, 다운그레이드도 안 되는 요금제라 재구매 불가) 2026-09-14에 새 서버로 통째로 이전했다. 이때 실사용 데이터가 없던 상태라 DB는 새로 생성했고(구 서버 백업 복구 안 함), 아래 1번부터 이어지는 본문은 **당시 최초 설계안**(Docker Postgres 유지, `/var/www/goodbus`, DEV B)이라 지금 실제 서버와 다르다. 이번에 카페24가 새로 내놓은 "개발 환경 설정" 자동구성 마법사로 구매했더니 예전과 다른 스택이 나왔다:
+
+| 항목 | 예전 설계안(본문 1~) | **지금 실제** |
+|---|---|---|
+| 서비스명 | DEV B, ~66,000원/월 | **DEV A**, 33,000원/월(6개월 결제) |
+| IP | `172.237.7.249` (죽음) | **`172.238.20.212`** |
+| 프로젝트 경로 | `/var/www/goodbus`, root 소유 | **`/opt/busrent`**, `appuser` 계정 소유(비루트, 최소권한) |
+| Postgres | Docker Compose (`goodbus-postgres` 컨테이너) | **네이티브 Postgres 17**(systemd), DB명 `appdb`, 계정 `appuser` — Docker 자체가 없음 |
+| pm2 실행 계정 | root | **appuser** (`sudo -u appuser pm2 ...`로만 조작) |
+| nginx/certbot | 수동 설치·설정(본문 4번) | **카페24 자동구성 스택이 이미 세팅**해서 옴(SSL도 자동 발급됨, 별도 구매 아님) |
+| DB 백업 스크립트 | `server/scripts/backup-db.sh` (docker exec 기반) | **`server/scripts/backup-db-native.sh`**(pg_dump 직결, DATABASE_URL 파싱) — docker 버전은 이 서버에서 안 먹힘 |
+| crontab 경로 | `/var/www/goodbus/server/...` | **`/opt/busrent/server/...`**, appuser의 crontab에 등록(root 아님) |
+
+같이 바뀐 외부 설정: Aligo SMS 발송 IP 화이트리스트, Toss Payments API 키 접근 정책(`busrent_test`) 둘 다 새 IP(`172.238.20.212`)로 재등록 완료. Cloudflare DNS(`busrent.co.kr`/`www`)도 새 IP로 전환 완료, Let's Encrypt 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별도로 `busrent.co.kr`/`www.busrent.co.kr`용을 추가 발급해서 같은 nginx 설정 파일 안에 두 서버 블록으로 공존시켰다.
+
+**아직 안 한 것(우선순위 낮음)**: Cloudflare origin-bypass nginx 차단(원본 IP 직접 접속 차단 — 예전 서버엔 있었는데 새 서버엔 아직 재설정 안 함), Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).
+
+이 섹션 아래(1번~)는 **최초 설계 시점의 계획 문서**로 남겨둔다 — Docker/`/var/www/goodbus` 전제로 읽지 말 것.
+
 ## 1. 아키텍처 (추천: 올인원)
 
 ```
@@ -229,6 +250,8 @@ crontab -e
 0 4 * * * cd /var/www/goodbus/server && /usr/bin/npm run db:run-recurring-billing >> /var/log/goodbus-billing.log 2>&1
 ```
 
+> **지금 실제(2026-09-14~)**: 경로가 `/opt/busrent/server`이고, root가 아니라 **`appuser`의 crontab**에 등록돼 있다(`sudo -u appuser crontab -e`). 자세한 배경은 "0. 현재 실제 배포 현황" 참고.
+
 ### 8-2. DB 자동 백업 (2026-08-15 도입)
 
 2026-08-14 침해사고 때 백업이 하나도 없어서 데이터를 통째로 유실한 것이 재발하지 않도록 하는 항목. Postgres가 named volume(`server/docker-compose.yml`의 `postgres_data`, bind mount 아님)이라 `docker exec`로 접근하는 `server/scripts/backup-db.sh`를 사용한다.
@@ -242,6 +265,8 @@ crontab -e
 # 정기결제 크론(04:00)보다 앞서 겹치지 않게 03:00
 0 3 * * * /var/www/goodbus/server/scripts/backup-db.sh >> /var/log/goodbus-backup.log 2>&1
 ```
+
+> **지금 실제(2026-09-14~)**: 이 서버는 Postgres가 Docker가 아니라 네이티브라 위 `backup-db.sh`(docker exec 기반)가 안 먹힌다. 대신 **`server/scripts/backup-db-native.sh`**(pg_dump로 `DATABASE_URL` 직결, `?schema=` 쿼리는 libpq가 몰라서 잘라내고 넘김)를 쓰고, `appuser`의 crontab에 `0 3 * * * /opt/busrent/server/scripts/backup-db-native.sh >> /var/log/goodbus-backup.log 2>&1`로 등록돼 있다.
 
 기본값은 `BACKUP_DIR=/var/backups/goodbus`, `BACKUP_RETENTION_DAYS=14`(`server/.env.example` 참고, 오버라이드 가능). 서버 자체가 뚫리면 서버 안 백업도 같이 날아가므로, **서버 밖 보관**이 진짜 목적이다 — 로컬 mac에서 주기적으로 pull:
 

@@ -16,15 +16,21 @@
 
 ---
 
-## 호스팅 (카페24) — 2026-08-16 실제 프로덕션 배포 완료, 2026-08-18 커스텀 도메인 연결
+## 호스팅 (카페24) — 2026-09-14 서버 마이그레이션 완료 (구 서버 만료로 신규 이전)
 
-- **운영 중:** `busrent.co.kr`(대표 도메인, 2026-08-18 연결) / `www.busrent.co.kr`, 카페24 개발언어 VPS **DEV B (4GB)** — 월 약 66,000원. `goodbus0716.mycafe24.com`은 브라우저 페이지 접속 시 새 도메인으로 301 리다이렉트(2026-08-18, `/api/*`는 웹훅 등 고려해 예외), 사이트가 두 곳으로 보이는 문제 해소
-- **스택:** Ubuntu 24.04, Node.js(pm2 fork 모드), Docker Postgres(네이티브 PostgreSQL 17은 `systemctl disable`로 끔), Nginx + certbot
-- **SSL:** Let's Encrypt(certbot) 적용, 3개 도메인 모두 포함하는 멀티도메인(SAN) 인증서로 확장 발급(2026-08-18), HSTS 포함 보안 헤더 응답 확인
-- **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — 실제로 이 문서 순서대로 재배포하며 검증·보강함(starter 앱 정리, `/uploads` 프록시, welcome 페이지, HSTS 상속 버그 등 — 자세한 내용은 `DEPLOYMENT.md` "10. 배포 후 체크리스트" 상단 참고)
-- **서버 레벨 보안**: fail2ban(5-jail), unattended-upgrades, DB 백업 cron, 카페24 플랫폼 방화벽(22/80/443만 개방) 전부 라이브 검증 완료 — 자세한 내용은 `DEPLOYMENT.md` "10"(체크리스트 상단)·"10-1"·"10-4"·"10-5" 참고
-- **커스텀 도메인 연결(2026-08-18)**: 카페24 콘솔의 "대표 도메인" 지정은 DNS 연결만 해줄 뿐 서버 Nginx/인증서는 자동 반영되지 않아 처음엔 `busrent.co.kr` 접속 시 Nginx 기본 404가 떴음 — `certbot --expand`로 인증서 확장 + Nginx `server_name`/리다이렉트 규칙 수동 추가로 해결, `NEXT_PUBLIC_SITE_URL`도 새 도메인으로 갱신 후 재빌드(sitemap·OG태그·JSON-LD가 이제 `busrent.co.kr` 기준). 절차는 `DEPLOYMENT.md` "10-6" 참고. 카카오맵 API 허용 도메인은 등록 완료(사용자 확인)
-- **Phase 3(Cloudflare 전체 프록시) 2026-08-25 완료** — 네임서버를 Cloudflare로 이관(`cody.ns.cloudflare.com`/`paloma.ns.cloudflare.com`), DNS Proxied(오렌지 클라우드), SSL/TLS 모드 Full (strict). Nginx에 Cloudflare 엣지 IP `set_real_ip_from`+`real_ip_header CF-Connecting-IP` 추가해 레이트리밋·`X-Real-IP`가 Cloudflare IP 하나로 뭉쳐지는 문제 방지, 추가로 `busrent.co.kr` 직접 원본 IP 우회 접속을 nginx `geo`+호스트 매치로 차단(`goodbus0716.mycafe24.com`은 UptimeRobot 의존성 때문에 의도적으로 예외). 전부 라이브 curl로 검증 완료 — 자세한 내용은 아래 "완료됨" 2026-08-25 항목 참고. **Kakao/Toss 관련 남은 항목도 같은 날 해소** — 상세는 아래 참고.
+- **2026-09-14 서버 마이그레이션**: 구 서버(`goodbus0716`, IP `172.237.7.249`, DEV B)가 자동연장 미설정 상태로 2026-09-11 호스팅 만료 → 완전히 다운(SSH 포트 자체 무응답), 요금제 특성상 다운그레이드 재구매도 안 돼서 새 서비스(`busrent0909`, **DEV A**, 33,000원/월·6개월 결제, 자동연장 설정함)를 새로 구매해 통째로 이전. 이전 시점에 실사용 데이터가 없었어서 DB는 새로 생성(구 서버 백업 복구 안 함). 상세 절차·현재 실제 구성표는 `DEPLOYMENT.md` "0. 현재 실제 배포 현황" 참고. 요약:
+  - IP `172.237.7.249` → **`172.238.20.212`**
+  - 배포 경로 `/var/www/goodbus`(root) → **`/opt/busrent`**(`appuser`, 비루트 최소권한 — 카페24 신규 "자동구성" 마법사가 이 구조로 세팅해 줌)
+  - DB: Docker Postgres → **네이티브 Postgres 17**(systemd), DB `appdb`/계정 `appuser` — `server/scripts/backup-db.sh`(docker exec 기반)가 이 서버에서 안 먹혀서 `server/scripts/backup-db-native.sh`(pg_dump 직결) 신규 작성, appuser crontab에 03:00 등록. 정기결제 크론(04:00)도 같은 crontab으로 재등록
+  - **Aligo SMS 발신 IP**, **Toss Payments API 키 접근 정책**(`busrent_test`, 테스트 탭 두 키 모두) 새 IP로 재등록 완료
+  - Cloudflare DNS(`busrent.co.kr` A, `www` CNAME) 새 IP로 전환 완료(전환 중 임시로 DNS-only로 내렸다가 `busrent.co.kr`/`www` 인증서 새로 발급 후 다시 Proxied로 복귀 — Full strict 모드라 순서 중요했음), 새 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별개로 추가 발급해 같은 nginx 파일에 서버 블록 두 개로 공존
+  - pm2는 새로 systemd 등록(`pm2 startup`) 완료, 재부팅에도 안전
+  - **아직 재설정 안 한 것**: Cloudflare origin-bypass 직접 IP 차단(2026-08-25 Phase 3 때 만들었던 nginx `geo` 차단, 새 서버엔 없음 — 우선순위 낮음), Sentry DSN(구 서버에만 있던 값이라 유실, 로컬 백업 없음 — 필요 시 Sentry 대시보드에서 재발급)
+- **스택:** Ubuntu 24.04, Node.js 24, pm2(fork 모드, appuser), 네이티브 PostgreSQL 17, Nginx + certbot(카페24 자동구성)
+- **SSL:** Let's Encrypt(certbot), `busrent.co.kr`/`www.busrent.co.kr`/`busrent0909.mycafe24.com` 전부 유효 인증서 발급 완료, 자동갱신 타이머(`certbot.timer`) 확인함
+- **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — `deploy/ecosystem.config.cjs`는 경로 무관하게 그대로 재사용 가능해서 이번 이전에도 안 건드림. `deploy.sh`는 root로 실행되면 `appuser`로 자동 재실행(`exec sudo -u appuser`)하도록 수정(2026-09-14) — root로 그대로 돌리면 빌드 산출물이 root 소유가 돼 appuser pm2 프로세스와 소유권이 꼬이는 문제를 막기 위함. 새 서버에서 실제로 root 계정으로 `deploy.sh` 실행 → appuser로 전환되어 git pull·npm ci·db push·build·pm2 재시작까지 전부 정상 완료, 파일 소유권도 전부 appuser로 확인, 라이브 재확인까지 통과
+- **서버 레벨 보안**: 카페24 자동구성이 fail2ban(sshd jail)·ufw는 깔아놨지만 ufw는 기본 비활성 상태였음 → 22/80/443만 허용해서 활성화함(2026-09-14). unattended-upgrades 상태는 미확인
+- **커스텀 도메인 연결·Cloudflare 전체 프록시**: 2026-08-18/08-25에 구 서버 기준으로 처음 세팅했던 절차와 원리는 동일(아래 "완료됨" 항목 참고) — 2026-09-14 마이그레이션도 같은 방식(DNS-only 임시 전환 → 인증서 발급 → Proxied 복귀)으로 재현함
 
 ---
 

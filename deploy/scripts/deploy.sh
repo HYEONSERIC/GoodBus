@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This host's app runs as a non-root "appuser" (Cafe24 dev VPS convention since the
+# 2026-09-14 migration — see DEPLOYMENT.md "0. 현재 실제 배포 현황"). Re-exec as that
+# user so build artifacts and the pm2 process list stay owned by the account that
+# actually runs them, instead of getting root-owned files mixed into appuser's tree.
+if [ "$(id -u)" -eq 0 ] && id appuser &>/dev/null; then
+    exec sudo -u appuser "$0" "$@"
+fi
+
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
