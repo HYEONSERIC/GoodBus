@@ -21,7 +21,9 @@ PG(결제) 없이 **베타·파일럿**을 올리는 것을 기준으로 한 설
 
 같이 바뀐 외부 설정: Aligo SMS 발송 IP 화이트리스트, Toss Payments API 키 접근 정책(`busrent_test`) 둘 다 새 IP(`172.238.20.212`)로 재등록 완료. Cloudflare DNS(`busrent.co.kr`/`www`)도 새 IP로 전환 완료, Let's Encrypt 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별도로 `busrent.co.kr`/`www.busrent.co.kr`용을 추가 발급해서 같은 nginx 설정 파일 안에 두 서버 블록으로 공존시켰다.
 
-**아직 안 한 것(우선순위 낮음)**: Cloudflare origin-bypass nginx 차단(원본 IP 직접 접속 차단 — 예전 서버엔 있었는데 새 서버엔 아직 재설정 안 함), Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).
+**Cloudflare origin-bypass 차단 재설정 완료(2026-09-14)**: `deploy/nginx/cloudflare-origin-bypass.conf`(신규, 리포에 커밋됨)의 `geo` 맵을 `/etc/nginx/conf.d/goodbus-cloudflare.conf`로 배포하고, `busrent.co.kr`/`www` 443 서버 블록에 `if ($goodbus_is_cloudflare = 0) { return 444; }` 추가 — 원본 IP 직접 접속(Host: busrent.co.kr) 차단, Cloudflare 경유는 정상, `busrent0909.mycafe24.com`(UptimeRobot 의존)은 의도적으로 예외 유지. 라이브 curl로 3가지 케이스 전부 검증 완료. (포트 80 블록은 certbot이 만든 리다이렉트 `if`가 먼저 걸려 이 검사가 도달 불가라 추가 안 함 — 어차피 콘텐츠 노출 없이 리다이렉트만 하므로 낮은 리스크.)
+
+**아직 안 한 것(우선순위 낮음)**: Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).
 
 이 섹션 아래(1번~)는 **최초 설계 시점의 계획 문서**로 남겨둔다 — Docker/`/var/www/goodbus` 전제로 읽지 말 것.
 

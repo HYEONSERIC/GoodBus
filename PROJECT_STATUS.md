@@ -25,7 +25,8 @@
   - **Aligo SMS 발신 IP**, **Toss Payments API 키 접근 정책**(`busrent_test`, 테스트 탭 두 키 모두) 새 IP로 재등록 완료
   - Cloudflare DNS(`busrent.co.kr` A, `www` CNAME) 새 IP로 전환 완료(전환 중 임시로 DNS-only로 내렸다가 `busrent.co.kr`/`www` 인증서 새로 발급 후 다시 Proxied로 복귀 — Full strict 모드라 순서 중요했음), 새 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별개로 추가 발급해 같은 nginx 파일에 서버 블록 두 개로 공존
   - pm2는 새로 systemd 등록(`pm2 startup`) 완료, 재부팅에도 안전
-  - **아직 재설정 안 한 것**: Cloudflare origin-bypass 직접 IP 차단(2026-08-25 Phase 3 때 만들었던 nginx `geo` 차단, 새 서버엔 없음 — 우선순위 낮음), Sentry DSN(구 서버에만 있던 값이라 유실, 로컬 백업 없음 — 필요 시 Sentry 대시보드에서 재발급)
+  - **Cloudflare origin-bypass 직접 IP 차단 재설정 완료(2026-09-14)** — 이번엔 `deploy/nginx/cloudflare-origin-bypass.conf`로 리포에 커밋해둬서 다음에 서버 또 옮겨도 처음부터 다시 만들 필요 없음(자세한 내용은 `DEPLOYMENT.md` "0." 참고)
+  - **아직 안 한 것**: Sentry DSN(구 서버에만 있던 값이라 유실, 로컬 백업 없음 — 필요 시 Sentry 대시보드에서 재발급)
 - **스택:** Ubuntu 24.04, Node.js 24, pm2(fork 모드, appuser), 네이티브 PostgreSQL 17, Nginx + certbot(카페24 자동구성)
 - **SSL:** Let's Encrypt(certbot), `busrent.co.kr`/`www.busrent.co.kr`/`busrent0909.mycafe24.com` 전부 유효 인증서 발급 완료, 자동갱신 타이머(`certbot.timer`) 확인함
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — `deploy/ecosystem.config.cjs`는 경로 무관하게 그대로 재사용 가능해서 이번 이전에도 안 건드림. `deploy.sh`는 root로 실행되면 `appuser`로 자동 재실행(`exec sudo -u appuser`)하도록 수정(2026-09-14) — root로 그대로 돌리면 빌드 산출물이 root 소유가 돼 appuser pm2 프로세스와 소유권이 꼬이는 문제를 막기 위함. 새 서버에서 실제로 root 계정으로 `deploy.sh` 실행 → appuser로 전환되어 git pull·npm ci·db push·build·pm2 재시작까지 전부 정상 완료, 파일 소유권도 전부 appuser로 확인, 라이브 재확인까지 통과
