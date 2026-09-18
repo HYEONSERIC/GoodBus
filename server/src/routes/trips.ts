@@ -15,6 +15,26 @@ import { getRoundPartnerTrip } from '../utils/tripGroupsCore';
 // PASSENGER_CANCEL_REASONS 문구와 동기화 유지 — 이 사유만 수수료 미환불.
 const DRIVER_FAULT_CANCEL_REASON = '기사님 사유로 취소';
 
+// 운행일 중복낙찰 체크(비즈니스 등급 전용 혜택)에 쓰는 KST 하루 경계 계산.
+// 서버 프로세스의 로컬 타임존(TZ)이 UTC일 수 있어 Date.getFullYear() 등
+// 로컬 getter에 의존하지 않고 +09:00 고정 오프셋으로 직접 계산한다
+// (BUGFIXES_2026-08-09.md에 기록된 프론트 UTC vs 로컬 날짜 필터 버그와
+// 같은 함정 — 서버에서는 반대 방향으로 틀릴 수 있어 명시적으로 처리).
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function kstDayRange(dateTime: Date) {
+    const kstShifted = new Date(dateTime.getTime() + KST_OFFSET_MS);
+    const dayStartUtcMs =
+        Date.UTC(
+            kstShifted.getUTCFullYear(),
+            kstShifted.getUTCMonth(),
+            kstShifted.getUTCDate(),
+        ) - KST_OFFSET_MS;
+    return {
+        gte: new Date(dayStartUtcMs),
+        lt: new Date(dayStartUtcMs + 24 * 60 * 60 * 1000),
+    };
+}
+
 const router = express.Router();
 
 const createTripSchema = z.object({
@@ -104,17 +124,23 @@ router.get('/', requireAuth, async (req, res) => {
                       status: 'open',
                   },
                   _min: { price: true },
+                  _avg: { price: true },
               })
             : [];
     const minBidByTripId = new Map(
         minBidRows.map((row) => [row.tripId, row._min.price])
     );
+    const avgBidByTripId = new Map(
+        minBidRows.map((row) => [row.tripId, row._avg.price])
+    );
 
     const tripsWithMinBid = trips.map((trip) => {
         const minPrice = minBidByTripId.get(trip.id);
+        const avgPrice = avgBidByTripId.get(trip.id);
         return {
             ...trip,
             minBidPrice: minPrice != null ? Number(minPrice) : null,
+            avgBidPrice: avgPrice != null ? Number(avgPrice) : null,
         };
     });
 
@@ -127,16 +153,26 @@ router.get('/', requireAuth, async (req, res) => {
         !(await canViewRevenue(req.user!.userId));
 
     // Drivers/companies must not see other bidders' prices or contact info
-    // (own bid stays intact). Currently applied to everyone in that role —
-    // there's no real paid-membership tier yet to gate this by, see
-    // PROJECT_STATUS.md. When one exists, branch here on the requester's
-    // membership before masking.
+    // (own bid stays intact) — applied to everyone in that role regardless
+    // of tier. 평균 입찰가(avgBidPrice)는 별도로 플러스 이상만 열람 가능
+    // (2026-09-18 멤버십 개편, TRIP_BID_CAP_BY_TIER와 같은 스펙).
     const isBidderRole =
         req.user!.role === UserRole.Driver ||
         req.user!.role === UserRole.BusCompany;
+    const requesterMembershipPlan = isBidderRole
+        ? (
+              await prisma.user.findUnique({
+                  where: { id: req.user!.userId },
+                  select: { membershipPlan: true },
+              })
+          )?.membershipPlan
+        : null;
+    const canViewAvgBidPrice =
+        !isBidderRole || requesterMembershipPlan !== 'Basic';
     const tripsWithBidderMasking = isBidderRole
         ? tripsWithMinBid.map((trip) => ({
               ...trip,
+              avgBidPrice: canViewAvgBidPrice ? trip.avgBidPrice : null,
               bids: trip.bids.map((bid) =>
                   bid.bidderId === req.user!.userId
                       ? bid
@@ -162,6 +198,7 @@ router.get('/', requireAuth, async (req, res) => {
                 ? tripsWithBidderMasking.map((trip) => ({
                       ...trip,
                       minBidPrice: null,
+                      avgBidPrice: null,
                       bids: trip.bids.map((bid) => ({ ...bid, price: 0 })),
                   }))
                 : tripsWithBidderMasking,
@@ -616,6 +653,7 @@ router.post(
                                 select: {
                                     id: true,
                                     email: true,
+                                    membershipPlan: true,
                                 },
                             },
                         },
@@ -627,6 +665,35 @@ router.post(
                             status: 404,
                             body: { error: 'Trip or bid not found' },
                         };
+                    }
+
+                    // 운행일 중복낙찰은 비즈니스 등급만 가능(2026-09-18 멤버십
+                    // 개편) — 낙찰자가 같은 날짜(KST)에 이미 확정된 다른
+                    // 여정을 갖고 있는지 확인. 왕복 파트너 레그는 이 시점엔
+                    // 아직 미낙찰 상태라 여기 걸리지 않는다(트랜잭션 뒷부분에서
+                    // 별도로 자동 낙찰됨, 재귀 호출 아님).
+                    if (awardedBid.bidder.membershipPlan !== 'Business') {
+                        const { gte, lt } = kstDayRange(trip.dateTime);
+                        const conflictingAward = await tx.bid.findFirst({
+                            where: {
+                                bidderId: awardedBid.bidder.id,
+                                status: 'awarded',
+                                trip: {
+                                    status: 'awarded',
+                                    dateTime: { gte, lt },
+                                },
+                            },
+                        });
+                        if (conflictingAward) {
+                            return {
+                                ok: false as const,
+                                status: 400,
+                                body: {
+                                    error:
+                                        '선택하신 기사님(회사)은 같은 날짜에 이미 다른 예약이 있어 낙찰할 수 없습니다',
+                                },
+                            };
+                        }
                     }
 
                     // 낙찰 확정에 실패했을 때(카드 미등록/결제 실패) 승객·기사 양쪽에 알린다.

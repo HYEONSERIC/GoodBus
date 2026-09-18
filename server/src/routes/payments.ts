@@ -262,6 +262,28 @@ router.post(
                         where: { id: req.user!.userId },
                         data: { membershipPlan: plan },
                     });
+
+                    // 비즈니스는 최저입찰가 열람이 이미 포함돼 있으므로, 업그레이드
+                    // 시점에 이미 있던 독립 애드온 구독은 자동 해지한다(안 하면
+                    // 같은 혜택을 계속 이중 결제하게 됨). 이번 달 이미 낸 애드온
+                    // 요금은 환불하지 않고 다음 결제부터 멈춘다 — 기존 멤버십
+                    // 해지(취소) 정책과 동일한 "잔여기간 유지, 재청구만 중단" 방식.
+                    if (plan === 'Business') {
+                        const activeAddon =
+                            await tx.minBidAddonSubscription.findUnique({
+                                where: { userId: req.user!.userId },
+                            });
+                        if (activeAddon?.status === 'active') {
+                            await tx.minBidAddonSubscription.update({
+                                where: { userId: req.user!.userId },
+                                data: {
+                                    status: 'cancelled',
+                                    cancelledAt: new Date(),
+                                },
+                            });
+                        }
+                    }
+
                     const updatedSubscription =
                         await tx.membershipSubscription.upsert({
                             where: { userId: req.user!.userId },
@@ -422,6 +444,23 @@ router.post(
             req.user!.userId,
             'min_bid_addon_subscribe',
             async (tx) => {
+                // 비즈니스 등급은 최저입찰가 열람이 이미 무료 포함이라 이 애드온을
+                // 또 살 필요가 없다 — 프론트도 구매 버튼을 숨기지만, 우회 호출
+                // 대비 서버에서도 방어한다.
+                const subscriber = await tx.user.findUnique({
+                    where: { id: req.user!.userId },
+                    select: { membershipPlan: true },
+                });
+                if (subscriber?.membershipPlan === 'Business') {
+                    return {
+                        ok: false as const,
+                        status: 400,
+                        body: {
+                            error: '비즈니스 멤버십에 이미 포함된 혜택입니다',
+                        },
+                    };
+                }
+
                 // 이미 활성 구독이면 재과금하지 않는다 — 락은 동시 요청의 레이스만
                 // 막을 뿐, 이 체크가 없으면 직렬화된 두 요청이 순서대로 각각
                 // 정상 응답을 받으며 카드에 두 번 청구되는 것까지는 막지 못한다.

@@ -1,4 +1,4 @@
-import { CONCURRENT_BID_LIMITS } from './membershipLimits';
+import { CONCURRENT_BID_LIMITS, TRIP_BID_CAP_BY_TIER } from './membershipLimits';
 import { MEMBERSHIP_PRICES_WON } from './paymentPricing';
 
 export type MembershipPlanCard = {
@@ -15,6 +15,7 @@ export const BIDDER_MEMBERSHIP_PLANS: MembershipPlanCard[] = [
         name: '베이직',
         price: '무료',
         features: [
+            `여정당 입찰 ${TRIP_BID_CAP_BY_TIER.Basic}건 미만까지 입찰 가능`,
             `${CONCURRENT_BID_LIMITS.Basic}건의 예약주문에 동시 활성 입찰 가능 (낙찰·낙찰실패·취소 건 제외)`,
         ],
     },
@@ -23,7 +24,10 @@ export const BIDDER_MEMBERSHIP_PLANS: MembershipPlanCard[] = [
         name: '플러스',
         price: `${MEMBERSHIP_PRICES_WON.Plus.toLocaleString()}원/월`,
         features: [
+            `여정당 입찰 ${TRIP_BID_CAP_BY_TIER.Plus}건 미만까지 입찰 가능`,
             `${CONCURRENT_BID_LIMITS.Plus}건의 예약주문에 동시 활성 입찰 가능 (낙찰·낙찰실패·취소 건 제외)`,
+            '모든 예약주문 평균 입찰가 열람 가능',
+            '멤버십 전용 주문 입찰 가능',
         ],
     },
     {
@@ -31,7 +35,11 @@ export const BIDDER_MEMBERSHIP_PLANS: MembershipPlanCard[] = [
         name: '프리미엄',
         price: `${MEMBERSHIP_PRICES_WON.Premium.toLocaleString()}원/월`,
         features: [
+            `여정당 입찰 ${TRIP_BID_CAP_BY_TIER.Premium}건 미만까지 입찰 가능`,
             `${CONCURRENT_BID_LIMITS.Premium}건의 예약주문에 동시 활성 입찰 가능 (낙찰·낙찰실패·취소 건 제외)`,
+            '모든 예약주문 평균 입찰가 열람 가능',
+            '멤버십 전용 주문 입찰 가능',
+            '입찰 후 고객님께 먼저 말걸기 가능(채팅)',
         ],
     },
     {
@@ -39,7 +47,13 @@ export const BIDDER_MEMBERSHIP_PLANS: MembershipPlanCard[] = [
         name: '비즈니스',
         price: `${MEMBERSHIP_PRICES_WON.Business.toLocaleString()}원/월`,
         features: [
+            `여정당 입찰 ${TRIP_BID_CAP_BY_TIER.Business}건 미만까지 입찰 가능`,
             `${CONCURRENT_BID_LIMITS.Business}건의 예약주문에 동시 활성 입찰 가능 (낙찰·낙찰실패·취소 건 제외)`,
+            '모든 예약주문 평균 입찰가 열람 가능',
+            '모든 주문 최저 입찰가 열람 가능',
+            '비즈니스 전용 주문 입찰 가능',
+            '입찰 후 고객님께 먼저 말걸기 가능(채팅)',
+            '운행일이 같은 여러 주문 중복낙찰 가능',
         ],
     },
 ];

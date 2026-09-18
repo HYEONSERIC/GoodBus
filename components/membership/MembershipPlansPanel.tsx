@@ -393,6 +393,7 @@ export function MembershipPlansPanel({
                                 : 'min-bid-addon',
                         )
                     }
+                    currentPlanName={currentPlanName}
                 />
             </div>
         </div>
@@ -402,13 +403,16 @@ export function MembershipPlansPanel({
 function MinBidAddonSubscriptionCard({
     open,
     onToggle,
+    currentPlanName,
 }: {
     open: boolean;
     onToggle: () => void;
+    currentPlanName?: string | null;
 }) {
     const [purchased, setPurchased] = useState<boolean | null>(null);
     const [subscription, setSubscription] = useState<SubscriptionStatus>(null);
     const [busy, setBusy] = useState(false);
+    const isBusinessTier = currentPlanName === 'Business';
 
     useEffect(() => {
         bidsAPI
@@ -475,7 +479,7 @@ function MinBidAddonSubscriptionCard({
 
     const isActive = purchased === true;
     const isCancelledGracePeriod =
-        isActive && subscription?.status === 'cancelled';
+        !isBusinessTier && isActive && subscription?.status === 'cancelled';
 
     return (
         <div
@@ -490,14 +494,22 @@ function MinBidAddonSubscriptionCard({
             >
                 <span className="flex items-center gap-2 font-semibold">
                     차량별 최저입찰금액 확인
-                    {isActive && (
+                    {isBusinessTier ? (
                         <span className="rounded-full bg-black px-2 py-0.5 text-[10px] font-medium text-white">
-                            {isCancelledGracePeriod ? '해지 예정' : '이용중'}
+                            포함됨
                         </span>
+                    ) : (
+                        isActive && (
+                            <span className="rounded-full bg-black px-2 py-0.5 text-[10px] font-medium text-white">
+                                {isCancelledGracePeriod ? '해지 예정' : '이용중'}
+                            </span>
+                        )
                     )}
                 </span>
                 <span className="text-sm text-gray-600">
-                    {MIN_BID_ADDON_PRICE_WON.toLocaleString()}원/월
+                    {isBusinessTier
+                        ? '비즈니스 멤버십 포함'
+                        : `${MIN_BID_ADDON_PRICE_WON.toLocaleString()}원/월`}
                 </span>
             </button>
             {open && (
@@ -506,7 +518,11 @@ function MinBidAddonSubscriptionCard({
                         <li>차량별(미니버스/밴·우등버스·대형버스) 최근 낙찰 최저금액 열람 가능</li>
                         <li>멤버십 티어와 무관하게 별도로 구독 가능</li>
                     </ul>
-                    {isCancelledGracePeriod ? (
+                    {isBusinessTier ? (
+                        <p className="rounded-md bg-gray-100 py-3 text-center text-sm font-medium text-gray-700">
+                            비즈니스 멤버십에 포함된 혜택입니다
+                        </p>
+                    ) : isCancelledGracePeriod ? (
                         <div className="space-y-2">
                             <p className="rounded-md bg-gray-100 py-3 text-center text-sm font-medium text-gray-700">
                                 구독 해지되었습니다.{' '}
@@ -544,9 +560,11 @@ function MinBidAddonSubscriptionCard({
                             {busy ? '처리 중…' : '구독하기'}
                         </Button>
                     )}
-                    <p className="text-center text-xs text-gray-500">
-                        월 정기결제 상품이며 언제든 취소 가능합니다.
-                    </p>
+                    {!isBusinessTier && (
+                        <p className="text-center text-xs text-gray-500">
+                            월 정기결제 상품이며 언제든 취소 가능합니다.
+                        </p>
+                    )}
                 </div>
             )}
         </div>

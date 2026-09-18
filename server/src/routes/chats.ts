@@ -230,6 +230,29 @@ router.post('/rooms/for-quote', requireAuth, async (req, res) => {
                 .json({ error: 'Trip is not available for chat' });
         }
 
+        // "먼저 말걸기"(입찰자가 채팅방을 처음 만드는 것)는 프리미엄 이상
+        // 등급만 가능(2026-09-18 멤버십 개편) — 승객이 먼저 만든 방이 이미
+        // 있으면 입장/이어가기일 뿐이라 등급 무관하게 항상 허용한다.
+        if (isBidder) {
+            const existingRoom = await prisma.chatRoom.findUnique({
+                where: { tripId_bidderId: { tripId, bidderId } },
+            });
+            if (!existingRoom) {
+                const bidder = await prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { membershipPlan: true },
+                });
+                if (
+                    bidder?.membershipPlan === 'Basic' ||
+                    bidder?.membershipPlan === 'Plus'
+                ) {
+                    return res.status(403).json({
+                        error: '먼저 말걸기는 프리미엄 이상 멤버십에서 이용 가능합니다',
+                    });
+                }
+            }
+        }
+
         const room = await prisma.chatRoom.upsert({
             where: {
                 tripId_bidderId: {

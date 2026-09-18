@@ -169,6 +169,7 @@ export function DriverDashboardContent() {
                                 distanceByTripId={d.distanceByTripId}
                                 onBid={d.handleBidButtonClick}
                                 roundOptions={d.DRIVER_ROUND_OPTS}
+                                myMembershipPlan={d.membershipPlan?.name}
                                 emptyWhenNoTrips="입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다. ↻ 버튼으로 새로고침할 수 있어요."
                                 emptyWhenFiltered="조건에 맞는 여정이 없습니다. 필터를 바꾸거나 ↻로 새로고침해 보세요."
                             />

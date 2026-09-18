@@ -166,6 +166,7 @@ export function CompanyDashboardContent() {
                                 filteredTrips={filteredOpenTrips}
                                 distanceByTripId={c.distanceByTripId}
                                 onBid={c.handleBidButtonClick}
+                                myMembershipPlan={c.membershipPlan?.name}
                                 emptyWhenNoTrips="입찰 가능한 여정이 없습니다. 승객이 견적을 등록하면 여기에 표시됩니다."
                                 emptyWhenFiltered="조건에 맞는 여정이 없습니다. 필터를 바꿔 보세요."
                             />

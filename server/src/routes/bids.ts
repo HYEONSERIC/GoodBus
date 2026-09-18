@@ -4,7 +4,8 @@ import prisma from '../utils/db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { UserRole, NotificationType, BusSize } from '@prisma/client';
 import { sendBidReceivedEmail } from '../utils/email';
-import { CONCURRENT_BID_LIMITS } from '../utils/membershipLimits';
+import { CONCURRENT_BID_LIMITS, TRIP_BID_CAP_BY_TIER } from '../utils/membershipLimits';
+import { getRoundPartnerTrip } from '../utils/tripGroupsCore';
 
 const router = express.Router();
 
@@ -78,6 +79,36 @@ router.post(
                 return res
                     .status(400)
                     .json({ error: 'Trip is not open for bidding' });
+            }
+
+            // 여정에 이미 걸린 입찰 건수가 내 등급의 문턱 이상이면 이 여정엔
+            // 입찰할 수 없다("멤버십 전용"/"비즈니스 전용" 배지의 근거,
+            // TRIP_BID_CAP_BY_TIER 참고). 왕복 여정은 프론트 배지(countOpenBids,
+            // lib/tripDisplay.ts)가 가는편+오는편 입찰을 합산해 보여주므로
+            // 서버 체크도 동일하게 파트너 여정을 찾아 합산한다.
+            const tripBidCap = TRIP_BID_CAP_BY_TIER[bidder.membershipPlan];
+            const partnerCandidates = await prisma.trip.findMany({
+                where: {
+                    passengerId: trip.passengerId,
+                    status: 'open',
+                    id: { not: trip.id },
+                },
+            });
+            const partnerTrip = getRoundPartnerTrip(trip, partnerCandidates);
+            const tripIdsForBidCount = partnerTrip
+                ? [trip.id, partnerTrip.id]
+                : [trip.id];
+            const currentTripBidCount = await prisma.bid.count({
+                where: { tripId: { in: tripIdsForBidCount }, status: 'open' },
+            });
+
+            if (currentTripBidCount >= tripBidCap) {
+                return res.status(400).json({
+                    error:
+                        '이 여정은 현재 등급에서 입찰 가능한 건수를 초과했습니다. 상위 등급이 필요합니다.',
+                    limit: tripBidCap,
+                    current: currentTripBidCount,
+                });
             }
 
             const activeBidCount = await prisma.bid.count({
@@ -166,14 +197,20 @@ router.get(
         try {
             const bidder = await prisma.user.findUnique({
                 where: { id: req.user!.userId },
-                select: { minBidAddonPurchased: true },
+                select: { minBidAddonPurchased: true, membershipPlan: true },
             });
 
             if (!bidder) {
                 return res.status(404).json({ error: 'User not found' });
             }
 
-            if (!bidder.minBidAddonPurchased) {
+            // 비즈니스 등급은 독립 애드온 구매 없이도 자동으로 열람 가능
+            // (server/src/routes/payments.ts가 비즈니스 업그레이드 시 기존
+            // 애드온 구독을 자동 해지 — 이중 결제 방지는 그쪽에서 처리).
+            if (
+                !bidder.minBidAddonPurchased &&
+                bidder.membershipPlan !== 'Business'
+            ) {
                 return res.json({ purchased: false });
             }
 
