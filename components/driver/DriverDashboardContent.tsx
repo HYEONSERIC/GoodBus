@@ -347,7 +347,7 @@ export function DriverDashboardContent() {
                 )}
 
                 {d.activeTab === 'paymentCards' && (
-                    <PaymentCardsPanel userId={d.user?.id} />
+                    <PaymentCardsPanel userId={d.user?.id} role="Driver" />
                 )}
 
                 {d.activeTab === 'paymentHistory' && <PaymentHistoryPanel />}

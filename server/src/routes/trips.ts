@@ -6,7 +6,7 @@ import { requireAuth, requireRole, canViewRevenue } from '../middleware/auth';
 import { BusSize, TripStatus, UserRole, NotificationType } from '@prisma/client';
 import { sendBidAwardedEmail } from '../utils/email';
 import { expireExpiredOpenTripsForPassenger } from '../utils/expireOpenTrips';
-import { chargeBillingKey, cancelPayment } from '../utils/toss';
+import { chargeBillingKey, cancelPayment } from '../utils/nicepay';
 import { DEFAULT_PLATFORM_COMMISSION_RATE } from '../utils/adminRevenue';
 import { withPaymentLock, acquireAdvisoryLock } from '../utils/paymentLock';
 import { getRoundPartnerTrip } from '../utils/tripGroupsCore';
@@ -742,8 +742,7 @@ router.post(
 
                     const commissionOrderId = crypto.randomUUID();
                     const commissionResult = await chargeBillingKey(
-                        billingKey.tossBillingKey,
-                        billingKey.customerKey,
+                        billingKey.nicepayBillingKey,
                         commissionWon,
                         commissionOrderId,
                         'GoodBus 낙찰 수수료 (10%)',
@@ -756,7 +755,7 @@ router.post(
                                 kind: 'platform_commission',
                                 status: 'failed',
                                 amount: commissionWon,
-                                tossOrderId: commissionOrderId,
+                                orderId: commissionOrderId,
                                 tripId: trip.id,
                                 bidId: awardedBid.id,
                                 failReason: commissionResult.errorText,
@@ -796,8 +795,8 @@ router.post(
                             kind: 'platform_commission',
                             status: 'succeeded',
                             amount: commissionWon,
-                            tossOrderId: commissionOrderId,
-                            tossPaymentKey: commissionResult.data.paymentKey,
+                            orderId: commissionOrderId,
+                            tid: commissionResult.data.tid,
                             tripId: trip.id,
                             bidId: awardedBid.id,
                         },
@@ -1001,10 +1000,11 @@ router.patch(
                     },
                 });
 
-                if (commissionCharge?.tossPaymentKey) {
+                if (commissionCharge?.tid) {
                     const refundResult = await cancelPayment(
-                        commissionCharge.tossPaymentKey,
+                        commissionCharge.tid,
                         `여정 취소 (${reason})`,
+                        crypto.randomUUID(),
                     );
                     if (refundResult.ok) {
                         await prisma.paymentTransaction.update({

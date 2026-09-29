@@ -292,3 +292,37 @@
 ## 의도적으로 검증 못 한 것
 
 - **비즈니스 업그레이드 시 애드온 자동해지**, **운행일 중복낙찰 차단** — 둘 다 실제 토스 결제(수수료/구독료 선결제)를 통과해야 도달하는 코드인데, 로컬 `server/.env`의 테스트 시크릿 키가 `인증되지 않은 시크릿 키` 오류로 무효 상태였음(이번 변경과 무관한 기존 로컬 환경 문제). 코드 재검토로만 확인 — 키 갱신 후 실제 트랜잭션으로 재확인 권장
+
+# 결제대행사 교체: 토스페이먼츠 → 나이스페이먼츠 (2026-09-29)
+
+원래 요청: "토스에서 나이스페이로 바꾸려고" — 전환 사유는 비용(토스 연회비 20만원 + 더 높은 수수료 vs 나이스페이 연회비 없음). 처음엔 "지금 구조로 가능한가"라는 질문이었는데, 나이스페이 공식 매뉴얼(GitHub `nicepay-manual`)을 조사하면서 **토스와 근본적으로 다른 카드 등록 방식**이 드러남 — 사용자가 "나이스페이도 UI/UX 제공한다는데?"라고 반문해서 GitHub 매뉴얼·나이스페이 "포스타트" 자동결제 상품 페이지·포트원(PortOne) 연동문서 세 곳을 추가로 교차 확인했지만 결론은 동일: 카드 정기결제(빌키)엔 호스팅 위젯이 없고(간편결제 정기결제에만 있음), 가맹점이 직접 카드입력 폼을 만들어 서버에서 암호화해 전달하는 방식이 업계 표준. 이후 "보안상 괜찮을까", "왜 대칭키를 쓰는거야", "중소기업도 나이스 써도 되나" 등 사용자가 직접 리스크를 하나씩 파고들며 확인 — PCI-DSS SAQ-D 분류 가능성을 명확히 알리고, 코드 레벨에서 가능한 보안조치를 최대한 넣기로 합의 후 진행.
+
+## 확정된 설계
+
+- **AES-256-CBC로 서버측 암호화** — 나이스페이의 encData 암호키가 API 인증에도 쓰는 SecretKey(대칭키)라서, 애초에 브라우저에서 암호화하는 구조가 불가능(공개키 방식이 아님) — 이게 "왜 대칭키를 쓰냐"는 질문의 답이자 이번 마이그레이션에서 가장 리스크가 큰 지점이라고 판단한 이유
+- **보안조치 6종을 계획 단계에서 미리 합의**: 카드 등록 전 SMS OTP 재인증(신규, `PhoneVerificationPurpose.card_registration`), 카드 등록 라우트 전용 rate limit, Luhn 사전검증, Sentry `beforeSend` 요청바디 스크러빙, 나이스페이 웹훅 IP 화이트리스트, 망취소(타임아웃 시 orderId 조회 후 자동 취소) — 전부 사용자가 "더 할 수 있는 거 있으면 생각해둬"라고 요청해서 추가한 항목들
+- **완전 전환, 듀얼 PG 아님** — 카드등록만 토스에 남기는 하이브리드도 검토했지만, 전환 사유 자체가 "토스 연회비 자체를 안 내고 싶어서"라 하이브리드는 의미가 없다고 사용자가 판단
+- **DB 컬럼 리네임은 데이터 보존** — `prisma db push`가 컬럼명 변경을 drop+add로 처리해 기존 `PaymentTransaction`/`BillingKey` 이력이 날아가는 걸 막기 위해, `db push` 실행 전에 수동 SQL `ALTER TABLE ... RENAME COLUMN`으로 먼저 이름을 맞춰둠 — 로컬에 실제 적용해 기존 트랜잭션 13건 이력 보존 확인
+
+## 수정된 파일
+
+- `server/src/utils/nicepay.ts`(신규, `toss.ts` 대체) — 인증(Basic)/AES-256 암호화/서명(`hex(sha256(...))`)/`issueBillingKey`/`chargeBillingKey`(망취소 래핑 포함)/`cancelPayment`/`deleteBillingKey`
+- `server/src/utils/nicepayWebhookVerify.ts`(신규, `tossWebhookVerify.ts` 대체) — HMAC이 아니라 평문 해시 비교로 검증식 자체가 다름
+- `server/src/routes/paymentsWebhook.ts` — 나이스페이 페이로드 형태(최상위 필드), `text/html "OK"` 응답, 운영환경 IP 화이트리스트
+- `server/src/routes/payments.ts` — `POST /billing-key/otp/request`+`POST /billing-key/register` 신규(카드폼+OTP+rate limit+Luhn), `DELETE /billing-key`에 원격 빌키 삭제 추가, subscribe/addon 라우트 `chargeBillingKey` 시그니처 교체
+- `server/src/routes/trips.ts`, `server/src/prisma/run-recurring-billing.ts` — 낙찰 수수료·정기결제·환불 호출부 교체
+- `server/src/instrument.ts` — Sentry `beforeSend`로 카드 등록 라우트 요청바디 차단
+- `server/prisma/schema.prisma` — `BillingKey.tossBillingKey`→`nicepayBillingKey`(`customerKey` 삭제), `PaymentTransaction.tossOrderId`→`orderId`/`tossPaymentKey`→`tid`, `PhoneVerificationPurpose`에 `card_registration` 추가
+- `components/PaymentCardsPanel.tsx` 전면 재작성(카드입력폼+OTP), `lib/toss.ts`/`app/payments/billing-key/callback/`/`@tosspayments/tosspayments-sdk` 삭제 — 나이스페이는 클라이언트 키도 서버 전용이라 `NEXT_PUBLIC_TOSS_CLIENT_KEY` 자체가 없어짐
+
+## 검증
+
+- `tsc --noEmit`(루트+server) 클린, `npm test` 48/48 통과, `npm run lint` 신규 에러 0
+- 나이스페이 **샌드박스** 테스트 상점("버스대절_test")으로 curl 실사용 검증(더미 응답 아니라 실제 API 호출): 카드등록(OTP→빌키발급, 실제 `BIKY...` 빌키 수신) → 멤버십 플랜변경 결제(실제 `tid` 수신) → 정기결제 크론 수동 실행 → 여정 낙찰 수수료 결제 → 여정 취소 환불(`PaymentTransaction.status`가 `cancelled`로 전환되는 것까지 DB로 확인) → 카드 삭제(원격 빌키 만료) → 웹훅 서명 시뮬레이션(`text/html "OK"` 정상, 잘못된 서명 400 거부)
+- 🔍 OTP 재사용 시도 → 차단, 🔍 기사 계정에 사업자번호 길이(10자리) 입력 → 차단, 🔍 Luhn 무효 카드번호 → 차단
+- 테스트로 만든 트립/빌링키는 정리, 시드 계정(`driver@example.com`)의 전화번호는 임시로 채워 넣었다가 검증 후 원상복구(null)
+
+## 의도적으로 검증 못 한 것
+
+- **실 프로덕션 키로의 전환 자체** — 운영 키(`R2_...`)는 이미 발급받았지만 아직 어디에도 반영 안 함. 반영 전 나이스페이 가맹점 심사팀에 PCI-DSS 요건(SAQ-D 여부, 거래량 기준) 확인이 먼저 필요하다고 계획 단계에서 합의 — 코드는 준비됐지만 이 확인·실 배포는 사용자 몫으로 남음
+- **나이스페이 실제 웹훅 등록·수신** — 로컬 서버가 공인 IP가 없어 나이스페이가 직접 웹훅을 쏠 수 없음. 서명 검증 로직은 매뉴얼 명세대로 직접 만든 서명으로 curl 시뮬레이션했지만, 실제 나이스페이가 보내는 페이로드의 필드 순서·인코딩까지 100% 동일한지는 운영 반영 후 실거래로 재확인 필요

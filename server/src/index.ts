@@ -19,7 +19,7 @@ import profileRoutes from './routes/profile';
 import supportRoutes from './routes/support';
 import reviewsRoutes from './routes/reviews';
 import paymentsRoutes from './routes/payments';
-import { handleTossWebhook } from './routes/paymentsWebhook';
+import { handleNicepayWebhook } from './routes/paymentsWebhook';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -44,7 +44,7 @@ app.use(cookieParser());
 app.post(
     '/payments/webhook',
     express.raw({ type: '*/*' }),
-    handleTossWebhook
+    handleNicepayWebhook
 );
 
 app.use(express.json());

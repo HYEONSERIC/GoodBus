@@ -12,7 +12,7 @@ export async function acquireAdvisoryLock(
 /**
  * Serializes concurrent charge attempts for the same (userId, purpose) pair using a
  * Postgres transaction-scoped advisory lock. Without this, a double-click or a client
- * retry can race two requests through "read current state -> charge via Toss -> write
+ * retry can race two requests through "read current state -> charge via PG -> write
  * result" before either has committed, charging the billing key twice for one action.
  * The lock is released automatically when the transaction commits or rolls back.
  */

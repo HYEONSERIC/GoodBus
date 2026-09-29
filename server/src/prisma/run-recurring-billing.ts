@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { MembershipPlan } from '@prisma/client';
 import prisma from '../utils/db';
-import { chargeBillingKey } from '../utils/toss';
+import { chargeBillingKey } from '../utils/nicepay';
 import { MEMBERSHIP_PRICES_WON, MIN_BID_ADDON_PRICE_WON } from '../utils/paymentPricing';
 
 function addOneMonth(date: Date): Date {
@@ -14,13 +14,12 @@ async function chargeWithRetry(
     userId: string,
     amount: number,
     orderName: string,
-    billingKey: { tossBillingKey: string; customerKey: string },
+    billingKey: { nicepayBillingKey: string },
 ) {
     for (let attempt = 1; attempt <= 2; attempt++) {
         const orderId = crypto.randomUUID();
         const result = await chargeBillingKey(
-            billingKey.tossBillingKey,
-            billingKey.customerKey,
+            billingKey.nicepayBillingKey,
             amount,
             orderId,
             orderName,
@@ -88,8 +87,8 @@ async function processMembershipSubscriptions() {
                         kind: 'membership_subscription',
                         status: 'succeeded',
                         amount,
-                        tossOrderId: orderId,
-                        tossPaymentKey: result.data.paymentKey,
+                        orderId,
+                        tid: result.data.tid,
                         metadata: subscription.pendingPlan
                             ? {
                                   changeType: 'scheduled_downgrade_applied',
@@ -122,7 +121,7 @@ async function processMembershipSubscriptions() {
                         kind: 'membership_subscription',
                         status: 'failed',
                         amount,
-                        tossOrderId: orderId,
+                        orderId,
                         failReason: result.errorText,
                     },
                 }),
@@ -192,8 +191,8 @@ async function processMinBidAddonSubscriptions() {
                         kind: 'min_bid_addon',
                         status: 'succeeded',
                         amount,
-                        tossOrderId: orderId,
-                        tossPaymentKey: result.data.paymentKey,
+                        orderId,
+                        tid: result.data.tid,
                     },
                 }),
                 prisma.minBidAddonSubscription.update({
@@ -210,7 +209,7 @@ async function processMinBidAddonSubscriptions() {
                         kind: 'min_bid_addon',
                         status: 'failed',
                         amount,
-                        tossOrderId: orderId,
+                        orderId,
                         failReason: result.errorText,
                     },
                 }),

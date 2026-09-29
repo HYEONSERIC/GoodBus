@@ -346,7 +346,7 @@ export function CompanyDashboardContent() {
                 )}
 
                 {c.activeTab === 'paymentCards' && (
-                    <PaymentCardsPanel userId={c.user?.id} />
+                    <PaymentCardsPanel userId={c.user?.id} role="BusCompany" />
                 )}
 
                 {c.activeTab === 'paymentHistory' && <PaymentHistoryPanel />}

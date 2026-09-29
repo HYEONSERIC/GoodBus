@@ -96,6 +96,7 @@ enum SupportInquiryCategory {
 enum PhoneVerificationPurpose {
   signup
   login
+  card_registration
 }
 
 enum PhoneAccountType {
@@ -266,14 +267,13 @@ model Bid {
 }
 
 model BillingKey {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tossBillingKey String   @unique
-  customerKey    String   @unique
-  cardBrand      String?
-  cardLast4      String?
-  createdAt      DateTime @default(now())
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nicepayBillingKey String   @unique
+  cardBrand         String?
+  cardLast4         String?
+  createdAt         DateTime @default(now())
 }
 
 model MembershipSubscription {
@@ -311,8 +311,8 @@ model PaymentTransaction {
   kind           PaymentTransactionKind
   status         PaymentTransactionStatus @default(pending)
   amount         Int
-  tossOrderId    String                   @unique
-  tossPaymentKey String?                  @unique
+  orderId        String                   @unique
+  tid            String?                  @unique
   tripId         String?
   bidId          String?
   failReason     String?

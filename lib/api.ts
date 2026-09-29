@@ -170,10 +170,22 @@ export const paymentsAPI = {
     getBillingKeyStatus: async () => fetchAPI('/payments/billing-key'),
     deleteBillingKey: async () =>
         fetchAPI('/payments/billing-key', { method: 'DELETE' }),
-    confirmBillingKey: async (authKey: string) =>
-        fetchAPI('/payments/billing-key/confirm', {
+    requestBillingKeyOtp: async () =>
+        fetchAPI('/payments/billing-key/otp/request', {
             method: 'POST',
-            body: JSON.stringify({ authKey }),
+            body: JSON.stringify({}),
+        }),
+    registerBillingKey: async (fields: {
+        cardNo: string;
+        expYear: string;
+        expMonth: string;
+        idNo: string;
+        cardPw: string;
+        otpCode: string;
+    }) =>
+        fetchAPI('/payments/billing-key/register', {
+            method: 'POST',
+            body: JSON.stringify(fields),
         }),
     subscribe: async (
         plan: 'Plus' | 'Premium' | 'Business',

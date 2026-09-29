@@ -1,54 +1,68 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/db';
-import { verifyTossWebhookSignature } from '../utils/tossWebhookVerify';
+import { verifyNicepayWebhookSignature } from '../utils/nicepayWebhookVerify';
+import { getClientIp } from '../utils/ipRateLimit';
 
 /**
- * 안전망 채널 — confirm/billing 승인 API의 동기 응답이 authoritative하므로
+ * 나이스페이 웹훅 발신 IP(방화벽 정책 문서 명시값) — 운영에서만 강제한다.
+ * 로컬/샌드박스 curl 시뮬레이션까지 막으면 검증이 불가능해지므로 NODE_ENV로 분기.
+ */
+const NICEPAY_WEBHOOK_IPS = new Set(['121.133.126.86', '121.133.126.87']);
+
+/**
+ * 안전망 채널 — 승인/빌키승인 API의 동기 응답이 authoritative하므로
  * 핵심 결제 처리 경로는 아니다. 여기선 결제취소 등 우리가 직접 트리거하지
  * 않은 상태 변경을 거래기록에 반영하는 역할만 한다.
  *
- * 헤더 이름(tosspayments-webhook-signature)은 구현·테스트 시
- * docs.tosspayments.com/reference/using-api/webhook-events 에서 재확인할 것.
+ * 나이스페이는 응답을 Content-Type: text/html에 "OK" 문자열로 받아야 성공으로
+ * 처리한다(JSON 200 아님) — 안 하면 실패로 간주해 재전송한다.
  */
-export async function handleTossWebhook(req: Request, res: Response) {
-    const rawBody = req.body as Buffer;
-    const transmissionTime = String(
-        req.header('tosspayments-webhook-transmission-time') || '',
-    );
-    const signature = String(
-        req.header('tosspayments-webhook-signature') || '',
-    );
+export async function handleNicepayWebhook(req: Request, res: Response) {
+    if (process.env.NODE_ENV === 'production') {
+        const clientIp = getClientIp(req);
+        if (!NICEPAY_WEBHOOK_IPS.has(clientIp)) {
+            console.error(`Nicepay webhook from unexpected IP: ${clientIp}`);
+            return res.status(403).send('Forbidden');
+        }
+    }
 
-    if (
-        !Buffer.isBuffer(rawBody) ||
-        !verifyTossWebhookSignature(rawBody, transmissionTime, signature)
-    ) {
-        console.error('Toss webhook signature verification failed');
-        return res.status(400).json({ error: 'Invalid signature' });
+    const rawBody = req.body as Buffer;
+    if (!Buffer.isBuffer(rawBody)) {
+        return res.status(400).send('Invalid payload');
     }
 
     let payload: any;
     try {
         payload = JSON.parse(rawBody.toString('utf8'));
     } catch {
-        return res.status(400).json({ error: 'Invalid payload' });
+        return res.status(400).send('Invalid payload');
+    }
+
+    const { tid, amount, ediDate, signature, orderId, status } = payload ?? {};
+
+    if (
+        !verifyNicepayWebhookSignature(
+            String(tid || ''),
+            amount,
+            String(ediDate || ''),
+            String(signature || ''),
+        )
+    ) {
+        console.error('Nicepay webhook signature verification failed');
+        return res.status(400).send('Invalid signature');
     }
 
     try {
-        const orderId = payload?.data?.orderId;
-        const status = payload?.data?.status;
-        if (
-            orderId &&
-            (status === 'CANCELED' || status === 'PARTIAL_CANCELED')
-        ) {
+        if (orderId && (status === 'cancelled' || status === 'partialCancelled')) {
             await prisma.paymentTransaction.updateMany({
-                where: { tossOrderId: orderId },
+                where: { orderId },
                 data: { status: 'cancelled' },
             });
         }
     } catch (error) {
-        console.error('Toss webhook processing error:', error);
+        console.error('Nicepay webhook processing error:', error);
     }
 
-    res.status(200).json({ received: true });
+    res.setHeader('Content-Type', 'text/html');
+    res.status(200).send('OK');
 }

@@ -8,7 +8,10 @@ import {
     PaymentTransactionKind,
     PaymentTransactionStatus,
 } from '@prisma/client';
-import { issueBillingKey, chargeBillingKey } from '../utils/toss';
+import { issueBillingKey, chargeBillingKey, deleteBillingKey } from '../utils/nicepay';
+import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
+import { sendOtpSms } from '../utils/aligo';
+import { createIpRateLimiter } from '../utils/ipRateLimit';
 import {
     MEMBERSHIP_PRICES_WON,
     MIN_BID_ADDON_PRICE_WON,
@@ -16,6 +19,38 @@ import {
 import { withPaymentLock } from '../utils/paymentLock';
 
 const router = express.Router();
+
+// 카드 등록은 도난 카드번호를 대량으로 찔러보는 카딩(carding) 공격의 표적이 되기
+// 쉬운 엔드포인트라 OTP 요청/카드 등록 각각에 별도 IP 레이트리밋을 둔다. 계정
+// 단위 제한은 매 등록 시도마다 유효한 OTP 소비를 요구하는 것으로 대신한다(OTP
+// 자체가 전화번호당 쿨다운/일일 한도를 이미 갖고 있음 — server/src/utils/otp.ts).
+const cardOtpRateLimiter = createIpRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    limit: 10,
+    message: '잠시 후 다시 시도해주세요',
+});
+
+const cardRegisterRateLimiter = createIpRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    limit: 5,
+    message: '너무 많은 카드 등록 시도가 있었습니다. 잠시 후 다시 시도해주세요',
+});
+
+/** Luhn 체크섬 — 나이스페이 API 호출 전에 형식이 명백히 잘못된 카드번호를 걸러낸다. */
+function isValidLuhn(cardNo: string): boolean {
+    let sum = 0;
+    let shouldDouble = false;
+    for (let i = cardNo.length - 1; i >= 0; i--) {
+        let digit = Number(cardNo[i]);
+        if (shouldDouble) {
+            digit *= 2;
+            if (digit > 9) digit -= 9;
+        }
+        sum += digit;
+        shouldDouble = !shouldDouble;
+    }
+    return sum % 10 === 0;
+}
 
 function addOneMonth(date: Date): Date {
     const next = new Date(date);
@@ -81,6 +116,24 @@ router.delete(
                 });
             }
 
+            const billingKey = await prisma.billingKey.findUnique({
+                where: { userId: req.user!.userId },
+            });
+            if (billingKey) {
+                // 원격 빌키도 명시적으로 만료시킨다 — 베스트에포트: 실패해도
+                // 로컬 삭제는 그대로 진행한다(사용자 입장에선 카드가 지워져야
+                // 하고, 나이스페이 쪽 잔존 빌키는 재시도/수동 정리로 처리).
+                const deleted = await deleteBillingKey(
+                    billingKey.nicepayBillingKey,
+                    crypto.randomUUID(),
+                );
+                if (!deleted.ok) {
+                    console.error(
+                        `Nicepay 빌키 삭제 실패 (userId=${req.user!.userId}): ${deleted.errorText}`,
+                    );
+                }
+            }
+
             await prisma.billingKey.deleteMany({
                 where: { userId: req.user!.userId },
             });
@@ -92,20 +145,145 @@ router.delete(
     },
 );
 
-const billingKeyConfirmSchema = z.object({
-    authKey: z.string().min(1),
+const billingKeyOtpRequestSchema = z.object({});
+
+router.post(
+    '/billing-key/otp/request',
+    requireAuth,
+    requireRole(UserRole.Driver, UserRole.BusCompany),
+    cardOtpRateLimiter,
+    async (req, res) => {
+        try {
+            billingKeyOtpRequestSchema.parse(req.body ?? {});
+            const user = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: { phoneNumber: true },
+            });
+            const phoneNumber = user?.phoneNumber
+                ? normalizePhoneNumber(user.phoneNumber)
+                : null;
+            if (!phoneNumber) {
+                return res
+                    .status(400)
+                    .json({ error: '인증된 휴대전화번호가 없습니다' });
+            }
+
+            const issued = await issueOtp(
+                phoneNumber,
+                'card_registration',
+                'business',
+            );
+            if (!issued.ok) {
+                if (issued.error === 'rate_limited') {
+                    const minutes = Math.ceil(issued.retryAfterSeconds / 60);
+                    return res.status(429).json({
+                        error: `요청이 너무 많습니다. ${minutes}분 후 다시 시도해주세요`,
+                    });
+                }
+                const message =
+                    issued.error === 'cooldown'
+                        ? '잠시 후 다시 시도해주세요'
+                        : '오늘 요청 가능한 인증 횟수를 초과했습니다';
+                return res.status(429).json({ error: message });
+            }
+
+            const sms = await sendOtpSms(phoneNumber, issued.code);
+            if (!sms.ok) {
+                return res
+                    .status(502)
+                    .json({ error: '인증번호 발송에 실패했습니다' });
+            }
+
+            res.json({ message: '인증번호가 발송되었습니다', devMode: sms.devMode });
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return res
+                    .status(400)
+                    .json({ error: 'Invalid input', details: error.errors });
+            }
+            console.error('Billing key OTP request error:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    },
+);
+
+// idNo는 개인(기사)=생년월일 6자리, 법인(운수업체)=사업자등록번호 10자리 —
+// 아래 라우트에서 req.user.role로 분기해 길이를 검사한다.
+const billingKeyRegisterSchema = z.object({
+    cardNo: z.string().regex(/^[0-9]{15,16}$/, '카드번호가 올바르지 않습니다'),
+    expYear: z.string().regex(/^[0-9]{2}$/, '유효기간(년)이 올바르지 않습니다'),
+    expMonth: z
+        .string()
+        .regex(/^(0[1-9]|1[0-2])$/, '유효기간(월)이 올바르지 않습니다'),
+    idNo: z.string().regex(/^[0-9]{6}$|^[0-9]{10}$/, '생년월일/사업자번호가 올바르지 않습니다'),
+    cardPw: z.string().regex(/^[0-9]{2}$/, '카드 비밀번호가 올바르지 않습니다'),
+    otpCode: z.string().trim().min(1),
 });
 
 router.post(
-    '/billing-key/confirm',
+    '/billing-key/register',
     requireAuth,
     requireRole(UserRole.Driver, UserRole.BusCompany),
+    cardRegisterRateLimiter,
     async (req, res) => {
+        // 카드번호/비밀번호는 절대 로그·에러메시지에 원본으로 남기지 않는다 —
+        // 아래 어떤 catch/console.error도 req.body를 통째로 찍지 않도록 주의.
         try {
-            const { authKey } = billingKeyConfirmSchema.parse(req.body);
-            const customerKey = req.user!.userId;
+            const body = billingKeyRegisterSchema.parse(req.body);
 
-            const result = await issueBillingKey(authKey, customerKey);
+            const expectedIdNoLength = req.user!.role === 'Driver' ? 6 : 10;
+            if (body.idNo.length !== expectedIdNoLength) {
+                return res.status(400).json({
+                    error:
+                        req.user!.role === 'Driver'
+                            ? '생년월일 6자리를 입력해주세요'
+                            : '사업자등록번호 10자리를 입력해주세요',
+                });
+            }
+            if (!isValidLuhn(body.cardNo)) {
+                return res.status(400).json({ error: '카드번호가 올바르지 않습니다' });
+            }
+
+            const user = await prisma.user.findUnique({
+                where: { id: req.user!.userId },
+                select: { phoneNumber: true },
+            });
+            const phoneNumber = user?.phoneNumber
+                ? normalizePhoneNumber(user.phoneNumber)
+                : null;
+            if (!phoneNumber) {
+                return res
+                    .status(400)
+                    .json({ error: '인증된 휴대전화번호가 없습니다' });
+            }
+
+            const otpResult = await consumeOtp(
+                phoneNumber,
+                'card_registration',
+                body.otpCode,
+                'business',
+            );
+            if (!otpResult.ok) {
+                const message =
+                    otpResult.error === 'invalid_code'
+                        ? '인증번호가 올바르지 않습니다'
+                        : otpResult.error === 'expired'
+                          ? '인증번호가 만료되었습니다. 다시 요청해주세요'
+                          : otpResult.error === 'too_many_attempts'
+                            ? '인증 시도 횟수를 초과했습니다. 다시 요청해주세요'
+                            : '인증번호를 먼저 요청해주세요';
+                return res.status(400).json({ error: message });
+            }
+
+            const result = await issueBillingKey({
+                cardNo: body.cardNo,
+                expYear: body.expYear,
+                expMonth: body.expMonth,
+                idNo: body.idNo,
+                cardPw: body.cardPw,
+                orderId: crypto.randomUUID(),
+                buyerTel: phoneNumber,
+            });
             if (!result.ok) {
                 return res.status(400).json({ error: result.errorText });
             }
@@ -114,15 +292,14 @@ router.post(
                 where: { userId: req.user!.userId },
                 create: {
                     userId: req.user!.userId,
-                    tossBillingKey: result.data.billingKey,
-                    customerKey,
-                    cardBrand: result.data.card?.company,
-                    cardLast4: result.data.card?.number?.slice(-4),
+                    nicepayBillingKey: result.data.bid,
+                    cardBrand: result.data.cardName,
+                    cardLast4: body.cardNo.slice(-4),
                 },
                 update: {
-                    tossBillingKey: result.data.billingKey,
-                    cardBrand: result.data.card?.company,
-                    cardLast4: result.data.card?.number?.slice(-4),
+                    nicepayBillingKey: result.data.bid,
+                    cardBrand: result.data.cardName,
+                    cardLast4: body.cardNo.slice(-4),
                 },
             });
 
@@ -133,7 +310,7 @@ router.post(
                     .status(400)
                     .json({ error: 'Invalid input', details: error.errors });
             }
-            console.error('Billing key confirm error:', error);
+            console.error('Billing key register error:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     },
@@ -221,8 +398,7 @@ router.post(
                     const amount = MEMBERSHIP_PRICES_WON[plan];
                     const orderId = crypto.randomUUID();
                     const result = await chargeBillingKey(
-                        billingKey.tossBillingKey,
-                        billingKey.customerKey,
+                        billingKey.nicepayBillingKey,
                         amount,
                         orderId,
                         `GoodBus 멤버십 ${plan}`,
@@ -235,7 +411,7 @@ router.post(
                                 kind: 'membership_subscription',
                                 status: 'failed',
                                 amount,
-                                tossOrderId: orderId,
+                                orderId,
                                 failReason: result.errorText,
                                 metadata,
                             },
@@ -253,8 +429,8 @@ router.post(
                             kind: 'membership_subscription',
                             status: 'succeeded',
                             amount,
-                            tossOrderId: orderId,
-                            tossPaymentKey: result.data.paymentKey,
+                            orderId,
+                            tid: result.data.tid,
                             metadata,
                         },
                     });
@@ -485,8 +661,7 @@ router.post(
                 const amount = MIN_BID_ADDON_PRICE_WON;
                 const orderId = crypto.randomUUID();
                 const result = await chargeBillingKey(
-                    billingKey.tossBillingKey,
-                    billingKey.customerKey,
+                    billingKey.nicepayBillingKey,
                     amount,
                     orderId,
                     'GoodBus 차량별 최저입찰금액 확인',
@@ -499,7 +674,7 @@ router.post(
                             kind: 'min_bid_addon',
                             status: 'failed',
                             amount,
-                            tossOrderId: orderId,
+                            orderId,
                             failReason: result.errorText,
                         },
                     });
@@ -516,8 +691,8 @@ router.post(
                         kind: 'min_bid_addon',
                         status: 'succeeded',
                         amount,
-                        tossOrderId: orderId,
-                        tossPaymentKey: result.data.paymentKey,
+                        orderId,
+                        tid: result.data.tid,
                     },
                 });
                 await tx.user.update({
