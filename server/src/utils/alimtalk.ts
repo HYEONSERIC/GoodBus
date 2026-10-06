@@ -1,6 +1,11 @@
 import { Prisma } from '@prisma/client';
 import prisma from './db';
-import { isAligoDevMode, postAlimtalk, AlimtalkPayload } from './aligo';
+import {
+    isAligoDevMode,
+    isAligoSendDisabled,
+    postAlimtalk,
+    AlimtalkPayload,
+} from './aligo';
 import { normalizePhoneNumber } from './otp';
 import {
     AlimtalkRenderError,
@@ -114,7 +119,7 @@ export async function sendAlimtalk(
         }
         claimedKey = params.dedupeKey;
 
-        if (isAligoDevMode()) {
+        if (isAligoDevMode() || isAligoSendDisabled()) {
             console.log(
                 `[Alimtalk:DEV] ${params.templateKey} -> ${maskPhone(phone)}\n${message}`,
             );

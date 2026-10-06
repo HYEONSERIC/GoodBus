@@ -6,6 +6,7 @@ import { generateToken } from '../utils/jwt';
 import { requireAuth } from '../middleware/auth';
 import { normalizePhoneNumber, issueOtp, consumeOtp } from '../utils/otp';
 import { sendOtpSms } from '../utils/aligo';
+import { sendAlimtalk } from '../utils/alimtalk';
 import { createIpRateLimiter, getClientIp } from '../utils/ipRateLimit';
 
 const router = express.Router();
@@ -191,6 +192,14 @@ router.post('/signup', signupRateLimiter, async (req, res) => {
                 createdAt: true,
                 quoteAlertConsent: true,
             },
+        });
+
+        void sendAlimtalk({
+            templateKey: 'WELCOME',
+            receiverUserId: user.id,
+            receiverPhone: user.phoneNumber,
+            dedupeKey: `WELCOME:${user.id}`,
+            variables: { 고객명: user.displayName || '고객' },
         });
 
         const token = generateToken({

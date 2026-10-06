@@ -13,8 +13,29 @@ export type AlimtalkTemplate = {
 };
 
 const PASSENGER_DASHBOARD_URL = 'https://busrent.co.kr/dashboard/passenger';
+const SITE_URL = 'https://busrent.co.kr';
 
 export const ALIMTALK_TEMPLATES = {
+    WELCOME: {
+        tplCode: 'UM_1769',
+        body: [
+            '[버스대절 주식회사]',
+            '',
+            '#{고객명}님, 버스대절 회원가입을 환영합니다.',
+            '',
+            '여정 견적과 입찰 내역을 한곳에서 편하게 확인하실 수 있습니다.',
+            '',
+            "※ 견적등록 알림을 받고 싶지 않으시면 로그인 후 알림 설정에서 '견적등록 알림'을 꺼주세요.",
+        ].join('\n'),
+        fallbackSubject: '버스대절 회원가입 안내',
+        fallbackText:
+            '[버스대절] #{고객명}님, 버스대절 회원가입을 환영합니다. 여정 견적과 입찰 내역을 한곳에서 확인하실 수 있습니다.',
+        button: {
+            name: '버스대절 바로가기',
+            linkMo: SITE_URL,
+            linkPc: SITE_URL,
+        },
+    },
     BID_ARRIVED: {
         tplCode: 'UL_9798',
         body: [

@@ -97,7 +97,9 @@ async function sendViaAlimtalk(
         }
 
         const data: any = await response.json();
-        if (String(data?.result_code) !== '1') {
+        const succeeded =
+            String(data?.result_code) === '1' || String(data?.code) === '0';
+        if (!succeeded) {
             console.error('Aligo AlimTalk rejected:', data);
             return {
                 ok: false,
@@ -131,6 +133,13 @@ export function isAligoDevMode(): boolean {
     );
 }
 
+export function isAligoSendDisabled(): boolean {
+    return (
+        process.env.ALIGO_DISABLED === 'true' &&
+        process.env.NODE_ENV !== 'production'
+    );
+}
+
 export async function sendOtpSms(
     phoneNumber: string,
     code: string
@@ -138,6 +147,14 @@ export async function sendOtpSms(
     const apiKey = process.env.ALIGO_API_KEY;
     const userId = process.env.ALIGO_USER_ID;
     const sender = process.env.ALIGO_SENDER;
+
+    if (isAligoSendDisabled()) {
+        console.log(`[Aligo:DISABLED] ${phoneNumber} 인증번호: ${code}`);
+        return { ok: true, devMode: true, channel: 'dev' };
+    }
+    if (process.env.ALIGO_DISABLED === 'true') {
+        console.warn('[Aligo] ALIGO_DISABLED is ignored in production');
+    }
 
     if (!apiKey || !userId || !sender) {
         console.log(`[Aligo:DEV] ${phoneNumber} 인증번호: ${code}`);

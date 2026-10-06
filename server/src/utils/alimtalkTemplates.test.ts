@@ -53,6 +53,23 @@ describe('renderAlimtalkText', () => {
 });
 
 describe('ALIMTALK_TEMPLATES 등록본 일치', () => {
+    it('회원가입안내(WELCOME) 본문이 등록본과 같다', () => {
+        const rendered = renderAlimtalkText(ALIMTALK_TEMPLATES.WELCOME.body, {
+            고객명: '홍길동',
+        });
+        expect(rendered).toBe(
+            [
+                '[버스대절 주식회사]',
+                '',
+                '홍길동님, 버스대절 회원가입을 환영합니다.',
+                '',
+                '여정 견적과 입찰 내역을 한곳에서 편하게 확인하실 수 있습니다.',
+                '',
+                "※ 견적등록 알림을 받고 싶지 않으시면 로그인 후 알림 설정에서 '견적등록 알림'을 꺼주세요.",
+            ].join('\n'),
+        );
+    });
+
     it('승객_입찰도착 본문이 등록본과 같다', () => {
         const rendered = renderAlimtalkText(ALIMTALK_TEMPLATES.BID_ARRIVED.body, {
             고객명: '홍길동',
