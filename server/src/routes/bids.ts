@@ -6,6 +6,8 @@ import { UserRole, NotificationType, BusSize } from '@prisma/client';
 import { sendBidReceivedEmail } from '../utils/email';
 import { CONCURRENT_BID_LIMITS, TRIP_BID_CAP_BY_TIER } from '../utils/membershipLimits';
 import { getRoundPartnerTrip } from '../utils/tripGroupsCore';
+import { acquireAdvisoryLock } from '../utils/paymentLock';
+import { sendAlimtalk, formatKstDateTime } from '../utils/alimtalk';
 
 const router = express.Router();
 
@@ -124,41 +126,54 @@ router.post(
                 });
             }
 
-            const bid = await prisma.bid.create({
-                data: {
-                    tripId,
-                    bidderId: req.user!.userId,
-                    price,
-                    note,
-                },
-                include: {
-                    trip: {
+            const { bid, openBidCount, passengerContact } = await prisma.$transaction(
+                async (tx) => {
+                    await acquireAdvisoryLock(tx, `trip-bids:${tripId}`);
+                    const created = await tx.bid.create({
+                        data: {
+                            tripId,
+                            bidderId: req.user!.userId,
+                            price,
+                            note,
+                        },
                         include: {
-                            passenger: {
+                            trip: true,
+                            bidder: {
                                 select: {
                                     id: true,
                                     email: true,
+                                    displayName: true,
+                                    role: true,
                                 },
                             },
                         },
-                    },
-                    bidder: {
+                    });
+                    const count = await tx.bid.count({
+                        where: { tripId, status: 'open' },
+                    });
+                    const passengerContact = await tx.user.findUniqueOrThrow({
+                        where: { id: created.trip.passengerId },
                         select: {
-                            id: true,
                             email: true,
                             displayName: true,
-                            role: true,
+                            phoneNumber: true,
+                            quoteAlertConsent: true,
                         },
-                    },
+                    });
+                    return {
+                        bid: created,
+                        openBidCount: count,
+                        passengerContact,
+                    };
                 },
-            });
+            );
 
             const bidderLabel = bid.bidder.displayName || bid.bidder.email || '기사';
 
             // Create notification for passenger
             await prisma.notification.create({
                 data: {
-                    userId: bid.trip.passenger.id,
+                    userId: bid.trip.passengerId,
                     type: NotificationType.BID_RECEIVED,
                     title: 'New Bid Received',
                     message: `You received a new bid of ${price}만원 from ${bidderLabel} for your trip from ${bid.trip.origin} to ${bid.trip.destination}`,
@@ -169,12 +184,43 @@ router.post(
 
             // Send email to passenger
             sendBidReceivedEmail(
-                bid.trip.passenger.email,
+                passengerContact.email,
                 bid.trip.origin,
                 bid.trip.destination,
                 Number(price),
                 bid.bidder.email
             );
+
+            if (passengerContact.quoteAlertConsent) {
+                const passengerName = passengerContact.displayName || '고객';
+                if (openBidCount === 1) {
+                    void sendAlimtalk({
+                        templateKey: 'BID_ARRIVED',
+                        receiverUserId: bid.trip.passengerId,
+                        receiverPhone: passengerContact.phoneNumber,
+                        dedupeKey: `BID_ARRIVED:${tripId}:1`,
+                        variables: {
+                            고객명: passengerName,
+                            출발지: bid.trip.origin,
+                            도착지: bid.trip.destination,
+                            출발일시: formatKstDateTime(bid.trip.dateTime),
+                            입찰금액: `${price}만원`,
+                            입찰자명: bidderLabel,
+                        },
+                    });
+                } else if (openBidCount === 5 || openBidCount === 10) {
+                    void sendAlimtalk({
+                        templateKey: 'BID_MILESTONE',
+                        receiverUserId: bid.trip.passengerId,
+                        receiverPhone: passengerContact.phoneNumber,
+                        dedupeKey: `BID_MILESTONE:${tripId}:${openBidCount}`,
+                        variables: {
+                            고객명: passengerName,
+                            입찰건수: String(openBidCount),
+                        },
+                    });
+                }
+            }
 
             res.status(201).json({ bid });
         } catch (error) {

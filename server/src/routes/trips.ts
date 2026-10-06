@@ -971,67 +971,102 @@ router.patch(
         try {
             const { reason } = cancelTripSchema.parse(req.body);
 
-            const trip = await prisma.trip.findUnique({
-                where: { id: req.params.id },
-            });
+            // 낙찰(award)과 같은 여정 락을 공유한다. 락 밖에서 읽은 상태로 환불·취소를
+            // 판단하면, 낙찰이 동시에 끝나 수수료가 결제된 뒤 취소가 그걸 환불하지 못한다.
+            const outcome = await withPaymentLock(
+                req.params.id,
+                'trip_award',
+                async (tx) => {
+                    const trip = await tx.trip.findUnique({
+                        where: { id: req.params.id },
+                    });
 
-            if (!trip) {
-                return res.status(404).json({ error: 'Trip not found' });
-            }
-
-            if (trip.passengerId !== req.user!.userId) {
-                return res.status(403).json({ error: 'Not your trip' });
-            }
-
-            if (!['open', 'awarded'].includes(trip.status)) {
-                return res
-                    .status(400)
-                    .json({ error: 'Only open or awarded trips can be cancelled' });
-            }
-
-            // 낙찰된 여정이 취소되면 이미 청구한 수수료를 환불한다 — 단,
-            // "기사님 사유로 취소"는 미환불(프론트 PASSENGER_CANCEL_REASONS와 문구 동기화 유지).
-            if (trip.status === 'awarded' && reason !== DRIVER_FAULT_CANCEL_REASON) {
-                const commissionCharge = await prisma.paymentTransaction.findFirst({
-                    where: {
-                        tripId: trip.id,
-                        kind: 'platform_commission',
-                        status: 'succeeded',
-                    },
-                });
-
-                if (commissionCharge?.tid) {
-                    const refundResult = await cancelPayment(
-                        commissionCharge.tid,
-                        `여정 취소 (${reason})`,
-                        crypto.randomUUID(),
-                    );
-                    if (refundResult.ok) {
-                        await prisma.paymentTransaction.update({
-                            where: { id: commissionCharge.id },
-                            data: { status: 'cancelled' },
-                        });
-                    } else {
-                        console.error(
-                            'Commission refund failed:',
-                            refundResult.errorText,
-                        );
+                    if (!trip) {
+                        return {
+                            ok: false as const,
+                            status: 404,
+                            body: { error: 'Trip not found' },
+                        };
                     }
-                }
-            }
 
-            // Soft-cancel: keep the trip row (and its bids/chats/review) so the
-            // driver's UI can show a "취소됨" status instead of the trip just
-            // disappearing. `npm run db:purge-cancelled-trips` hard-deletes
-            // cancelled trips after the fact.
-            await prisma.trip.update({
-                where: { id: trip.id },
-                data: {
-                    status: TripStatus.cancelled,
-                    cancelReason: reason,
-                    cancelledAt: new Date(),
+                    if (trip.passengerId !== req.user!.userId) {
+                        return {
+                            ok: false as const,
+                            status: 403,
+                            body: { error: 'Not your trip' },
+                        };
+                    }
+
+                    if (!['open', 'awarded'].includes(trip.status)) {
+                        return {
+                            ok: false as const,
+                            status: 400,
+                            body: {
+                                error: 'Only open or awarded trips can be cancelled',
+                            },
+                        };
+                    }
+
+                    // 낙찰된 여정이 취소되면 이미 청구한 수수료를 환불한다 — 단,
+                    // "기사님 사유로 취소"는 미환불(프론트 PASSENGER_CANCEL_REASONS와 문구 동기화 유지).
+                    // 환불이 실패하면 여정을 취소 상태로 바꾸지 않는다: 그렇게 하면 승객은
+                    // 취소됐다고 보는데 수수료는 청구된 채로 남고, 다시 시도할 수도 없다.
+                    if (trip.status === 'awarded' && reason !== DRIVER_FAULT_CANCEL_REASON) {
+                        const commissionCharge = await tx.paymentTransaction.findFirst({
+                            where: {
+                                tripId: trip.id,
+                                kind: 'platform_commission',
+                                status: 'succeeded',
+                            },
+                        });
+
+                        if (commissionCharge?.tid) {
+                            const refundResult = await cancelPayment(
+                                commissionCharge.tid,
+                                `여정 취소 (${reason})`,
+                                crypto.randomUUID(),
+                            );
+                            if (!refundResult.ok) {
+                                console.error(
+                                    'Commission refund failed; trip left unchanged:',
+                                    trip.id,
+                                    refundResult.errorText,
+                                );
+                                return {
+                                    ok: false as const,
+                                    status: 502,
+                                    body: {
+                                        error: '수수료 환불에 실패하여 여정을 취소하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+                                    },
+                                };
+                            }
+                            await tx.paymentTransaction.update({
+                                where: { id: commissionCharge.id },
+                                data: { status: 'cancelled' },
+                            });
+                        }
+                    }
+
+                    // Soft-cancel: keep the trip row (and its bids/chats/review) so the
+                    // driver's UI can show a "취소됨" status instead of the trip just
+                    // disappearing. `npm run db:purge-cancelled-trips` hard-deletes
+                    // cancelled trips after the fact.
+                    await tx.trip.update({
+                        where: { id: trip.id },
+                        data: {
+                            status: TripStatus.cancelled,
+                            cancelReason: reason,
+                            cancelledAt: new Date(),
+                        },
+                    });
+
+                    return { ok: true as const };
                 },
-            });
+            );
+
+            if (!outcome.ok) {
+                return res.status(outcome.status).json(outcome.body);
+            }
 
             res.json({ message: 'Trip cancelled successfully' });
         } catch (error) {

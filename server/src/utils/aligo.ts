@@ -161,3 +161,77 @@ export async function sendOtpSms(
 
     return sendViaSms(phoneNumber, code, { apiKey, userId, sender });
 }
+
+export type AlimtalkPayload = {
+    apiKey: string;
+    userId: string;
+    sender: string;
+    senderKey: string;
+    tplCode: string;
+    receiver: string;
+    message: string;
+    fallbackSubject: string;
+    fallbackText: string;
+    buttonJson?: string;
+};
+
+export type AlimtalkTransportResult =
+    | { ok: true }
+    | { ok: false; error: string; retryable: boolean };
+
+type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+
+// 전송 한 번만 수행한다. 재시도·로그는 호출부(alimtalk.ts)가 맡는다.
+export async function postAlimtalk(
+    payload: AlimtalkPayload,
+    fetchImpl: FetchLike = fetch,
+): Promise<AlimtalkTransportResult> {
+    const params: Record<string, string> = {
+        apikey: payload.apiKey,
+        userid: payload.userId,
+        senderkey: payload.senderKey,
+        tpl_code: payload.tplCode,
+        sender: payload.sender,
+        receiver_1: payload.receiver,
+        message_1: payload.message,
+        failover: 'Y',
+        fsubject_1: payload.fallbackSubject,
+        fmessage_1: payload.fallbackText,
+    };
+    if (payload.buttonJson) {
+        params.button_1 = payload.buttonJson;
+    }
+
+    let response: Response;
+    try {
+        response = await fetchImpl(ALIGO_ALIMTALK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params),
+            signal: AbortSignal.timeout(10000),
+        });
+    } catch {
+        return { ok: false, error: 'network', retryable: true };
+    }
+
+    if (!response.ok) {
+        return {
+            ok: false,
+            error: `http_${response.status}`,
+            retryable: response.status >= 500,
+        };
+    }
+
+    const data: any = await response.json().catch(() => null);
+    const succeeded =
+        String(data?.result_code) === '1' || String(data?.code) === '0';
+    if (!succeeded) {
+        return {
+            ok: false,
+            error: String(data?.message || 'rejected'),
+            retryable: false,
+        };
+    }
+
+    return { ok: true };
+}

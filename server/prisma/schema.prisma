@@ -417,3 +417,17 @@ model AdminAuditLog {
   @@index([targetType, targetId])
   @@index([createdAt])
 }
+
+model AlimtalkLog {
+  id             String   @id @default(cuid())
+  templateKey    String
+  receiverUserId String?
+  maskedPhone    String?
+  dedupeKey      String   @unique
+  status         String
+  errorCode      String?
+  createdAt      DateTime @default(now())
+
+  @@index([templateKey])
+  @@index([createdAt])
+}
