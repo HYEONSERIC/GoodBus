@@ -575,7 +575,7 @@ nginx -t && systemctl reload nginx
 | DB 접속 안 됨 | Docker Postgres와 카페24 네이티브 Postgres가 동시에 5432를 쓰려는 충돌인지 확인 |
 | 빌드는 되는데 배포 후 동작 이상 | 로컬 개발은 Node 20인데 서버가 Node 24로 실행 중인 건 아닌지 (`node -v`) |
 | 카페24 도메인 접속 시 "Server is running" 환영 페이지만 뜸 | `/var/www/cafe24-welcome/index.html`이 존재하면 Nginx `location = /`가 실제 앱보다 그 파일을 우선 서빙함 — `mv`로 치우고 `nginx -s reload` |
-| `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가) |
+| `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가). **실제 재발 확인: 2026-10-08** — 2026-09-14 신규 VPS 이전 이후 `/etc/nginx/sites-available/busrent`에 이 블록이 없는 채로 운영되고 있었음(관리자 콘솔 서류 이미지 깨짐, 다운로드는 `/api/` 경유라 영향 없어서 늦게 발견). `nginx -t`로 검증 후 `busrent.bak-<시각>` 백업을 남기고 두 서버 블록(구/신 도메인) 모두에 블록을 다시 추가, `systemctl reload nginx`로 반영·확인함. 서버 시스템 파일이라 이 수정은 git에는 반영되지 않음 — **다음에 VPS를 재설치/재이전할 때 반드시 다시 확인할 것** |
 | CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
 | SSH `Connection refused`가 갑자기 뜸 | 서버가 죽은 게 아니라 fail2ban이 실패한 로그인 시도를 감지해 접속 IP를 일시 차단했을 가능성 — 몇 분 기다리거나 Cafe24 웹 콘솔로 우회 접속해 `fail2ban-client status sshd`/`unban` 확인 |
 | 정상 사용자인데 간헐적으로 429 응답 | `deploy/nginx/goodbus.conf`의 `limit_req`(2026-08-15 추가, `/api/auth/` 2r/s, 나머지 10r/s)에 걸렸을 가능성 — burst 값(각각 5/20) 조정 검토 |
