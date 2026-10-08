@@ -3,6 +3,64 @@ import { MembershipPlan } from '@prisma/client';
 import prisma from '../utils/db';
 import { chargeBillingKey } from '../utils/nicepay';
 import { MEMBERSHIP_PRICES_WON, MIN_BID_ADDON_PRICE_WON } from '../utils/paymentPricing';
+import { sendAlimtalk, formatKstDateTime } from '../utils/alimtalk';
+
+async function notifyRecurringPaymentFailed(
+    userId: string,
+    orderId: string,
+    paymentLabel: string,
+    amount: number,
+) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { displayName: true, companyName: true, email: true, phoneNumber: true },
+    });
+    if (!user) return;
+    // 이 스크립트는 일회성 CLI라 main()이 끝나면 바로 Prisma 연결을 닫는다
+    // (라우트처럼 프로세스가 계속 떠 있지 않음) — fire-and-forget하면 발송이
+    // 끝나기 전에 연결이 닫힐 수 있어 반드시 await한다.
+    await sendAlimtalk({
+        templateKey: 'RECURRING_PAYMENT_FAILED',
+        receiverUserId: userId,
+        receiverPhone: user.phoneNumber,
+        // orderId는 시도마다 새로 생기므로, 이 키는 "같은 결제 시도"에 대한
+        // 중복 발송만 막고 다음 날 재시도 실패는 다시 보낸다.
+        dedupeKey: `RECURRING_PAYMENT_FAILED:${orderId}`,
+        variables: {
+            기사명: user.displayName || user.companyName || user.email || '기사',
+            결제항목: paymentLabel,
+            결제금액: `${amount.toLocaleString('ko-KR')}원`,
+            실패일시: formatKstDateTime(new Date()),
+        },
+    });
+}
+
+async function notifyMembershipPaymentCompleted(
+    userId: string,
+    orderId: string,
+    paymentLabel: string,
+    amount: number,
+    nextBillingAt: Date,
+) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { displayName: true, companyName: true, email: true, phoneNumber: true },
+    });
+    if (!user) return;
+    await sendAlimtalk({
+        templateKey: 'MEMBERSHIP_PAYMENT_COMPLETED',
+        receiverUserId: userId,
+        receiverPhone: user.phoneNumber,
+        dedupeKey: `MEMBERSHIP_PAYMENT_COMPLETED:${orderId}`,
+        variables: {
+            기사명: user.displayName || user.companyName || user.email || '기사',
+            결제항목: paymentLabel,
+            결제금액: `${amount.toLocaleString('ko-KR')}원`,
+            결제일시: formatKstDateTime(new Date()),
+            다음결제일: formatKstDateTime(nextBillingAt).split(' ')[0],
+        },
+    });
+}
 
 function addOneMonth(date: Date): Date {
     const next = new Date(date);
@@ -113,6 +171,13 @@ async function processMembershipSubscriptions() {
             console.log(
                 `[${subscription.userId}] 멤버십 과금 성공 (${billedPlan}, ${amount}원)`,
             );
+            await notifyMembershipPaymentCompleted(
+                subscription.userId,
+                orderId,
+                `멤버십(${billedPlan})`,
+                amount,
+                addOneMonth(subscription.nextBillingAt),
+            );
         } else {
             await prisma.$transaction([
                 prisma.paymentTransaction.create({
@@ -136,6 +201,12 @@ async function processMembershipSubscriptions() {
             ]);
             console.error(
                 `[${subscription.userId}] 멤버십 과금 최종 실패, Basic으로 강등: ${result.errorText}`,
+            );
+            await notifyRecurringPaymentFailed(
+                subscription.userId,
+                orderId,
+                `멤버십(${billedPlan})`,
+                amount,
             );
         }
     }
@@ -224,6 +295,12 @@ async function processMinBidAddonSubscriptions() {
             ]);
             console.error(
                 `[${subscription.userId}] 애드온 과금 최종 실패, 해지: ${result.errorText}`,
+            );
+            await notifyRecurringPaymentFailed(
+                subscription.userId,
+                orderId,
+                '최저입찰금액 확인 애드온',
+                amount,
             );
         }
     }

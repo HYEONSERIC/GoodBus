@@ -17,6 +17,7 @@ import {
     MIN_BID_ADDON_PRICE_WON,
 } from '../utils/paymentPricing';
 import { withPaymentLock } from '../utils/paymentLock';
+import { sendAlimtalk, formatKstDateTime } from '../utils/alimtalk';
 
 const router = express.Router();
 
@@ -137,6 +138,30 @@ router.delete(
             await prisma.billingKey.deleteMany({
                 where: { userId: req.user!.userId },
             });
+
+            if (billingKey) {
+                const user = await prisma.user.findUnique({
+                    where: { id: req.user!.userId },
+                    select: { displayName: true, companyName: true, email: true, phoneNumber: true },
+                });
+                if (user) {
+                    const minuteBucket = Math.floor(Date.now() / 60000);
+                    void sendAlimtalk({
+                        templateKey: 'CARD_CHANGED',
+                        receiverUserId: req.user!.userId,
+                        receiverPhone: user.phoneNumber,
+                        dedupeKey: `CARD_CHANGED:${req.user!.userId}:delete:${minuteBucket}`,
+                        variables: {
+                            기사명: user.displayName || user.companyName || user.email || '기사',
+                            변경유형: '삭제',
+                            카드사: billingKey.cardBrand || '정보 없음',
+                            카드번호뒤4자리: billingKey.cardLast4 || '****',
+                            처리일시: formatKstDateTime(new Date()),
+                        },
+                    });
+                }
+            }
+
             res.json({ deleted: true });
         } catch (error) {
             console.error('Delete billing key error:', error);
@@ -246,7 +271,7 @@ router.post(
 
             const user = await prisma.user.findUnique({
                 where: { id: req.user!.userId },
-                select: { phoneNumber: true },
+                select: { phoneNumber: true, displayName: true, companyName: true, email: true },
             });
             const phoneNumber = user?.phoneNumber
                 ? normalizePhoneNumber(user.phoneNumber)
@@ -288,6 +313,10 @@ router.post(
                 return res.status(400).json({ error: result.errorText });
             }
 
+            const existingBillingKey = await prisma.billingKey.findUnique({
+                where: { userId: req.user!.userId },
+            });
+
             await prisma.billingKey.upsert({
                 where: { userId: req.user!.userId },
                 create: {
@@ -300,6 +329,21 @@ router.post(
                     nicepayBillingKey: result.data.bid,
                     cardBrand: result.data.cardName,
                     cardLast4: body.cardNo.slice(-4),
+                },
+            });
+
+            const minuteBucket = Math.floor(Date.now() / 60000);
+            void sendAlimtalk({
+                templateKey: 'CARD_CHANGED',
+                receiverUserId: req.user!.userId,
+                receiverPhone: phoneNumber,
+                dedupeKey: `CARD_CHANGED:${req.user!.userId}:${existingBillingKey ? 'update' : 'register'}:${minuteBucket}`,
+                variables: {
+                    기사명: user?.displayName || user?.companyName || user?.email || '기사',
+                    변경유형: existingBillingKey ? '변경' : '등록',
+                    카드사: result.data.cardName,
+                    카드번호뒤4자리: body.cardNo.slice(-4),
+                    처리일시: formatKstDateTime(new Date()),
                 },
             });
 
@@ -478,13 +522,42 @@ router.post(
                             },
                         });
 
-                    return { ok: true as const, subscription: updatedSubscription };
+                    return {
+                        ok: true as const,
+                        subscription: updatedSubscription,
+                        charged: { plan, amount, orderId },
+                    };
                 },
             );
 
             if (!result.ok) {
                 return res.status(result.status).json(result.body);
             }
+
+            if (result.charged) {
+                const user = await prisma.user.findUnique({
+                    where: { id: req.user!.userId },
+                    select: { displayName: true, companyName: true, email: true, phoneNumber: true },
+                });
+                if (user) {
+                    void sendAlimtalk({
+                        templateKey: 'MEMBERSHIP_PAYMENT_COMPLETED',
+                        receiverUserId: req.user!.userId,
+                        receiverPhone: user.phoneNumber,
+                        dedupeKey: `MEMBERSHIP_PAYMENT_COMPLETED:${result.charged.orderId}`,
+                        variables: {
+                            기사명: user.displayName || user.companyName || user.email || '기사',
+                            결제항목: `멤버십(${result.charged.plan})`,
+                            결제금액: `${result.charged.amount.toLocaleString('ko-KR')}원`,
+                            결제일시: formatKstDateTime(new Date()),
+                            다음결제일: formatKstDateTime(
+                                result.subscription.nextBillingAt,
+                            ).split(' ')[0],
+                        },
+                    });
+                }
+            }
+
             res.json({ subscription: result.subscription });
         } catch (error) {
             if (error instanceof z.ZodError) {

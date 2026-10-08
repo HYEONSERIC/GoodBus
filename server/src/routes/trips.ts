@@ -10,6 +10,8 @@ import { chargeBillingKey, cancelPayment } from '../utils/nicepay';
 import { DEFAULT_PLATFORM_COMMISSION_RATE } from '../utils/adminRevenue';
 import { withPaymentLock, acquireAdvisoryLock } from '../utils/paymentLock';
 import { getRoundPartnerTrip } from '../utils/tripGroupsCore';
+import { sendAlimtalk, formatKstDateTime } from '../utils/alimtalk';
+import { BUS_SIZE_LABELS } from '../utils/alimtalkTemplates';
 
 // 프론트 components/passenger/dialogs/PassengerCancelTripDialog.tsx의
 // PASSENGER_CANCEL_REASONS 문구와 동기화 유지 — 이 사유만 수수료 미환불.
@@ -641,6 +643,8 @@ router.post(
                                 select: {
                                     id: true,
                                     email: true,
+                                    displayName: true,
+                                    phoneNumber: true,
                                 },
                             },
                         },
@@ -654,6 +658,8 @@ router.post(
                                     id: true,
                                     email: true,
                                     membershipPlan: true,
+                                    displayName: true,
+                                    phoneNumber: true,
                                 },
                             },
                         },
@@ -918,6 +924,58 @@ router.post(
                 tripWithDetails.passenger.email
             );
 
+            {
+                const driverName =
+                    awardedBid.bidder.displayName || awardedBid.bidder.email || '기사';
+                const fare = `${Number(awardedBid.price)}만원`;
+                const vehicleLabel = BUS_SIZE_LABELS[tripWithDetails.busSize] || '버스';
+                const returnDateTime = partnerAward
+                    ? formatKstDateTime(partnerAward.trip.dateTime)
+                    : '편도 운행';
+                void sendAlimtalk({
+                    templateKey: 'AWARD_COMPLETED',
+                    receiverUserId: awardedBid.bidder.id,
+                    receiverPhone: awardedBid.bidder.phoneNumber,
+                    dedupeKey: `AWARD_COMPLETED:${trip.id}`,
+                    variables: {
+                        기사명: driverName,
+                        총요금: fare,
+                        운행요금: fare,
+                        부가서비스요금: '0원',
+                        포함사항: '통행료·주차비 포함, 별도 요금 없음',
+                        결제방법:
+                            tripWithDetails.paymentMethod === 'card'
+                                ? '카드결제'
+                                : '현금결제',
+                        고객명: tripWithDetails.passenger.displayName || '고객',
+                        고객연락처: tripWithDetails.passenger.phoneNumber || '-',
+                        출발지: tripWithDetails.origin,
+                        도착지: tripWithDetails.destination,
+                        출발일시: formatKstDateTime(tripWithDetails.dateTime),
+                        귀환일시: returnDateTime,
+                        차량정보: vehicleLabel,
+                        운행형태: partnerAward ? '왕복' : '편도',
+                        인원: String(tripWithDetails.paxCount),
+                    },
+                });
+                void sendAlimtalk({
+                    templateKey: 'AWARD_CONFIRMED',
+                    receiverUserId: tripWithDetails.passenger.id,
+                    receiverPhone: tripWithDetails.passenger.phoneNumber,
+                    dedupeKey: `AWARD_CONFIRMED:${trip.id}`,
+                    variables: {
+                        고객명: tripWithDetails.passenger.displayName || '고객',
+                        기사명: driverName,
+                        기사연락처: awardedBid.bidder.phoneNumber || '-',
+                        차량정보: vehicleLabel,
+                        출발지: tripWithDetails.origin,
+                        도착지: tripWithDetails.destination,
+                        출발일시: formatKstDateTime(tripWithDetails.dateTime),
+                        귀환일시: returnDateTime,
+                    },
+                });
+            }
+
             // 왕복 반대편이 자동 낙찰됐다면 같은 후속 처리(채팅방·알림·메일)를 반복한다.
             if (partnerAward) {
                 await prisma.chatRoom.upsert({
@@ -1007,10 +1065,81 @@ router.patch(
                         };
                     }
 
+                    // 낙찰된 기사에게 보낼 알림톡에 필요한 표시값 — 환불 알림과 취소
+                    // 알림이 같은 기사·여정 정보를 쓰므로 한 번만 조회해 둔다. 발송
+                    // 자체는 트랜잭션 커밋 후(락 밖)에 하고, 여기서는 값만 계산한다.
+                    let driverDisplay: {
+                        receiverUserId: string;
+                        receiverPhone: string | null;
+                        기사명: string;
+                        차량정보: string;
+                        출발지: string;
+                        도착지: string;
+                        출발일시: string;
+                        귀환일시: string;
+                        운행형태: string;
+                        인원: string;
+                    } | null = null;
+
+                    if (trip.status === 'awarded') {
+                        const awardedBid = await tx.bid.findFirst({
+                            where: { tripId: trip.id, status: 'awarded' },
+                            include: {
+                                bidder: {
+                                    select: {
+                                        id: true,
+                                        email: true,
+                                        displayName: true,
+                                        phoneNumber: true,
+                                    },
+                                },
+                            },
+                        });
+
+                        if (awardedBid) {
+                            const partnerCandidates = await tx.trip.findMany({
+                                where: {
+                                    passengerId: trip.passengerId,
+                                    status: 'awarded',
+                                    id: { not: trip.id },
+                                },
+                            });
+                            const partner = getRoundPartnerTrip(
+                                trip,
+                                partnerCandidates,
+                            );
+
+                            driverDisplay = {
+                                receiverUserId: awardedBid.bidder.id,
+                                receiverPhone: awardedBid.bidder.phoneNumber,
+                                기사명:
+                                    awardedBid.bidder.displayName ||
+                                    awardedBid.bidder.email ||
+                                    '기사',
+                                차량정보: BUS_SIZE_LABELS[trip.busSize] || '버스',
+                                출발지: trip.origin,
+                                도착지: trip.destination,
+                                출발일시: formatKstDateTime(trip.dateTime),
+                                귀환일시: partner
+                                    ? formatKstDateTime(partner.dateTime)
+                                    : '편도 운행',
+                                운행형태: partner ? '왕복' : '편도',
+                                인원: String(trip.paxCount),
+                            };
+                        }
+                    }
+
                     // 낙찰된 여정이 취소되면 이미 청구한 수수료를 환불한다 — 단,
                     // "기사님 사유로 취소"는 미환불(프론트 PASSENGER_CANCEL_REASONS와 문구 동기화 유지).
                     // 환불이 실패하면 여정을 취소 상태로 바꾸지 않는다: 그렇게 하면 승객은
                     // 취소됐다고 보는데 수수료는 청구된 채로 남고, 다시 시도할 수도 없다.
+                    let refundNotify: {
+                        receiverUserId: string;
+                        receiverPhone: string | null;
+                        dedupeKey: string;
+                        variables: Record<string, string>;
+                    } | null = null;
+
                     if (trip.status === 'awarded' && reason !== DRIVER_FAULT_CANCEL_REASON) {
                         const commissionCharge = await tx.paymentTransaction.findFirst({
                             where: {
@@ -1044,6 +1173,24 @@ router.patch(
                                 where: { id: commissionCharge.id },
                                 data: { status: 'cancelled' },
                             });
+
+                            if (driverDisplay) {
+                                refundNotify = {
+                                    receiverUserId: driverDisplay.receiverUserId,
+                                    receiverPhone: driverDisplay.receiverPhone,
+                                    dedupeKey: `REFUND_COMPLETED:${trip.id}`,
+                                    variables: {
+                                        기사명: driverDisplay.기사명,
+                                        환불금액: `${commissionCharge.amount.toLocaleString('ko-KR')}원`,
+                                        취소사유: reason,
+                                        출발지: driverDisplay.출발지,
+                                        도착지: driverDisplay.도착지,
+                                        출발일시: driverDisplay.출발일시,
+                                        귀환일시: driverDisplay.귀환일시,
+                                        차량정보: driverDisplay.차량정보,
+                                    },
+                                };
+                            }
                         }
                     }
 
@@ -1060,12 +1207,49 @@ router.patch(
                         },
                     });
 
-                    return { ok: true as const };
+                    const driverNotify = driverDisplay
+                        ? {
+                              receiverUserId: driverDisplay.receiverUserId,
+                              receiverPhone: driverDisplay.receiverPhone,
+                              dedupeKey: `TRIP_CANCELLED:${trip.id}`,
+                              variables: {
+                                  기사명: driverDisplay.기사명,
+                                  출발지: driverDisplay.출발지,
+                                  도착지: driverDisplay.도착지,
+                                  출발일시: driverDisplay.출발일시,
+                                  귀환일시: driverDisplay.귀환일시,
+                                  차량정보: driverDisplay.차량정보,
+                                  운행형태: driverDisplay.운행형태,
+                                  인원: driverDisplay.인원,
+                              },
+                          }
+                        : null;
+
+                    return { ok: true as const, driverNotify, refundNotify };
                 },
             );
 
             if (!outcome.ok) {
                 return res.status(outcome.status).json(outcome.body);
+            }
+
+            if (outcome.driverNotify) {
+                void sendAlimtalk({
+                    templateKey: 'TRIP_CANCELLED',
+                    receiverUserId: outcome.driverNotify.receiverUserId,
+                    receiverPhone: outcome.driverNotify.receiverPhone,
+                    dedupeKey: outcome.driverNotify.dedupeKey,
+                    variables: outcome.driverNotify.variables,
+                });
+            }
+            if (outcome.refundNotify) {
+                void sendAlimtalk({
+                    templateKey: 'REFUND_COMPLETED',
+                    receiverUserId: outcome.refundNotify.receiverUserId,
+                    receiverPhone: outcome.refundNotify.receiverPhone,
+                    dedupeKey: outcome.refundNotify.dedupeKey,
+                    variables: outcome.refundNotify.variables,
+                });
             }
 
             res.json({ message: 'Trip cancelled successfully' });

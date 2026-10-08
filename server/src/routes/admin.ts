@@ -19,6 +19,7 @@ import {
     parseSupportPostKind,
 } from '../utils/supportPost';
 import { formatSupportInquiryCategory } from '../utils/supportInquiry';
+import { sendAlimtalk, formatKstDateTime } from '../utils/alimtalk';
 import {
     groupTripsForDisplay,
     summarizePassengerTrips,
@@ -850,6 +851,41 @@ router.patch(
                 targetId: user.id,
                 metadata: { type, status, reason: reason || null, email: user.email },
             });
+
+            if (status === 'approved' || status === 'rejected') {
+                const documentLabel = type === 'company' ? '사업자등록증' : '운전면허증';
+                const recipientName =
+                    user.displayName || user.companyName || user.email || '기사';
+                // 재심사(반려 후 재제출 → 재승인/재반려)는 다시 보내야 하므로 유저를
+                // 영구히 막지 않되, 더블클릭 등 같은 요청의 순간적인 중복만 막도록 분
+                // 단위로 dedupe한다(심사 이력 테이블이 없어 더 정교한 키를 만들 수 없음).
+                const reviewMinuteBucket = Math.floor(Date.now() / 60000);
+                if (status === 'approved') {
+                    void sendAlimtalk({
+                        templateKey: 'DOCUMENT_APPROVED',
+                        receiverUserId: user.id,
+                        receiverPhone: user.phoneNumber,
+                        dedupeKey: `DOCUMENT_APPROVED:${user.id}:${type}:${reviewMinuteBucket}`,
+                        variables: {
+                            기사명: recipientName,
+                            서류종류: documentLabel,
+                            승인일시: formatKstDateTime(new Date()),
+                        },
+                    });
+                } else {
+                    void sendAlimtalk({
+                        templateKey: 'DOCUMENT_REJECTED',
+                        receiverUserId: user.id,
+                        receiverPhone: user.phoneNumber,
+                        dedupeKey: `DOCUMENT_REJECTED:${user.id}:${type}:${reviewMinuteBucket}`,
+                        variables: {
+                            기사명: recipientName,
+                            서류종류: documentLabel,
+                            반려사유: reason || '사유 없음',
+                        },
+                    });
+                }
+            }
 
             res.json({ user });
         } catch (error) {
