@@ -342,7 +342,7 @@ pm2 restart all
 2026-08-14 Next.js 취약점을 통한 RCE로 서버가 침해돼 OS 재설치로 복구한 사고가 있었음(전체 경위는 `PROJECT_STATUS.md` 참고). 그때 드러난 운영 공백들:
 
 - [x] **DB 자동 백업** — 2026-08-15 스크립트 작성, **2026-08-16 crontab 실제 등록 + 실행 검증 완료**(위 "8-2" 참고). `crontab -l`에 03:00 등록 확인, 수동 1회 실행으로 만든 덤프(`goodbus_2026-08-16_162355.sql.gz`)의 gzip 무결성과 `CREATE TABLE public."User"` 포함 여부까지 확인
-- [x] **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no` + `PermitRootLogin prohibit-password` 적용 후, 키 로그인 유지 + 비밀번호 인증이 프롬프트 없이 즉시 거부되는 것까지 라이브 검증(아래 "10-2" 참고)
+- [x] **SSH 키 전용 인증** — 2026-08-16 완료. `PasswordAuthentication no` + `PermitRootLogin prohibit-password` 적용 후, 키 로그인 유지 + 비밀번호 인증이 프롬프트 없이 즉시 거부되는 것까지 라이브 검증(아래 "10-2" 참고) — 단 이건 구 서버 기준 기록. **2026-09-14 새 서버에는 이 설정이 없어 `PasswordAuthentication yes`로 돌고 있었고(24시간 대입 시도 1,048건), 2026-10-11에 다시 적용·검증함**
 - [ ] **다운 감지 알림 없음** — 서버가 몇 시간 죽어있어도 아무도 모름. 아래 "10-3" 참고 (UptimeRobot 가입 여전히 안 함)
 - [x] **GitHub Dependabot/vulnerability alerts** — 2026-08-15, 꺼져 있는 것으로 확인(`gh api` 조회 결과), `gh api -X PUT repos/HYEONSERIC/GoodBus/vulnerability-alerts`와 `.../automated-security-fixes`로 활성화 완료. `.github/dependabot.yml` 추가(root+server 주간 스캔)
 - [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
@@ -370,6 +370,8 @@ pm2 restart all
 
 여러 기기에서 접속해야 하면 각 기기의 공개키를 `authorized_keys`에 추가로 등록하면 된다.
 
+**새 서버(2026-09-14~) 재적용 — 2026-10-11**: 새 서버는 `sshd_config`에 `PasswordAuthentication yes`·`PermitRootLogin yes`가 그대로 있었다(위 drop-in이 OS 재설치·이전 때 사라짐). `authorized_keys`에 키가 하나(`goodbus-vps-2026-08`)뿐이고 최근 접속이 모두 `Accepted publickey`임을 확인한 뒤, drop-in에 `KbdInteractiveAuthentication no`를 더해 `printf ... > /etc/ssh/sshd_config.d/90-goodbus-keyonly.conf && sshd -t && sshd -T | grep ...`로 적용값을 먼저 확인하고 `systemctl restart ssh`. 기존 접속은 끊기지 않으므로 그 창을 연 채 새 터미널에서 키 로그인과 비밀번호 강제 거부를 둘 다 확인했다. `sshd -T`는 `permitrootlogin without-password`로 표시하는데 `prohibit-password`의 옛 이름이라 같은 설정이다. **VPS를 재설치·이전하면 이 파일이 다시 사라지므로 `sshd -T | grep -E "^(passwordauthentication|permitrootlogin)"`로 매번 확인할 것.**
+
 ### 10-3. 다운타임 모니터링 + 에러 트래킹 (2026-08-16 완료 + 라이브 검증)
 
 Sentry는 애플리케이션이 살아서 에러를 던질 때만 잡는다 — 프로세스가 죽거나(크립토마이너가 CPU를 다 먹는 등) 크래시 루프에 빠지면 감지 못 한다. 별도 외부 핑 모니터링이 필요:
@@ -384,6 +386,8 @@ Sentry는 애플리케이션이 살아서 에러를 던질 때만 잡는다 — 
 ### 10-4. 봇/브루트포스 방어 확장 (2026-08-16, 실제 배포 시 적용 + 라이브 검증 완료)
 
 카페24 자동설치가 fail2ban과 `nginx-http-auth`/`nginx-limit-req`/`nginx-botsearch` 필터를 이미 깔아준다 — 우리가 한 건 jail을 켜고, 아래 버그를 고치고, 앱 전용 jail 하나를 추가한 것뿐이다.
+
+> **새 서버(2026-09-14~) 현황 — 2026-10-11 확인**: 이 섹션의 jail 설정은 새 서버에 없고 `sshd` jail 하나만 돈다(`fail2ban-client status`). 그리고 **지금 구조(Cloudflare 프록시 뒤)에서는 아래 `goodbus-login`·nginx jail을 그대로 복구하면 안 된다** — 서버에 도착하는 연결의 IP가 Cloudflare 것이라, 로그에 찍힌 IP를 iptables로 막아도 방문자를 막지 못하고 Cloudflare IP를 차단할 위험이 있다. 앱 로그인 시도 제한은 앱의 IP별 레이트리밋(`ipRateLimit.ts`)이 맡는다. 또 Nginx 로그 파일은 새 서버에서 `busrent_access.log`/`busrent_error.log`로 이름이 다르고, 아래 `logpath`의 `/root/.pm2/...`도 새 서버에선 `/opt/busrent/.pm2/logs/...`다.
 
 **⚠️ 발견한 버그 — `backend=auto`가 로그 파일이 아니라 journald를 감시함**: `/etc/fail2ban/jail.conf`의 기본 `backend = auto`가 이 서버에서는 조용히 `systemd`(journald)로 해석돼, `logpath`를 지정해도 무시하고 저널만 본다. Nginx 로그도, pm2 로그(journald에 안 실림)도 이 상태로는 fail2ban이 절대 못 본다 — `fail2ban-client status <jail>`의 `Journal matches` 줄이 `File list` 대신 떠 있으면 이 상태다. **해결: 아래 4개 jail 전부 `backend = polling`을 명시.** 이걸 놓치면 jail이 "실행 중"으로는 보이지만 실제로는 아무것도 차단하지 않는 죽은 설정이 된다.
 
@@ -579,6 +583,7 @@ nginx -t && systemctl reload nginx
 | 카페24 도메인 접속 시 "Server is running" 환영 페이지만 뜸 | `/var/www/cafe24-welcome/index.html`이 존재하면 Nginx `location = /`가 실제 앱보다 그 파일을 우선 서빙함 — `mv`로 치우고 `nginx -s reload` |
 | `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가). **실제 재발 확인: 2026-10-08** — 2026-09-14 신규 VPS 이전 이후 `/etc/nginx/sites-available/busrent`에 이 블록이 없는 채로 운영되고 있었음(관리자 콘솔 서류 이미지 깨짐, 다운로드는 `/api/` 경유라 영향 없어서 늦게 발견). `nginx -t`로 검증 후 `busrent.bak-<시각>` 백업을 남기고 두 서버 블록(구/신 도메인) 모두에 블록을 다시 추가, `systemctl reload nginx`로 반영·확인함. 서버 시스템 파일이라 이 수정은 git에는 반영되지 않음 — **다음에 VPS를 재설치/재이전할 때 반드시 다시 확인할 것**. **재발 감지(2026-10-11 추가)**: UptimeRobot에 `Keyword on busrent.co.kr/uploads/healthcheck.txt` 모니터(5분 간격, 키워드 `busrent-uploads-ok`가 없으면 장애, 알림은 이메일, Up과 테스트 알림 메일 도착 확인함)를 걸어 이 블록이 다시 빠지면 알려주게 함. 단 감시 대상 파일 `/opt/busrent/server/uploads/healthcheck.txt`는 서버에만 있고 git에 없으므로, 이전·재설치 때는 `echo "busrent-uploads-ok" \| sudo -u appuser tee /opt/busrent/server/uploads/healthcheck.txt`로 다시 만들어야 모니터가 오탐하지 않음 |
 | CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
+| 앱 보안 로그(`[SECURITY] failed login ip=`)·Nginx 접속 로그에 `172.64.x`·`104.x`·`162.158.x` 같은 Cloudflare 주소만 찍힘 / 앱의 IP별 레이트리밋이 서로 다른 방문자를 한 덩어리로 막음 | **Nginx가 방문자 IP를 복원하지 않는 상태** — `X-Real-IP`가 `$remote_addr`(= Cloudflare 주소)로 설정되기 때문. `/etc/nginx/conf.d/goodbus-cloudflare.conf`에 Cloudflare 대역 한정 `set_real_ip_from`·`real_ip_header CF-Connecting-IP`가 있는지 확인(`deploy/nginx/cloudflare-origin-bypass.conf`가 원본). **2026-10-11 실제 발생** — 설정이 `deploy/nginx/goodbus.conf`에만 있고 라이브 카페24 생성 사이트 설정엔 없었음. 적용 때 **직접접속 차단 `geo`의 키가 `$realip_remote_addr`인지 반드시 확인**(`$remote_addr` 그대로면 모든 요청이 444로 차단돼 사이트 전체가 내려감). 적용: `git pull` 후 기존 파일 백업→`cp deploy/nginx/cloudflare-origin-bypass.conf /etc/nginx/conf.d/goodbus-cloudflare.conf`→`nginx -t`→`systemctl reload nginx`, 실패 시 백업으로 복구. 확인: Cloudflare 경유 200, `curl -sk --resolve busrent.co.kr:443:127.0.0.1 https://busrent.co.kr/`가 `000`(차단 유지), 로그인 실패 후 `grep "failed login" /opt/busrent/.pm2/logs/goodbus-api-error-0.log`의 `ip=`가 Cloudflare 대역이 아님. 이 파일은 서버에 복사해야 반영되므로 재설치·이전 때 다시 적용할 것 |
 | SSH `Connection refused`가 갑자기 뜸 | 서버가 죽은 게 아니라 fail2ban이 실패한 로그인 시도를 감지해 접속 IP를 일시 차단했을 가능성 — 몇 분 기다리거나 Cafe24 웹 콘솔로 우회 접속해 `fail2ban-client status sshd`/`unban` 확인 |
 | 정상 사용자인데 간헐적으로 429 응답 | `deploy/nginx/goodbus.conf`의 `limit_req`(2026-08-15 추가, `/api/auth/` 2r/s, 나머지 10r/s)에 걸렸을 가능성 — burst 값(각각 5/20) 조정 검토 |
 | fail2ban jail이 "started"인데 실제로 아무도 밴이 안 됨 | `fail2ban-client status <jail>`에서 `File list` 대신 `Journal matches`가 떠 있으면 `backend=auto`가 조용히 journald를 보고 있는 것 — logpath가 있어도 무시됨. `backend = polling` 명시 필요(위 "10-4" 참고) |

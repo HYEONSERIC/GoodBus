@@ -30,7 +30,7 @@
 - **스택:** Ubuntu 24.04, Node.js 24, pm2(fork 모드, appuser), 네이티브 PostgreSQL 17, Nginx + certbot(카페24 자동구성)
 - **SSL:** Let's Encrypt(certbot), `busrent.co.kr`/`www.busrent.co.kr`/`busrent0909.mycafe24.com` 전부 유효 인증서 발급 완료, 자동갱신 타이머(`certbot.timer`) 확인함
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — `deploy/ecosystem.config.cjs`는 경로 무관하게 그대로 재사용 가능해서 이번 이전에도 안 건드림. `deploy.sh`는 root로 실행되면 `appuser`로 자동 재실행(`exec sudo -u appuser`)하도록 수정(2026-09-14) — root로 그대로 돌리면 빌드 산출물이 root 소유가 돼 appuser pm2 프로세스와 소유권이 꼬이는 문제를 막기 위함. 새 서버에서 실제로 root 계정으로 `deploy.sh` 실행 → appuser로 전환되어 git pull·npm ci·db push·build·pm2 재시작까지 전부 정상 완료, 파일 소유권도 전부 appuser로 확인, 라이브 재확인까지 통과
-- **서버 레벨 보안**: 카페24 자동구성이 fail2ban(sshd jail)·ufw는 깔아놨지만 ufw는 기본 비활성 상태였음 → 22/80/443만 허용해서 활성화함(2026-09-14). unattended-upgrades 상태는 미확인
+- **서버 레벨 보안**: 카페24 자동구성이 fail2ban(sshd jail)·ufw는 깔아놨지만 ufw는 기본 비활성 상태였음 → 22/80/443만 허용해서 활성화함(2026-09-14). ~~unattended-upgrades 상태는 미확인~~ — 당시 미확인 → **2026-10-11 확인 완료**: `active`, 보안 오리진(`-security`·ESM)만 허용, 매일 실행 설정(`APT::Periodic::Unattended-Upgrade "1"`)
 - **커스텀 도메인 연결·Cloudflare 전체 프록시**: 2026-08-18/08-25에 구 서버 기준으로 처음 세팅했던 절차와 원리는 동일(아래 "완료됨" 항목 참고) — 2026-09-14 마이그레이션도 같은 방식(DNS-only 임시 전환 → 인증서 발급 → Proxied 복귀)으로 재현함
 
 ---
@@ -323,6 +323,14 @@
     - **운영 배포 중 장애물 — `next build`가 OOM으로 `Killed`**: 서버 RAM이 1.9GB에 swap 495MB뿐이라 빌드 프로세스(RSS 약 1.16GB)가 메모리 한계에서 강제 종료됨(`dmesg`에 `Out of memory: Killed process ... next-build`). 빌드가 중간에 죽으면 `deploy.sh`(`set -e`)가 pm2 재시작 전에 멈추므로 기존 서비스는 그대로 유지됐고, 사이트 200·헬스체크 ok·pm2 online 확인 후 **롤백하지 않고 `/swapfile` 2GB를 추가**(`/etc/fstab` 등록, 추가 요금 없음 — 정액제 디스크 안의 파일) → 재배포 성공(컴파일 61초). 이 swap은 서버에만 있어 재설치·이전 시 다시 만들어야 함(`DEPLOYMENT.md` 트러블슈팅 표 참고)
     - **배포 후 확인**: 운영 커밋 `6eb4fd1`, `next-server (v16.3.8)`, 운영 의존성 `npm audit --omit=dev` root·server 둘 다 0건, 홈 200·`/api/health` ok·`/uploads/healthcheck.txt` 정상, pm2 두 프로세스 online·에러 로그 없음
     - **남은 것**: ① `app/layout.tsx`가 아직 `next/font/google`로 빌드 때마다 구글에서 폰트를 받음(8/14에 패치를 롤백하게 만든 원인과 같은 구조 — `DEPLOYMENT.md` "13"은 `next/font/local`로 해결했다고 읽히지만 실제 코드엔 미적용, `@fontsource` 기반 자체 호스팅으로 별도 작업 예정) ② 개발 전용 취약점 잔존(`shell-quote` critical·`js-yaml`·`vitest`·`eslint-config-next` 등) — 운영 번들에 포함되지 않지만 정리 필요, `eslint-config-next`는 메이저 다운그레이드가 필요해 별도 판단
+
+- **새 서버 하드닝 재검증 — SSH 키 전용 복구 + 실제 방문자 IP 복원** (2026-10-11, 커밋 `466e00c`)
+    - **SSH — 새 서버에 8/16 설정이 없었음**: `sshd -T`가 `PasswordAuthentication yes`·`PermitRootLogin yes`였고(`/etc/ssh/sshd_config.d/`에 키 전용 파일 없음), 최근 24시간 root 비밀번호 대입 시도 1,048건. 최근 접속은 전부 `Accepted publickey`(키는 `goodbus-vps-2026-08` 하나뿐)라 잠길 위험이 없음을 확인한 뒤 `/etc/ssh/sshd_config.d/90-goodbus-keyonly.conf`(`PasswordAuthentication no`, `KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`, `PubkeyAuthentication yes`) 적용. 맥에서 키 로그인 성공, `-o PreferredAuthentications=password -o PubkeyAuthentication=no`로 강제한 비밀번호 로그인은 `Permission denied (publickey)`로 즉시 거부되는 것까지 확인
+    - **fail2ban — 앱 로그인 jail은 복구하지 않기로 함**: 새 서버는 `sshd` jail 하나뿐(`goodbus-login`·Nginx jail 없음). 다만 사이트가 Cloudflare 프록시 뒤라 서버에 도착하는 연결의 IP는 Cloudflare 것이어서, 로그에 찍힌 IP를 방화벽으로 막는 이 jail은 실효가 없고 복구하면 오히려 Cloudflare IP를 차단할 위험이 있음. 로그인 시도 제한은 앱의 IP별 레이트리밋이 맡음(8/16에 한 `goodbus-login` 라이브 검증은 그때 구조 기준이라, 지금 Cloudflare 뒤에서 같은 결과가 나온다고 보장되지 않음 — 이번에 jail 동작을 다시 시험해 본 것은 아님)
+    - **발견·수정 — 서버가 방문자 IP를 몰랐음**: 앱 보안 로그가 `ip=172.64.217.45`처럼 Cloudflare 주소를 기록하고 Nginx 접속 로그도 Cloudflare 대역이었음. `set_real_ip_from`/`real_ip_header CF-Connecting-IP`가 `deploy/nginx/goodbus.conf`에만 있고 실제 운영 중인 카페24 생성 사이트 설정에는 없었기 때문(`/uploads` 블록 누락과 같은 유형). 그 결과 `X-Real-IP`가 항상 Cloudflare 주소라 앱의 IP별 레이트리밋(OTP 요청·로그인·가입)이 서로 다른 방문자를 한 덩어리로 묶고 있었고, 실패 로그로 공격자를 추적할 수 없었음
+    - **수정**: `deploy/nginx/cloudflare-origin-bypass.conf`(라이브에선 `/etc/nginx/conf.d/goodbus-cloudflare.conf`)에 Cloudflare 대역 한정 `real_ip` 지시어를 추가하고, 직접접속 차단 `geo`의 키를 `$remote_addr`→`$realip_remote_addr`로 변경(안 바꾸면 `$remote_addr`가 방문자 주소로 바뀌면서 모든 요청이 444로 차단돼 사이트 전체가 내려감). Docker nginx로 사전 검증: 신뢰 대역에서 온 요청은 헤더 적용, 신뢰 대역 밖에서 위조한 헤더는 무시. 운영 적용은 백업 후 `nginx -t`→reload
+    - **확인**: 적용 후 Cloudflare 경유 200, 원본 직접접속 차단(444·`000`) 유지, 헬스체크 ok, Nginx 접속 로그에 Cloudflare가 아닌 실제 IP, 앱 `[SECURITY] failed login ip=`에 실제 IP(`2600:3c18::...`) 기록(수정 전 줄은 `172.64.217.44`로 남아 있어 전후가 비교됨). 이 conf.d 파일은 서버에 복사해 쓰는 방식이라 `git pull`만으로는 반영되지 않음 — 다음 배포나 재설치 때 다시 복사해야 함
+    - **남은 것**: Nginx 접속 로그 기반 jail(`nginx-botsearch` 등)은 새 서버에서 켜지 않았고 로그 파일명이 `busrent_access.log`/`busrent_error.log`로 바뀌어 있음. Cloudflare 뒤에서 방화벽 차단이 효과가 있는지 먼저 판단한 뒤 결정
 
 ## 미완료 / 실서비스 갭
 
