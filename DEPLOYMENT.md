@@ -23,7 +23,7 @@ PG(결제) 없이 **베타·파일럿**을 올리는 것을 기준으로 한 설
 
 **Cloudflare origin-bypass 차단 재설정 완료(2026-09-14)**: `deploy/nginx/cloudflare-origin-bypass.conf`(신규, 리포에 커밋됨)의 `geo` 맵을 `/etc/nginx/conf.d/goodbus-cloudflare.conf`로 배포하고, `busrent.co.kr`/`www` 443 서버 블록에 `if ($goodbus_is_cloudflare = 0) { return 444; }` 추가 — 원본 IP 직접 접속(Host: busrent.co.kr) 차단, Cloudflare 경유는 정상, `busrent0909.mycafe24.com`(UptimeRobot 의존)은 의도적으로 예외 유지. 라이브 curl로 3가지 케이스 전부 검증 완료. (포트 80 블록은 certbot이 만든 리다이렉트 `if`가 먼저 걸려 이 검사가 도달 불가라 추가 안 함 — 어차피 콘텐츠 노출 없이 리다이렉트만 하므로 낮은 리스크.)
 
-**아직 안 한 것(우선순위 낮음)**: Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).
+~~**아직 안 한 것(우선순위 낮음)**: Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).~~ — 이전 직후 시점의 기록. 이후 DSN이 재반영돼 2026-10-06에 브라우저 쪽 수신을 확인함(라이브 번들의 SDK·DSN + 테스트 에러 도착). 서버 쪽도 2026-10-11에 확인함(`.env`·`.env.local` 둘 다 DSN 존재, `node-express` 프로젝트로 서버 테스트 에러 도착). Next 서버 런타임 에러 수신은 별도 발생 테스트 안 함.
 
 이 섹션 아래(1번~)는 **최초 설계 시점의 계획 문서**로 남겨둔다 — Docker/`/var/www/goodbus` 전제로 읽지 말 것.
 
@@ -575,7 +575,7 @@ nginx -t && systemctl reload nginx
 | DB 접속 안 됨 | Docker Postgres와 카페24 네이티브 Postgres가 동시에 5432를 쓰려는 충돌인지 확인 |
 | 빌드는 되는데 배포 후 동작 이상 | 로컬 개발은 Node 20인데 서버가 Node 24로 실행 중인 건 아닌지 (`node -v`) |
 | 카페24 도메인 접속 시 "Server is running" 환영 페이지만 뜸 | `/var/www/cafe24-welcome/index.html`이 존재하면 Nginx `location = /`가 실제 앱보다 그 파일을 우선 서빙함 — `mv`로 치우고 `nginx -s reload` |
-| `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가). **실제 재발 확인: 2026-10-08** — 2026-09-14 신규 VPS 이전 이후 `/etc/nginx/sites-available/busrent`에 이 블록이 없는 채로 운영되고 있었음(관리자 콘솔 서류 이미지 깨짐, 다운로드는 `/api/` 경유라 영향 없어서 늦게 발견). `nginx -t`로 검증 후 `busrent.bak-<시각>` 백업을 남기고 두 서버 블록(구/신 도메인) 모두에 블록을 다시 추가, `systemctl reload nginx`로 반영·확인함. 서버 시스템 파일이라 이 수정은 git에는 반영되지 않음 — **다음에 VPS를 재설치/재이전할 때 반드시 다시 확인할 것** |
+| `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가). **실제 재발 확인: 2026-10-08** — 2026-09-14 신규 VPS 이전 이후 `/etc/nginx/sites-available/busrent`에 이 블록이 없는 채로 운영되고 있었음(관리자 콘솔 서류 이미지 깨짐, 다운로드는 `/api/` 경유라 영향 없어서 늦게 발견). `nginx -t`로 검증 후 `busrent.bak-<시각>` 백업을 남기고 두 서버 블록(구/신 도메인) 모두에 블록을 다시 추가, `systemctl reload nginx`로 반영·확인함. 서버 시스템 파일이라 이 수정은 git에는 반영되지 않음 — **다음에 VPS를 재설치/재이전할 때 반드시 다시 확인할 것**. **재발 감지(2026-10-11 추가)**: UptimeRobot에 `Keyword on busrent.co.kr/uploads/healthcheck.txt` 모니터(5분 간격, 키워드 `busrent-uploads-ok`가 없으면 장애, 알림은 이메일, Up과 테스트 알림 메일 도착 확인함)를 걸어 이 블록이 다시 빠지면 알려주게 함. 단 감시 대상 파일 `/opt/busrent/server/uploads/healthcheck.txt`는 서버에만 있고 git에 없으므로, 이전·재설치 때는 `echo "busrent-uploads-ok" \| sudo -u appuser tee /opt/busrent/server/uploads/healthcheck.txt`로 다시 만들어야 모니터가 오탐하지 않음 |
 | CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
 | SSH `Connection refused`가 갑자기 뜸 | 서버가 죽은 게 아니라 fail2ban이 실패한 로그인 시도를 감지해 접속 IP를 일시 차단했을 가능성 — 몇 분 기다리거나 Cafe24 웹 콘솔로 우회 접속해 `fail2ban-client status sshd`/`unban` 확인 |
 | 정상 사용자인데 간헐적으로 429 응답 | `deploy/nginx/goodbus.conf`의 `limit_req`(2026-08-15 추가, `/api/auth/` 2r/s, 나머지 10r/s)에 걸렸을 가능성 — burst 값(각각 5/20) 조정 검토 |

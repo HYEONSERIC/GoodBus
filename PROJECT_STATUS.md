@@ -26,7 +26,7 @@
   - Cloudflare DNS(`busrent.co.kr` A, `www` CNAME) 새 IP로 전환 완료(전환 중 임시로 DNS-only로 내렸다가 `busrent.co.kr`/`www` 인증서 새로 발급 후 다시 Proxied로 복귀 — Full strict 모드라 순서 중요했음), 새 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별개로 추가 발급해 같은 nginx 파일에 서버 블록 두 개로 공존
   - pm2는 새로 systemd 등록(`pm2 startup`) 완료, 재부팅에도 안전
   - **Cloudflare origin-bypass 직접 IP 차단 재설정 완료(2026-09-14)** — 이번엔 `deploy/nginx/cloudflare-origin-bypass.conf`로 리포에 커밋해둬서 다음에 서버 또 옮겨도 처음부터 다시 만들 필요 없음(자세한 내용은 `DEPLOYMENT.md` "0." 참고)
-  - **아직 안 한 것**: Sentry DSN(구 서버에만 있던 값이라 유실, 로컬 백업 없음 — 필요 시 Sentry 대시보드에서 재발급)
+  - ~~**아직 안 한 것**: Sentry DSN(구 서버에만 있던 값이라 유실, 로컬 백업 없음 — 필요 시 Sentry 대시보드에서 재발급)~~ — 이전 직후 시점의 기록. **이후 DSN 재반영됨**: 2026-10-06 라이브 JS 번들에서 Sentry SDK·DSN 확인 + 브라우저에서 일부러 낸 테스트 에러가 `javascript-nextjs` 프로젝트에 도착(브라우저 쪽 동작 확인). **서버 쪽도 2026-10-11 확인 완료**: 새 서버의 `/opt/busrent/server/.env`(`SENTRY_DSN`)와 `/opt/busrent/.env.local`(`NEXT_PUBLIC_SENTRY_DSN`) 둘 다 값이 있음을 `grep -c`로 확인, `loadEnv`→`instrument` 순서로 `captureException`+`flush`를 실행해 `node-express` 프로젝트(`NODE-EXPRESS-1`)에 `server sentry test`가 도착하는 것까지 확인(이슈 그룹이 8/16 테스트와 같아 Age는 2개월로 표시되나 Last Seen이 방금으로 갱신됨). Next 서버 런타임 에러 수신은 DSN 존재만 확인했고 별도 발생 테스트는 안 함
 - **스택:** Ubuntu 24.04, Node.js 24, pm2(fork 모드, appuser), 네이티브 PostgreSQL 17, Nginx + certbot(카페24 자동구성)
 - **SSL:** Let's Encrypt(certbot), `busrent.co.kr`/`www.busrent.co.kr`/`busrent0909.mycafe24.com` 전부 유효 인증서 발급 완료, 자동갱신 타이머(`certbot.timer`) 확인함
 - **배포 문서·스크립트:** `DEPLOYMENT.md`, `deploy/` — `deploy/ecosystem.config.cjs`는 경로 무관하게 그대로 재사용 가능해서 이번 이전에도 안 건드림. `deploy.sh`는 root로 실행되면 `appuser`로 자동 재실행(`exec sudo -u appuser`)하도록 수정(2026-09-14) — root로 그대로 돌리면 빌드 산출물이 root 소유가 돼 appuser pm2 프로세스와 소유권이 꼬이는 문제를 막기 위함. 새 서버에서 실제로 root 계정으로 `deploy.sh` 실행 → appuser로 전환되어 git pull·npm ci·db push·build·pm2 재시작까지 전부 정상 완료, 파일 소유권도 전부 appuser로 확인, 라이브 재확인까지 통과
@@ -309,6 +309,13 @@
     - 커밋 `d74f121`, 운영 배포 완료. `.env`의 `ALIMTALK_ENABLED_TEMPLATES`에 12종 중 11종(승객_리뷰요청 제외) 전부 활성화
     - 배포 직후 사용자가 관리자 승인 페이지 서류 이미지가 안 보인다고 보고 — 운영 Nginx(`/etc/nginx/sites-available/busrent`)에 `/uploads/` 프록시 블록이 없어 Express가 아닌 Next.js로 요청이 가서 404였던 것. 2026-09-14 신규 VPS 이전 때 빠진 채로 운영되던 기존에 알려진 재발 유형(`DEPLOYMENT.md` "12. 트러블슈팅" 참고) — 백업 후 블록 재추가, `nginx -t` 검증 후 reload로 해결. 서버 시스템 설정이라 git에는 반영되지 않음
 
+- **관측성 마무리 — 수신·알림·이미지 감시 확인** (2026-10-11)
+    - **서버 쪽 Sentry 수신 확인**: 새 서버의 `/opt/busrent/server/.env`(`SENTRY_DSN`)·`/opt/busrent/.env.local`(`NEXT_PUBLIC_SENTRY_DSN`) 둘 다 값이 있음을 확인, `loadEnv`→`instrument` 순서로 `captureException`+`flush`를 실행해 `node-express` 프로젝트에 도착. 이슈 그룹은 에러가 난 코드 위치(스택)로 묶이므로 같은 `node -e` 명령의 테스트는 메시지를 바꿔도 같은 이슈(`NODE-EXPRESS-1`)가 되어 알림이 다시 울리지 않음 — 알림 재검증용으로 메시지만 바꿔 보내는 방법은 통하지 않는다
+    - **Sentry 알림 확인**: 두 프로젝트 모두 "high priority issues → Email" 규칙이 있고, 알림 메일 도착을 확인(`JAVASCRIPT-NEXTJS-1` 2026-08-16, `JAVASCRIPT-NEXTJS-5` 2026-10-06, `NODE-EXPRESS-1` 2026-08-16). 주간 리포트(Weekly Report) 메일도 같은 주소로 도착
+    - **UptimeRobot 이미지 감시 추가**: `/opt/busrent/server/uploads/healthcheck.txt`(내용 `busrent-uploads-ok`)를 만들고 `Keyword on busrent.co.kr/uploads/healthcheck.txt` 모니터(5분 간격, 키워드 없으면 장애, 알림 이메일) 추가 — 2026-10-08 Nginx `/uploads` 누락(24일 방치)을 5분 안에 잡기 위함. Up 확인, 테스트 알림 메일 도착 확인. 이 파일은 서버에만 있어 이전·재설치 때 재생성 필요(`DEPLOYMENT.md` 트러블슈팅 표 참고)
+    - **기존 `/api/health` 모니터 측정값**: 2026-10-11 기준 현재 Up 26일 22시간 연속, 최근 30일 99.050%, 30일 내 장애 1건(2026-09-14 09:41 시작, `522 Connection timed out`, 6시간 50분). 호스팅 만료일(9/11)로 기록한 것과 외부 측정 다운 시작(9/14 09:41)이 어긋나 있어, 만료 후 유예 기간이 있었는지는 확인 필요
+    - **남은 것**: Next 서버 런타임 에러 수신은 DSN 존재만 확인(별도 발생 테스트 안 함), 중앙 로깅·메트릭은 여전히 없음
+
 ## 미완료 / 실서비스 갭
 
 - **배포**
@@ -317,9 +324,9 @@
     - `DEPLOYMENT.md` "10. 배포 후 체크리스트" 중 미완료 항목: 승객 견적 생성→기사 입찰→승객 낙찰 전체 흐름 브라우저 검증, 관리자 콘솔 UI(매출 탭 등) 브라우저 검증, Sentry 에러 리포트 실제 확인
 - **휴대전화 로그인**
     - 전 역할(승객/기사/버스회사) 전화번호 전용 가입·로그인으로 전면 개편(스키마·API·UI) **구현·테스트·프로덕션 배포까지 전부 완료**(2026-08-19 구현, 2026-08-20 배포) — 자세한 내용은 위 "인증 — 휴대전화 / 알림톡" 섹션 참고
-    - **SMS 단독 실발송도 프로덕션에서 완료**(2026-08-20) — 알림톡(카카오 채널·템플릿 심사)만 아직 **대기/예정** (외부 절차, 코드 아님)
+    - **SMS 단독 실발송도 프로덕션에서 완료**(2026-08-20) — ~~알림톡(카카오 채널·템플릿 심사)만 아직 **대기/예정** (외부 절차, 코드 아님)~~ — 당시 미완성이었으나 **이후 반영 완료**: 12종 전부 카카오 승인, 인증번호(OTP)·가입 환영은 2026-10-06, 나머지 11종 중 운영 활성화 완료는 2026-10-08(승객_리뷰요청만 "운행 완료" 판정 cron 설계 선행이 필요해 보류) — 위 "인증 — 휴대전화 / 알림톡"·"완료됨" 참고
 - **보안 강화** (2026-08-15에 코드 레벨 갭 다수 해소 — 위 "완료됨"의 "보안 강화 — 백엔드 취약점 5건 수정" 참고)
-    - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), **로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**
+    - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), ~~**로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**~~ — 당시 기록. **2026-08-15(`c63c090`)에 로그인·회원가입·전화로그인 IP 레이트리밋 확장 + 로그인 실패 `[SECURITY]` 구조화 로그로 반영 완료**(`server/src/utils/ipRateLimit.ts`, 위 "봇 차단·애플리케이션 보안 종합 정리" 참고)
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
     - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키는 2026-08-25에 이어 2026-08-29에 한 번 더 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
