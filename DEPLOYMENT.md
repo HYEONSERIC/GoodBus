@@ -18,6 +18,7 @@ PG(결제) 없이 **베타·파일럿**을 올리는 것을 기준으로 한 설
 | nginx/certbot | 수동 설치·설정(본문 4번) | **카페24 자동구성 스택이 이미 세팅**해서 옴(SSL도 자동 발급됨, 별도 구매 아님) |
 | DB 백업 스크립트 | `server/scripts/backup-db.sh` (docker exec 기반) | **`server/scripts/backup-db-native.sh`**(pg_dump 직결, DATABASE_URL 파싱) — docker 버전은 이 서버에서 안 먹힘 |
 | crontab 경로 | `/var/www/goodbus/server/...` | **`/opt/busrent/server/...`**, appuser의 crontab에 등록(root 아님) |
+| RAM / swap | DEV B, 4GB RAM | **RAM 1.9GB**, swap은 원래 495MB 파티션(`/dev/sdb`)뿐이라 **2026-10-11에 `/swapfile` 2GB 추가**(`/etc/fstab` 등록, 서버에만 존재 — 재설치 시 재생성 필요, 트러블슈팅 표의 `next build` `Killed` 항목 참고) |
 
 같이 바뀐 외부 설정: Aligo SMS 발송 IP 화이트리스트, Toss Payments API 키 접근 정책(`busrent_test`) 둘 다 새 IP(`172.238.20.212`)로 재등록 완료. Cloudflare DNS(`busrent.co.kr`/`www`)도 새 IP로 전환 완료, Let's Encrypt 인증서는 카페24 자동발급분(`busrent0909.mycafe24.com`)과 별도로 `busrent.co.kr`/`www.busrent.co.kr`용을 추가 발급해서 같은 nginx 설정 파일 안에 두 서버 블록으로 공존시켰다.
 
@@ -347,7 +348,7 @@ pm2 restart all
 - [x] **카페24 플랫폼 방화벽 ON + fail2ban 확장 + OS 자동패치** — 2026-08-16, 아래 "10-4"/"10-5" 참고, 전부 라이브 검증 완료
 - [x] **Toss Secret Key/Webhook Secret 재발급 완료** (2026-08-16) — [Toss 개발자센터](https://developers.tosspayments.com/my/api-keys)에서 재발급 받아 `server/.env` 갱신 → `pm2 restart goodbus-api`, 헬스체크·에러 로그로 정상 기동 확인. Client key(`NEXT_PUBLIC_TOSS_CLIENT_KEY`)는 공개 키라 재발급 대상 아님, 기존 값 유지
 - [~] Kakao API 키는 프로덕션 서버에 반영되고 실제 동작(장소검색)까지 확인됨(2026-08-16, 위 체크리스트 참고) — **단, 침해사고 이후 실제로 재발급된 새 키인지는 이번 세션에서 확인 안 됨**(로컬 개발 `.env` 파일에 있던 값을 그대로 옮김). 재발급 여부가 불확실하면 안전하게 [Kakao Developers](https://developers.kakao.com)에서 재발급 후 교체 권장
-- [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities
+- [x] **`server/` npm 패키지 감사 미처리 취약점** — 2026-08-15에 27건 중 26건 해소, **`nodemailer`도 2026-08-16에 `9.0.5`로 업그레이드해 마저 해소**(`^6.9.8`→`^9.0.5`, 타입체크·빌드·모듈 로드·기존 테스트 30개 전부 통과 확인). `npm audit` 결과 현재 `server`/루트 둘 다 0 vulnerabilities — ~~현재~~ 2026-08-16 시점의 기록. **이후 새 advisory로 운영 의존성에 취약점이 다시 생겨(Next.js 16.3.1 등) 2026-10-11에 재패치·배포했고 다시 0건**(`PROJECT_STATUS.md`의 "의존성 취약점 재점검·패치" 참고) — 이 항목은 한 번 끝나는 일이 아니라 주기적으로 `npm audit --omit=dev`를 확인해야 함
 
 ### 10-2. SSH 하드닝 (2026-08-16 완료 + 라이브 검증)
 
@@ -574,6 +575,7 @@ nginx -t && systemctl reload nginx
 | `Missing backend URL` | 루트 `.env.local` 의 `API_URL` |
 | DB 접속 안 됨 | Docker Postgres와 카페24 네이티브 Postgres가 동시에 5432를 쓰려는 충돌인지 확인 |
 | 빌드는 되는데 배포 후 동작 이상 | 로컬 개발은 Node 20인데 서버가 Node 24로 실행 중인 건 아닌지 (`node -v`) |
+| `deploy.sh`의 `next build`가 `Killed`로 끝남 | **메모리 부족(OOM)** — 에러 메시지 없이 `Killed`만 나오고 `dmesg -T \| grep -i "out of memory"`에 `Killed process ... next-build`가 찍힘. 이 서버(DEV A)는 RAM 1.9GB라 Turbopack 빌드(RSS 약 1.1~1.2GB 이상)가 swap 495MB만으로는 부족했음(**2026-10-11 실제 발생**, Next 16.3.8 배포 중). `deploy.sh`는 `set -e`라 빌드 실패 시 pm2 재시작 전에 멈추므로 기존 서비스는 유지되지만, 빌드가 중간에 죽어 `.next`가 불완전할 수 있으니 먼저 `curl`로 홈·`/api/health`와 `pm2 list`부터 확인. **롤백하지 말고** swap 추가: `[ "$(df --output=avail -BG / \| tail -1 \| tr -dc 0-9)" -gt 5 ] && fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab`(디스크 여유 5GB 이상일 때만, 정액제 디스크 안의 파일이라 추가 요금 없음) 후 `deploy.sh` 재실행(컴파일 61초에 성공). **swap 파일은 서버에만 있고 git에 없으므로 VPS 재설치·이전 시 다시 만들어야 함** — 안 만들면 다음 배포에서 같은 `Killed`가 재현됨 |
 | 카페24 도메인 접속 시 "Server is running" 환영 페이지만 뜸 | `/var/www/cafe24-welcome/index.html`이 존재하면 Nginx `location = /`가 실제 앱보다 그 파일을 우선 서빙함 — `mv`로 치우고 `nginx -s reload` |
 | `/uploads/*` 이미지 404 | 카페24가 도메인별로 자동 생성하는 `/etc/nginx/sites-available/<서비스명>`은 OS 재설치/재프로비저닝될 때마다 기본값으로 초기화됨 — `/uploads/` → `127.0.0.1:4000` proxy_pass 블록이 살아있는지 매번 확인 (`deploy/nginx/goodbus.conf`의 내용을 참고해 다시 추가). **실제 재발 확인: 2026-10-08** — 2026-09-14 신규 VPS 이전 이후 `/etc/nginx/sites-available/busrent`에 이 블록이 없는 채로 운영되고 있었음(관리자 콘솔 서류 이미지 깨짐, 다운로드는 `/api/` 경유라 영향 없어서 늦게 발견). `nginx -t`로 검증 후 `busrent.bak-<시각>` 백업을 남기고 두 서버 블록(구/신 도메인) 모두에 블록을 다시 추가, `systemctl reload nginx`로 반영·확인함. 서버 시스템 파일이라 이 수정은 git에는 반영되지 않음 — **다음에 VPS를 재설치/재이전할 때 반드시 다시 확인할 것**. **재발 감지(2026-10-11 추가)**: UptimeRobot에 `Keyword on busrent.co.kr/uploads/healthcheck.txt` 모니터(5분 간격, 키워드 `busrent-uploads-ok`가 없으면 장애, 알림은 이메일, Up과 테스트 알림 메일 도착 확인함)를 걸어 이 블록이 다시 빠지면 알려주게 함. 단 감시 대상 파일 `/opt/busrent/server/uploads/healthcheck.txt`는 서버에만 있고 git에 없으므로, 이전·재설치 때는 `echo "busrent-uploads-ok" \| sudo -u appuser tee /opt/busrent/server/uploads/healthcheck.txt`로 다시 만들어야 모니터가 오탐하지 않음 |
 | CI의 `Backend (Express)` job만 `npm ci`에서 `Missing: ... from lock file`로 실패 | `server/package-lock.json`이 macOS에서 생성돼 Linux 전용 `optionalDependencies`가 빠진 상태 — `CLAUDE.md`의 "Regenerating package-lock.json on macOS" 항목대로 Docker(`--platform linux/amd64`)에서 재생성 |
@@ -597,7 +599,7 @@ docker logs goodbus-postgres
 
 **앞으로의 원칙 — critical/high severity CVE 패치가 빌드를 깨뜨리면, 롤백이 아니라 그날 안에 다음 중 하나를 실행한다:**
 
-1. **빌드를 고쳐서 패치를 유지한다** (권장, 대부분 가능) — 예: 이번 Next.js 건은 `next/font/local`로 self-host해서 외부 fetch 자체를 없애 해결
+1. **빌드를 고쳐서 패치를 유지한다** (권장, 대부분 가능) — 예: 이번 Next.js 건은 `next/font/local`로 self-host해서 외부 fetch 자체를 없애 해결 (**2026-10-11 확인: 이건 권장 방향일 뿐 코드엔 아직 미적용** — `app/layout.tsx`는 여전히 `next/font/google`이라 빌드가 구글 네트워크에 의존함. 한글 폰트는 통짜 파일이 수 MB라 `next/local`보다 unicode-range로 쪼개진 `@fontsource-variable/noto-sans-kr`가 적합해 그쪽으로 별도 작업 예정)
 2. 그게 당장 안 되면, **취약점이 있는 기능/라우트를 임시로 내리거나 Nginx에서 막아** 노출 표면을 줄인다
 3. 그래도 안 되면 **서버를 일시적으로 내린다**
 

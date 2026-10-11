@@ -316,6 +316,14 @@
     - **기존 `/api/health` 모니터 측정값**: 2026-10-11 기준 현재 Up 26일 22시간 연속, 최근 30일 99.050%, 30일 내 장애 1건(2026-09-14 09:41 시작, `522 Connection timed out`, 6시간 50분). 호스팅 만료일(9/11)로 기록한 것과 외부 측정 다운 시작(9/14 09:41)이 어긋나 있어, 만료 후 유예 기간이 있었는지는 확인 필요
     - **남은 것**: Next 서버 런타임 에러 수신은 DSN 존재만 확인(별도 발생 테스트 안 함), 중앙 로깅·메트릭은 여전히 없음
 
+- **의존성 취약점 재점검·패치 — Next.js 16.3.8 등 운영 배포 완료** (2026-10-11, 커밋 `6eb4fd1`)
+    - **발견**: `aligo`에서 `npm audit`을 돌려보니 8/16 "0 vulnerabilities" 이후 새로 올라온 advisory로 운영 의존성에 취약점이 다시 생겨 있었음 — root 5건(`next` critical: 이미지 최적화 AVIF RCE `<16.3.3`·SSRF `<16.3.8` 등, 설치된 건 16.3.1), server 8건(`proxy-addr` critical IP 위조, `multer`·`nodemailer` high DoS 등). `next/og`는 코드에서 안 써서 그쪽 RCE는 해당 없음, Windows 서버 RCE도 Linux VPS라 해당 없음. **즉 8/14 사고 때와 같은 "알려진 취약 버전이 운영 중" 상태가 이번 점검 전까지 이어지고 있었음**(각 advisory 공개일 대비 노출 기간은 확인하지 않음. 악용 흔적은 배포 후 확인한 범위에서는 발견되지 않음 — CPU 상위 프로세스는 `next-server`/`node`뿐, pm2 로그 에러 없음. 단 침입 여부를 정밀 점검한 것은 아님)
+    - **패치**: root `next` 16.3.1→16.3.8(+`sharp`, `brace-expansion`·`fast-uri`·`source-map-js` 패치), server `multer` 2.2.0→2.4.0, `nodemailer` 9.0.5→10.0.16(유일한 breaking은 Node 20+ 요구, 우리 사용처는 `createTransport`+`sendMail`뿐이라 영향 없음), `express` 4.22.3(`proxy-addr` 2.0.8), `body-parser`·`qs`·`ip-address`. `npm audit fix`는 `typescript-eslint`·`vite`·`vitest` 같은 개발 도구까지 올려서, 취약한 패키지만 골라 올리는 최소 변경으로 진행. lockfile은 맥에서 만들지 않고 `linux/amd64 node:20` 컨테이너에서 `package.json`·lockfile 사본만 복사해 생성(저장소 마운트 시 맥 `node_modules`가 덮이는 것 방지) 후 같은 컨테이너에서 `npm ci` 검증
+    - **검증**: root lint 에러 0·테스트 18개·`.next` 삭제 후 콜드 빌드 3회 연속 성공(폰트 fetch 오류 없음), server `tsc`·테스트 56개·빌드 통과. 로컬에서 실제 서버를 띄워(`ALIGO_DISABLED`·빈 `SENTRY_DSN`으로 실제 문자·Sentry 전송 차단) 로그인 레이트리밋(20회까지 401, 21회부터 429, 다른 IP는 영향 없음)·잘못된 enum 쿼리 크래시 가드·multer 2.4 업로드 필터(정상 PNG 저장, 이미지로 위장한 텍스트·용량 초과 400)·nodemailer 10 `sendMail` 확인. CI(`Frontend`·`Backend` 두 job) 초록불
+    - **운영 배포 중 장애물 — `next build`가 OOM으로 `Killed`**: 서버 RAM이 1.9GB에 swap 495MB뿐이라 빌드 프로세스(RSS 약 1.16GB)가 메모리 한계에서 강제 종료됨(`dmesg`에 `Out of memory: Killed process ... next-build`). 빌드가 중간에 죽으면 `deploy.sh`(`set -e`)가 pm2 재시작 전에 멈추므로 기존 서비스는 그대로 유지됐고, 사이트 200·헬스체크 ok·pm2 online 확인 후 **롤백하지 않고 `/swapfile` 2GB를 추가**(`/etc/fstab` 등록, 추가 요금 없음 — 정액제 디스크 안의 파일) → 재배포 성공(컴파일 61초). 이 swap은 서버에만 있어 재설치·이전 시 다시 만들어야 함(`DEPLOYMENT.md` 트러블슈팅 표 참고)
+    - **배포 후 확인**: 운영 커밋 `6eb4fd1`, `next-server (v16.3.8)`, 운영 의존성 `npm audit --omit=dev` root·server 둘 다 0건, 홈 200·`/api/health` ok·`/uploads/healthcheck.txt` 정상, pm2 두 프로세스 online·에러 로그 없음
+    - **남은 것**: ① `app/layout.tsx`가 아직 `next/font/google`로 빌드 때마다 구글에서 폰트를 받음(8/14에 패치를 롤백하게 만든 원인과 같은 구조 — `DEPLOYMENT.md` "13"은 `next/font/local`로 해결했다고 읽히지만 실제 코드엔 미적용, `@fontsource` 기반 자체 호스팅으로 별도 작업 예정) ② 개발 전용 취약점 잔존(`shell-quote` critical·`js-yaml`·`vitest`·`eslint-config-next` 등) — 운영 번들에 포함되지 않지만 정리 필요, `eslint-config-next`는 메이저 다운그레이드가 필요해 별도 판단
+
 ## 미완료 / 실서비스 갭
 
 - **배포**
@@ -327,6 +335,7 @@
     - **SMS 단독 실발송도 프로덕션에서 완료**(2026-08-20) — ~~알림톡(카카오 채널·템플릿 심사)만 아직 **대기/예정** (외부 절차, 코드 아님)~~ — 당시 미완성이었으나 **이후 반영 완료**: 12종 전부 카카오 승인, 인증번호(OTP)·가입 환영은 2026-10-06, 나머지 11종 중 운영 활성화 완료는 2026-10-08(승객_리뷰요청만 "운행 완료" 판정 cron 설계 선행이 필요해 보류) — 위 "인증 — 휴대전화 / 알림톡"·"완료됨" 참고
 - **보안 강화** (2026-08-15에 코드 레벨 갭 다수 해소 — 위 "완료됨"의 "보안 강화 — 백엔드 취약점 5건 수정" 참고)
     - OTP 요청은 IP 레이트리밋이 추가됐지만(위 참고), ~~**로그인 등 나머지 라우트는 여전히 레이트 리밋/브루트포스 방어 없음**~~ — 당시 기록. **2026-08-15(`c63c090`)에 로그인·회원가입·전화로그인 IP 레이트리밋 확장 + 로그인 실패 `[SECURITY]` 구조화 로그로 반영 완료**(`server/src/utils/ipRateLimit.ts`, 위 "봇 차단·애플리케이션 보안 종합 정리" 참고)
+    - **의존성 취약점은 2026-10-11에 다시 패치**(위 "의존성 취약점 재점검·패치" 참고) — 새 advisory는 계속 올라오므로 Dependabot 주간 PR·`dependency-audit.yml` 리포트를 실제로 확인하는 습관이 필요(CI는 audit으로 실패하지 않음). `next/font/google` 자체 호스팅 전환은 아직 미완
     - 쿠키 기반 외 추가 CSRF 방어 없음
     - 관리자 행위 감사 로그는 도입됐지만(위 "완료됨" 참고), 보안 이벤트(로그인 실패·비정상 접근 등) 모니터링은 여전히 없음
     - **2026-08-14 RCE 침해사고 후속** — 취약점 자체와 DB/JWT/root SSH 비밀번호는 사고 당일, 코드 레벨 후속과 인프라 항목(백업 cron, fail2ban 확장, unattended-upgrades, 카페24 방화벽, nodemailer, SSH 키 전용 인증, UptimeRobot, Sentry DSN 2건)은 2026-08-15~16에 전부 완료(위 "완료됨" 참고). Toss Secret Key/Webhook Secret은 2026-08-16 실제로 재발급 받아 서버에 반영·재시작 완료(client key는 공개 키라 재발급 없음, 기존 값 유지). **Kakao API 키는 2026-08-25에 이어 2026-08-29에 한 번 더 재발급 완료**(위 "완료됨" 참고) — 콘솔에서 옛날 키 삭제만 사용자 몫으로 남음. 상세는 `DEPLOYMENT.md` "10-1" 참고
