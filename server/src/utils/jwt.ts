@@ -7,8 +7,11 @@ const JWT_SECRET =
         throw new Error('JWT_SECRET environment variable is required');
     })();
 
-export function generateToken(payload: JWTPayload): string {
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d', algorithm: 'HS256' });
+export function generateToken(
+    payload: JWTPayload,
+    expiresIn: jwt.SignOptions['expiresIn'] = '7d',
+): string {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn, algorithm: 'HS256' });
 }
 
 export function verifyToken(token: string): JWTPayload {

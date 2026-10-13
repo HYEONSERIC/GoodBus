@@ -29,6 +29,11 @@ const loginRateLimiter = createIpRateLimiter({
     message: '너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요',
 });
 
+// Admin sessions see all-user PII, revenue data, and can block accounts /
+// create other admins — a much wider blast radius than a passenger/driver
+// session, so they get a short-lived token instead of the usual 7 days.
+const ADMIN_SESSION_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
+
 const signupRateLimiter = createIpRateLimiter({
     windowMs: 60 * 60 * 1000,
     limit: 10,
@@ -412,13 +417,20 @@ router.post('/login', loginRateLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        const token = generateToken({ userId: user.id, role: user.role });
+        const isAdmin = user.role === 'Admin';
+        const sessionMaxAgeMs = isAdmin
+            ? ADMIN_SESSION_MAX_AGE_MS
+            : 7 * 24 * 60 * 60 * 1000;
+        const token = generateToken(
+            { userId: user.id, role: user.role },
+            isAdmin ? Math.floor(ADMIN_SESSION_MAX_AGE_MS / 1000) : '7d',
+        );
 
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
+            maxAge: sessionMaxAgeMs,
         });
 
         res.json({
