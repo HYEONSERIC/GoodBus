@@ -18,7 +18,7 @@
         "db:run-recurring-billing": "tsx src/prisma/run-recurring-billing.ts"
     },
     "dependencies": {
-        "@prisma/client": "^5.19.1",
+        "@prisma/client": "^7.9.1",
         "@sentry/node": "^10.69.0",
         "bcrypt": "^5.1.1",
         "cookie-parser": "^1.4.6",
