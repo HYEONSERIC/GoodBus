@@ -584,3 +584,36 @@ Claude의 SSH 읽기/쓰기가 "Production Reads" 권한 분류기에 막혀, �
 
 - `busrent.co.kr` certbot dry-run 재시도(Let's Encrypt 레이트리밋 풀린 뒤, 급하지 않음)
 - 상세 내용은 플랜 파일 `/Users/hyeonsu/.claude/plans/zazzy-marinating-puddle.md` 참고
+
+# 콜버스 스타일 비로그인 견적 위저드(`/quote`) 추가 (2026-11-05)
+
+원래 요청: "사업체에서 사용성이 불편하다는 반응 — 콜버스처럼 로그인 전에 견적 정보부터 입력받고 마지막에 전화번호 인증으로 바로 가입+로그인되게 하면 어떨까". Plan 모드로 기존 인증/견적 플로우를 두 Explore 에이전트로 조사한 뒤 설계, 구현 후 실제 브라우저+로컬 DB로 전 구간 검증.
+
+## 결정 사항
+
+- 백엔드의 `/auth/signup`(OTP 검증 → 기존 계정 로그인 또는 신규 생성, 한 번의 호출)은 손대지 않고 그대로 재사용 — 프론트에서 "견적 정보 먼저, 전화인증 마지막" 순서만 구현
+- 고객 유형(개인/법인/여행사)은 위저드에 포함하기로 하고 `Trip.requesterType` 필드 신설(스키마 변경), 버스 종류 선택 스텝도 포함(콜버스 화면엔 없었지만 우리 DB는 `busSize`가 생성 필수값), "인원 모름" 체크 시 임시 추정치(40명) 저장
+- 색상은 콜버스의 노란 테마를 따라가지 않고 GoodBus 기존 브랜드 블루(`#2563eb`)로 구성
+- 랜딩 페이지는 히어로의 "무료로 여정 등록하기" 버튼만 `/quote`로 바꾸고, 기존 회원가입/로그인/버스·회사 가입 경로는 전부 그대로 유지(사용자가 명시적으로 요청)
+
+## 구현
+
+- `hooks/useQuoteWizard.ts`(신규): 6단계(고객유형+목적/경로/일정/인원/버스종류/전화인증) 상태·유효성 검사·Kakao 장소검색(`usePassengerTripForm.ts` 로직 재사용)·OTP 요청/검증·최종 제출(signup 성공 직후 `tripsAPI.create` 호출, 왕복이면 2회) 전부 포함. 전화번호+OTP 로직을 별도 공용 훅으로 뽑는 건 "지금 쓰는 곳이 여기 하나뿐"이라는 이유로 보류(과도한 추상화 방지)
+- `app/quote/page.tsx` + `components/quote/Step*.tsx` 6개(신규): 각 스텝 컴포넌트, `components/OpenTripBidDialog.tsx`의 헤더/sticky footer 패턴 재사용
+- `server/prisma/schema.prisma`·`server/src/routes/trips.ts`: `Trip.requesterType String?` 추가(생성/수정 라우트 둘 다), `npm run db:push`로 로컬 DB 동기화(이 레포는 `prisma migrate`가 아니라 `db push` 컨벤션 — `prisma/migrations` 폴더 자체가 없음)
+- `lib/tripDisplay.ts`에 `getRequesterTypeLabel` 추가, 기존 `servicePurpose` 배지가 있는 5곳(`OpenTripCard`·`OpenTripBidTripSummarySection`·`MyBidQuoteDetailDialog`·`AwardedTripCard`·`PassengerQuoteTripCard`) 전부에 같은 자리로 노출 + 관련 타입 3개(`types/trip.ts`·`types/openTripBid.ts`·`types/passenger.ts`)에 필드 추가
+
+## 검증 과정에서 발견한 것
+
+- **실버그 1 (수정 완료)**: 위저드의 일정 스텝이 과거 날짜를 막지 않아, 끝까지 제출하면 `POST /trips 201`까지는 성공하지만 대시보드 진입 직후 기존 `expireExpiredOpenTripsForPassenger`(지난 일정 open 여정을 `GET /trips`마다 자동 하드삭제)가 바로 지워버려 "견적이 감쪽같이 사라지는" 현상이 재현됨. `usePassengerTripForm.ts`의 `createTrip()`엔 있던 과거 날짜 차단 가드가 새 위저드엔 빠져 있었던 것 — `useQuoteWizard.ts`의 `canProceed('schedule')`에 동일 가드(과거 날짜·귀환일<출발일) 추가로 수정, 재검증 통과
+- 더블클릭 연타(제출 버튼) 프로브는 깨끗했음 — React의 `submitLoading` disable이 실제로 두 번째 클릭을 막아서 네트워크 로그상 signup/trips POST 각 1회만 발생(이 레포가 더블차지 버그 전력이 많아 특별히 의심했던 항목)
+- `requesterType`이 없는(이 필드 추가 이전) 기존 트립도 배지만 조용히 생략되고 "null" 텍스트나 크래시 없이 정상 렌더링됨 확인
+- **실버그 2 (이번에 같이 수정)**: 2026-10-13 세션에서 "사용자 판단으로 코드는 그대로 둠"으로 남겨뒀던 관리자 콘솔 서류 이미지 로컬 깨짐 버그(Helmet `Cross-Origin-Resource-Policy: same-origin`가 로컬의 3000↔4000 교차 출처 `<img>` 로드를 막던 것) — `server/src/index.ts`의 `/uploads` 응답에만 `Cross-Origin-Resource-Policy: cross-origin`을 명시해 해제. `curl -H "Origin: http://evil.example.com"`으로 CORS가 여전히 `CORS_ORIGIN`만 허용하고 느슨해지지 않았음을 확인
+- Kakao 장소검색 드롭다운이 absolute가 아니라 일반 문서 흐름에 쌓이는 방식이라, 자동화 스크립트로 빠르게 연속 클릭하면 드롭다운이 열리면서 밀린 좌표를 잘못 클릭하는 일이 있었음(실사용자가 손으로 누를 땐 문제없음) — 버그는 아니고 테스트 중 겪은 해프닝
+
+## 산출물
+
+- 신규 파일 8개(`hooks/useQuoteWizard.ts`, `app/quote/page.tsx`, `components/quote/Step*.tsx` 6개), 수정 13개(스키마·라우트·타입 3개·배지 노출 5개·`lib/tripDisplay.ts`·`app/page.tsx`)
+- `tsc --noEmit`(프론트/백엔드)·`npm run lint`·`npm run build`(프론트/백엔드) 전부 통과
+- claude-in-chrome으로 신규가입/기존로그인/왕복/인원모름/잘못된OTP/더블클릭/null-safety/기사측 배지노출/CORS 스코프 전부 실제 조작으로 검증(상세는 `/verify` 실행 결과 참고, 이 대화 세션에 남아있음)
+- 커밋 `a33ef6a`, `aligo` 브랜치 푸시 완료, CI(Frontend/Backend) 초록불. 운영 미배포(다음 배포 때 포함)

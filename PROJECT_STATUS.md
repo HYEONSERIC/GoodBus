@@ -348,6 +348,16 @@
     - Claude의 SSH 읽기/쓰기가 세션 권한 분류기에 막혀, 사용자가 직접 VPS에서 명령어 실행→결과 공유하는 방식으로 진행. 라이브 검증: 원본 IP 443/80 둘 다 `000`(차단), `busrent0909.mycafe24.com`·`busrent.co.kr`(Cloudflare 경유) 둘 다 `200` 그대로, `busrent.co.kr` 포트 80 직접 호출도 certbot의 기존 301 리다이렉트 그대로 동작. `certbot renew --dry-run` 중 `busrent0909.mycafe24.com`은 성공, `busrent.co.kr`은 Let's Encrypt `rateLimited` 에러로 실패했으나 설정과 무관한 일시적 레이트리밋(나중에 재시도 필요)
     - 조사 중 부가로 발견한 일반적 견고성 갭 2건도 같이 수정: `app/api/[...path]/route.ts`에 업스트림 `fetch()` try/catch 없어 백엔드 다운 시 예외가 그대로 전파되던 것 → `{error}` 502 JSON으로, `app/`에 `error.tsx`/`global-error.tsx`가 하나도 없던 것 → `global-error.tsx` 신규 추가(둘 다 실제 프로덕션 빌드로 구동해 검증). 상세 경위는 `.claude/refactor.md` 참고
 
+- **콜버스 스타일 비로그인 견적 위저드(`/quote`) 추가 + 고객유형 배지 노출** (2026-11-05, 커밋 `a33ef6a`)
+    - 사업체 피드백: 회원가입부터 요구하는 현재 플로우가 불편함. 경쟁사 콜버스(callbus.com)처럼 비로그인 상태에서 경로·일정·인원 등을 먼저 입력받고, 맨 마지막에 전화번호 인증 한 번으로 가입+로그인+견적 제출을 동시에 끝내는 방식으로 전환
+    - **설계**: 백엔드의 기존 `/auth/signup`(OTP 검증 → 기존 계정 있으면 로그인, 없으면 생성, 둘 다 한 번의 호출)은 그대로 재사용 — 프론트에서 순서만 바꿈. 6단계 위저드(고객유형+목적 → 경로 → 일정 → 인원 → 버스종류 → 전화인증)가 백엔드 호출 없이 로컬 상태에만 값을 쌓다가, 마지막 전화인증 성공 직후 그 데이터로 `POST /trips` 호출(왕복이면 기존 `usePassengerTripForm.ts` 패턴대로 2회). 로그인된 대시보드 안의 기존 "견적 등록하기" 다이얼로그는 그대로 유지, 랜딩 페이지 히어로의 "무료로 여정 등록하기" 버튼만 `/signup`→`/quote`로 변경(버스 종류 카드 3개의 "가격비교" 버튼은 아직 `/signup` 그대로 — 변경 안 함)
+    - 신규 `Trip.requesterType`(개인/법인/여행사) optional 필드 추가, 기존 `servicePurpose` 배지와 같은 자리에 기사/업체가 보는 견적 리스트·입찰 다이얼로그·내 입찰 상세·낙찰완료 카드·승객 본인 카드 전체에 노출
+    - 실제 브라우저(claude-in-chrome)+로컬 DB로 전 구간 검증: 신규번호 가입/기존번호 로그인 양쪽, 왕복(Trip 2건 생성), "인원 모름"(임시추정치 40명 저장), 잘못된 OTP 거부, 제출 버튼 더블클릭 연타(중복 생성 안 됨, React `submitLoading` disable이 실제로 막음), `requesterType`이 없는 기존 트립에서도 배지만 조용히 생략되고 크래시 없음 전부 확인
+    - **검증 중 실제 버그 발견·수정**: 가는날에 과거 날짜를 넣어도 위저드가 막지 않고 `POST /trips`까지 성공시켰는데, 대시보드 진입 직후 기존 `expireExpiredOpenTripsForPassenger`(지난 일정 open 여정을 `GET /trips`마다 자동 하드삭제)가 바로 지워버려 "방금 만든 견적이 흔적도 없이 사라지는" 현상을 재현 — `usePassengerTripForm.ts`의 `createTrip()`엔 있던 과거 날짜 차단 가드가 새 위저드엔 누락돼 있었던 것. `useQuoteWizard.ts`의 일정 단계 유효성 검사에 동일 가드(과거 날짜·귀환일<출발일) 추가
+    - **2026-10-13에 "사용자 판단으로 코드는 그대로 둠"으로 남겨뒀던 로컬 전용 버그도 이번에 같이 수정**: 관리자 콘솔 서류 이미지 미리보기가 로컬에서만 깨지던 것(Helmet 기본 `Cross-Origin-Resource-Policy: same-origin`이 로컬의 3000↔4000 교차 출처 `<img>` 로드를 막던 것) — `/uploads` 응답에만 `Cross-Origin-Resource-Policy: cross-origin`을 명시해 해제. CORS는 `CORS_ORIGIN`만 허용하도록 그대로 scoped돼 있어 보안 완화 없음을 curl로 확인(임의 Origin으로는 여전히 `Access-Control-Allow-Origin` 미반환)
+    - `aligo` 푸시 완료, CI(Frontend/Backend) 초록불 확인. **운영 미배포** — 다음 배포 때 포함됨
+    - **의도적으로 손대지 않은 것**: 위저드는 결제방식·경유지·기사동행·추가요청 등 선택 필드를 생략하고 기본값(null)으로 생성(가입 장벽 최소화가 목적) — 가입 후 대시보드에서 보완 입력 가능한지는 미확인
+
 ## 미완료 / 실서비스 갭
 
 - **배포**
