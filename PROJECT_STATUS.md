@@ -2,7 +2,7 @@
 
 이 문서는 완료된 것과 아직 완료되지 않은 것을 요약합니다.
 
-**최종 갱신:** 2026-10-13
+**최종 갱신:** 2026-11-05
 
 ---
 
@@ -340,6 +340,13 @@
     - **이 과정에서 결제 성공 경로 검증 블로커가 해소됨**: 그동안 "검증된 나이스페이 샌드박스 테스트카드 번호가 없어 라우트 레벨 검증 불가"로 보류돼 있던 낙찰완료·환불완료·멤버십결제 등 5개 알림톡이, 나이스페이 샌드박스가 표준 Luhn 테스트카드(`4111111111111111`)를 실제로 승인한다는 걸 발견하면서 전부 실제 라우트로 뚫림
     - **새로 발견(프로덕션 영향 없음, 코드 변경 안 함)**: 관리자 콘솔 서류 이미지가 **로컬에서만** 깨진 아이콘으로 보임 — `helmet()`의 기본 `Cross-Origin-Resource-Policy: same-origin` 헤더가 로컬의 프론트(`:3000`)·백엔드(`:4000`) 포트 차이를 "다른 출처"로 보고 `<img>` no-cors 요청을 차단하는 것. 프로덕션은 nginx가 같은 도메인으로 묶어줘서 영향 없음을 확인 — 사용자 판단으로 코드는 그대로 둠
     - **의도적으로 검증 못 한 것**: SMS 폴백 경로(카카오톡 미가입 번호 필요), `AdminRevenuePanel`의 GMV 추정치와 실제 결제 기록 정합화(기존에도 남아있던 별도 과제)
+
+- **원본 IP 직접 접속 차단(Cloudflare 완전 우회 구멍 발견·수정)** (2026-11-05)
+    - 사용자가 공유한 Sentry `InvariantError`(`Expected RSC response, got text/plain`, `JAVASCRIPT-NEXTJS-6`) 확인 요청에서 시작 — Next.js 자체가 "This is a bug in Next.js"라고 적어둔 에러라 처음엔 우리 코드/프레임워크 어느 쪽 문제인지 불명확했음. 코드 전수 조사(Server Action·서비스워커·잘못된 POST·`next.config.ts` 전부 확인) 결과 혐의 없음, Sentry 이벤트 상세를 직접 열어보니 `url` 태그가 도메인이 아니라 **원본 VPS IP(`172.238.20.212`)**였고 breadcrumb에 Next.js Server Action ID 프로빙 패턴(`Received "x"`) — 우리 앱엔 Server Action이 아예 없는데도 범용 취약점 스캐너가 원본 IP로 직접 들어와 Next.js 내부에서 비정상 종료시킨 노이즈로 결론(실사용자 영향 0명, 계속 반복 발생 중이었음 — User-Agent가 이벤트마다 바뀌는 것도 자동화 증거)
+    - **원인**: `/etc/nginx/sites-enabled/busrent`에 `default_server`가 어디에도 명시돼 있지 않아, nginx가 해당 주소:포트에서 **파일에 제일 먼저 정의된 블록**(`busrent0909.mycafe24.com`, UptimeRobot 헬스체크용으로 Cloudflare 체크를 의도적으로 안 걸어둔 블록)을 암묵적 기본값으로 쓰고 있었음 — `busrent.co.kr`/`www`에만 걸려있던 Cloudflare origin-bypass 444 차단(9/14 조치)이 Host 불일치 요청 전부(원본 IP 포함)는 전혀 막지 못하고 있었던 것
+    - **수정**: `deploy/nginx/default-deny.conf`(신규, 커밋됨) → 라이브 `/etc/nginx/conf.d/goodbus-default-deny.conf`로 배포, `server_name _;` + `listen 443 ssl default_server`/`listen 80 default_server`로 매칭 안 되는 Host는 444로 연결 차단(443은 TLS 핸드셰이크용으로 `busrent0909.mycafe24.com` 인증서 재사용, 실콘텐츠 서빙 안 함). `sites-available/busrent`가 아니라 `conf.d`에 둔 이유는 `/uploads/` 프록시 블록 유실 사건과 동일(카페24 재설치 시 `sites-available/<서비스명>` 초기화됨)
+    - Claude의 SSH 읽기/쓰기가 세션 권한 분류기에 막혀, 사용자가 직접 VPS에서 명령어 실행→결과 공유하는 방식으로 진행. 라이브 검증: 원본 IP 443/80 둘 다 `000`(차단), `busrent0909.mycafe24.com`·`busrent.co.kr`(Cloudflare 경유) 둘 다 `200` 그대로, `busrent.co.kr` 포트 80 직접 호출도 certbot의 기존 301 리다이렉트 그대로 동작. `certbot renew --dry-run` 중 `busrent0909.mycafe24.com`은 성공, `busrent.co.kr`은 Let's Encrypt `rateLimited` 에러로 실패했으나 설정과 무관한 일시적 레이트리밋(나중에 재시도 필요)
+    - 조사 중 부가로 발견한 일반적 견고성 갭 2건도 같이 수정: `app/api/[...path]/route.ts`에 업스트림 `fetch()` try/catch 없어 백엔드 다운 시 예외가 그대로 전파되던 것 → `{error}` 502 JSON으로, `app/`에 `error.tsx`/`global-error.tsx`가 하나도 없던 것 → `global-error.tsx` 신규 추가(둘 다 실제 프로덕션 빌드로 구동해 검증). 상세 경위는 `.claude/refactor.md` 참고
 
 ## 미완료 / 실서비스 갭
 

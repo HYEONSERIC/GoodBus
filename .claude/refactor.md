@@ -533,3 +533,54 @@ Aligo에 실제로 등록·카카오 심사 제출된 템플릿 11종(기사_낙
 - SMS 폴백 경로(카카오톡 미가입 번호 필요 — 다른 실제 번호 확보해야 가능)
 - `AdminRevenuePanel`의 GMV 추정치와 실제 결제 기록 정합화(이전부터 남아있던 별도 과제, 이번 세션 범위 아님)
 - 베타테스터를 통한 실제 UX 피드백 — 다음 단계로 분리
+
+# Sentry `InvariantError: Expected RSC response, got text/plain` 조사 (2026-11-04)
+
+## 원래 요청
+
+사용자가 Sentry 이슈 스크린샷(`InvariantError`, `JAVASCRIPT-NEXTJS-6`, `Unhandled`, `POST /page`)을 공유하며 확인 요청. Next.js 자신이 "This is a bug in Next.js"라고 적어놓은 에러라 우리 코드 문제인지 프레임워크 문제인지 구분이 먼저 필요했다.
+
+## 결정 사항 (사용자 확정)
+
+- Sentry 대시보드를 직접(claude-in-chrome) 열어 이벤트 상세를 확인하는 쪽으로 진행
+- 조사 후 플랜에 포함된 부가 코드 하드닝(② API 프록시 에러 처리, ③ `global-error.tsx`)은 바로 적용
+
+## 구현
+
+- Explore 에이전트 2개(병렬)로 레포 전체에서 Server Action/서비스워커/잘못된 POST fetch/`router.refresh` 패턴/`next.config.ts` 실험 플래그를 전수 조사 → 전부 혐의 없음 확인
+- Sentry 대시보드(이슈 `7827110423`) 직접 확인: `url` 태그가 도메인이 아니라 **VPS 원본 IP(`172.238.20.212`)**, breadcrumb에 `Server Reference ID did not match the expected format. Received "x"` — Next.js Server Action 취약점을 범용으로 프로빙하는 봇이 원본 IP로 직접 들어와 만든 노이즈로 결론(실사용자 영향 0명, 9 events/14h)
+- `deploy/nginx/cloudflare-origin-bypass.conf` 재검토: Cloudflare-only 444 차단이 `busrent.co.kr`/`www` 블록에만 걸려있고, Cafe24 호스트네임(`busrent0909.mycafe24.com`, UptimeRobot용으로 의도적 예외) 블록엔 없음 — `DEPLOYMENT.md:583` 기록(웰컴 페이지를 의도적으로 치운 이력)을 근거로, 이 블록이 `server_name`을 좁게 지정하지 않았다면 **원본 IP를 포함한 Host-불일치 요청 전부**를 떠안고 있을 가능성이 높다는 가설 수립 — 라이브 `nginx -T` 확인은 "Production Reads" 권한 분류기에 두 번 막혀 이번 세션에서 미완(아래 "검증 못 한 것" 참고)
+- 부가 하드닝 2건 적용(이번 Sentry 이슈의 직접 원인은 아니지만 조사 중 발견한 일반적 견고성 갭):
+  - `app/api/[...path]/route.ts`: 업스트림 `fetch()`를 try/catch로 감싸 백엔드 다운 시 `{error: 'Backend unavailable'}` 502 JSON을 반환(기존엔 예외가 그대로 전파됨)
+  - `app/global-error.tsx` 신규 추가: 서버 컴포넌트 렌더링 중 예외가 나도 사용자에게 정상적인 한국어 에러 페이지가 뜨도록 보강(이전엔 `app/` 전체에 `error.tsx`/`global-error.tsx`가 하나도 없었음)
+
+## 검증 과정에서 발견한 것
+
+- `npm run dev:all`로 백엔드만 `kill -9`하면 **프론트까지 같이 죽는다**(concurrently가 한쪽이 죽으면 전체를 내림) — 백엔드만 내린 상태를 재현하려면 `next dev`/`server` 를 따로 띄워야 함(다음에 비슷한 "백엔드 다운" 시나리오 테스트할 때 참고)
+- `app/` 폴더명에 언더스코어 접두사(`__test_...`)를 쓰면 Next.js가 private 폴더로 취급해 라우팅에서 제외됨(404) — 임시 테스트 라우트 만들 때 언더스코어 없는 이름 사용할 것
+- `global-error.tsx`는 프로덕션 빌드에서 **서버 HTML에 내용이 안 보인다** — Next가 에러 상세를 숨기고 `digest`만 보내며, 실제 렌더링은 클라이언트 쪽 하이드레이션이 담당하므로 `curl`로는 검증 불가, 반드시 실제 브라우저로 확인해야 함(이번엔 claude-in-chrome으로 확인). 에러를 던지는 페이지는 기본적으로 정적 프리렌더 대상이라 빌드 자체가 실패하므로, 검증용 임시 라우트엔 `export const dynamic = 'force-dynamic'`이 필요했음
+
+## 산출물
+
+- 코드 변경 2건(커밋 전): `app/api/[...path]/route.ts`, `app/global-error.tsx`(신규)
+- 둘 다 `tsc --noEmit`, `npm run build`, 실제 프로덕션 빌드 기동 후 브라우저(API 프록시: curl로 502 JSON 확인 / global-error: claude-in-chrome 스크린샷으로 한국어 에러 UI 확인) 검증 완료
+
+## nginx 핵심 조치 — 사용자가 직접 라이브 적용 + 검증 완료 (2026-11-05 후속)
+
+Claude의 SSH 읽기/쓰기가 "Production Reads" 권한 분류기에 막혀, 사용자가 직접 VPS에 SSH 접속해 명령어를 실행하고 결과를 대화에 붙여넣는 방식으로 진행:
+
+- `nginx -T` 확인 결과 가설 확정: `/etc/nginx/sites-enabled/busrent`에 서버 블록이 `busrent0909.mycafe24.com`(443/80), `busrent.co.kr`/`www`(443/80) 이렇게 2쌍 4개뿐이고 `default_server`가 어디에도 명시 안 돼 있었음 — nginx가 파일에서 제일 먼저 정의된 `busrent0909.mycafe24.com` 블록(UptimeRobot용으로 의도적으로 Cloudflare 체크 없이 열어둔 블록)을 암묵적 기본값으로 써서, Host 불일치 요청(원본 IP 포함) 전부가 그리로 흘러들어가고 있었음
+- `deploy/nginx/default-deny.conf`(리포에 신규 커밋)를 `/etc/nginx/conf.d/goodbus-default-deny.conf`로 배포 — `server_name _;`로 `listen 443 ssl default_server`/`listen 80 default_server` 블록 추가, 매칭 안 되는 Host는 444로 연결 차단. `sites-available/busrent`가 아니라 `conf.d`에 둔 이유: 카페24 자동설치가 재설치 때 `sites-available/<서비스명>`을 초기화하는 전례(`/uploads/` 프록시 블록 유실 사건, `DEPLOYMENT.md`)와 동일한 이유로 재설치에도 살아남게 하려고
+- 443 블록은 TLS 핸드셰이크를 완료하려면 인증서가 있어야 해서(실제 콘텐츠는 안 내보내지만) `busrent0909.mycafe24.com`의 기존 인증서 경로를 그대로 재사용
+- `nginx -t` 통과(기존 인증서 OCSP stapling 경고만 있음, 우리 변경과 무관) → `systemctl reload nginx`
+- 라이브 검증 5개 항목 전부 사용자가 직접 실행해 확인: 원본 IP 443/80 둘 다 `000`(차단), `busrent0909.mycafe24.com` 443 `200`(그대로), `busrent.co.kr` 443(Cloudflare 경유) `200`(그대로), `busrent.co.kr` 포트 80을 `Host` 헤더로 직접 찔러도 certbot이 심어둔 `301`(https 리다이렉트) 그대로 나옴(처음엔 "404가 나와야 한다"고 잘못 예상했다가, 실제 파일 전체를 받아보고 `if ($host = busrent.co.kr) { return 301 ...; }`가 먼저 걸리는 정상 동작임을 확인 — 검증 과정에서의 내 실수), `certbot renew --dry-run --cert-name busrent0909.mycafe24.com` 성공
+- `busrent.co.kr` 쪽 certbot dry-run만 Let's Encrypt `rateLimited :: Service busy` 에러로 실패 — 우리 설정과 무관한 LE 쪽 일시적 레이트리밋(라우팅 문제였다면 challenge 실패 메시지가 났을 것). 나중에 재시도 권장, 급한 건 아님
+
+### 검증 과정에서 발견한 것 (추가)
+
+- `curl http://busrent.co.kr/`을 VPS 로컬에서 실행해도 일반 DNS로 나가 **Cloudflare를 거쳐** 응답받는다 — 로컬 nginx를 직접 테스트하려면 `curl -H "Host: busrent.co.kr" http://127.0.0.1/`처럼 Host 헤더를 강제하고 `127.0.0.1`로 쏴야 함. 처음에 이걸 놓쳐서 "Cloudflare의 301"을 "우리 nginx가 깨졌다"로 잘못 해석할 뻔함
+
+### 다음 액션
+
+- `busrent.co.kr` certbot dry-run 재시도(Let's Encrypt 레이트리밋 풀린 뒤, 급하지 않음)
+- 상세 내용은 플랜 파일 `/Users/hyeonsu/.claude/plans/zazzy-marinating-puddle.md` 참고

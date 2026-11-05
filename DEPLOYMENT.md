@@ -24,6 +24,12 @@ PG(결제) 없이 **베타·파일럿**을 올리는 것을 기준으로 한 설
 
 **Cloudflare origin-bypass 차단 재설정 완료(2026-09-14)**: `deploy/nginx/cloudflare-origin-bypass.conf`(신규, 리포에 커밋됨)의 `geo` 맵을 `/etc/nginx/conf.d/goodbus-cloudflare.conf`로 배포하고, `busrent.co.kr`/`www` 443 서버 블록에 `if ($goodbus_is_cloudflare = 0) { return 444; }` 추가 — 원본 IP 직접 접속(Host: busrent.co.kr) 차단, Cloudflare 경유는 정상, `busrent0909.mycafe24.com`(UptimeRobot 의존)은 의도적으로 예외 유지. 라이브 curl로 3가지 케이스 전부 검증 완료. (포트 80 블록은 certbot이 만든 리다이렉트 `if`가 먼저 걸려 이 검사가 도달 불가라 추가 안 함 — 어차피 콘텐츠 노출 없이 리다이렉트만 하므로 낮은 리스크.)
 
+**원본 IP 직접 접속(Host 불일치 전체) 차단 추가 — 2026-11-05**: 위 조치는 `Host: busrent.co.kr`로 "위장"한 요청만 막았을 뿐, **Host가 아예 그 무엇과도 안 맞는 요청**(원본 IP `https://172.238.20.212/` 그대로 접속 등)은 여전히 막혀있지 않았다 — `/etc/nginx/sites-enabled/busrent`에 `default_server`가 명시된 블록이 하나도 없어서, nginx가 해당 주소:포트에 대해 **파일에서 제일 먼저 정의된 블록**(`busrent0909.mycafe24.com`, UptimeRobot용으로 의도적으로 보호 안 걸어둔 블록)을 암묵적 기본값으로 쓰고 있었던 것. 이 틈으로 Next.js Server Action 취약점을 범용으로 긁는 봇이 Cloudflare를 완전히 우회해 들어와 Sentry에 `InvariantError`(`JAVASCRIPT-NEXTJS-6`, 이슈 `7827110423`) 노이즈를 만든 걸 계기로 발견(`.claude/refactor.md` 참고).
+
+`deploy/nginx/default-deny.conf`(신규, 리포에 커밋됨)를 `/etc/nginx/conf.d/goodbus-default-deny.conf`로 배포 — `listen 443 ssl default_server`/`listen 80 default_server`로 `server_name _;` 블록을 새로 추가해 그 무엇과도 매칭 안 되는 Host는 전부 444로 닫는다(443 블록은 TLS 핸드셰이크 완료용으로 `busrent0909.mycafe24.com`의 기존 인증서를 재사용, 실제 콘텐츠는 서빙 안 함). `sites-available/busrent`가 아니라 `conf.d`에 넣은 이유는 위 `/uploads/` 프록시 블록 유실 사건과 동일 — 카페24 자동설치가 재설치 때 `sites-available/<서비스명>`을 초기화하기 때문.
+
+라이브 검증(2026-11-05): 원본 IP 443/80 둘 다 `000`(연결 차단) 확인, `busrent0909.mycafe24.com`(443) `200` 그대로, `busrent.co.kr`(Cloudflare 경유) `200` 그대로, `busrent.co.kr` 포트 80을 `Host` 헤더로 직접 찔러도 certbot이 심어둔 `301`(https로 리다이렉트) 그대로 — 전부 기존 네임드 블록으로 정상 라우팅됨을 확인. `certbot renew --dry-run --cert-name busrent0909.mycafe24.com` 성공. `busrent.co.kr` 쪽 dry-run은 Let's Encrypt `rateLimited :: Service busy` 에러로 실패했으나 우리 설정과 무관(라우팅 문제였다면 challenge 자체가 실패하지, "서버 바쁨"이 아님) — 나중에 재시도 권장.
+
 ~~**아직 안 한 것(우선순위 낮음)**: Sentry DSN(예전 값이 구 서버에만 있었고 로컬 백업이 없어서 유실 — 필요하면 Sentry 대시보드에서 새로 발급).~~ — 이전 직후 시점의 기록. 이후 DSN이 재반영돼 2026-10-06에 브라우저 쪽 수신을 확인함(라이브 번들의 SDK·DSN + 테스트 에러 도착). 서버 쪽도 2026-10-11에 확인함(`.env`·`.env.local` 둘 다 DSN 존재, `node-express` 프로젝트로 서버 테스트 에러 도착). Next 서버 런타임 에러 수신은 별도 발생 테스트 안 함.
 
 이 섹션 아래(1번~)는 **최초 설계 시점의 계획 문서**로 남겨둔다 — Docker/`/var/www/goodbus` 전제로 읽지 말 것.

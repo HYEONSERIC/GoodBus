@@ -31,12 +31,23 @@ async function handler(
     const method = req.method.toUpperCase();
     const hasBody = !['GET', 'HEAD'].includes(method);
 
-    const upstreamRes = await fetch(targetUrl, {
-        method,
-        headers,
-        body: hasBody ? await req.arrayBuffer() : undefined,
-        redirect: 'manual',
-    });
+    let upstreamRes: Response;
+    try {
+        upstreamRes = await fetch(targetUrl, {
+            method,
+            headers,
+            body: hasBody ? await req.arrayBuffer() : undefined,
+            redirect: 'manual',
+        });
+    } catch {
+        // Backend unreachable (down, restarting, DNS/network failure) — respond
+        // with the {error} JSON shape lib/api.ts's fetchAPI expects, instead of
+        // letting the exception propagate as an unhandled Route Handler error.
+        return Response.json(
+            { error: 'Backend unavailable' },
+            { status: 502 }
+        );
+    }
 
     const resHeaders = new Headers(upstreamRes.headers);
     // Avoid leaking backend-specific CORS headers; this route is same-origin.
