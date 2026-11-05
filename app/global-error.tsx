@@ -34,6 +34,9 @@ export default function GlobalError({
           잠시 후 다시 시도해 주세요. 문제가 계속되면 고객센터로 문의해
           주세요.
         </p>
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- plain
+            anchor on purpose: this page renders when the app itself crashed,
+            so it must not depend on next/link's router context */}
         <a
           href="/"
           style={{
