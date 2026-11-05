@@ -44,6 +44,7 @@ export type PassengerTrip = {
     companionType?: 'depart_return' | 'with_schedule' | null;
     itineraryDetail?: string | null;
     servicePurpose?: string | null;
+    requesterType?: string | null;
     paymentMethod?: 'cash' | 'card' | null;
     additionalRequest?: string | null;
     passenger: {

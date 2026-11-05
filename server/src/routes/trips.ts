@@ -49,6 +49,7 @@ const createTripSchema = z.object({
     dateTime: z.string().datetime(),
     paxCount: z.number().int().positive(),
     busSize: z.enum(['small', 'medium', 'large']),
+    requesterType: z.enum(['individual', 'corporate', 'agency']).optional(),
     stopoverDetail: z.string().optional(),
     companionType: z
         .enum(['depart_return', 'with_schedule'])
@@ -227,6 +228,7 @@ router.post(
                 dateTime,
                 paxCount,
                 busSize,
+                requesterType,
                 stopoverDetail,
                 companionType,
                 itineraryDetail,
@@ -256,6 +258,7 @@ router.post(
                     dateTime: new Date(dateTime),
                     paxCount,
                     busSize: busSize as BusSize,
+                    requesterType: requesterType || undefined,
                     stopoverDetail: stopoverDetail || undefined,
                     companionType: companionType || undefined,
                     itineraryDetail: itineraryDetail || undefined,
@@ -374,6 +377,7 @@ const updateTripSchema = z.object({
     dateTime: z.string().datetime().optional(),
     paxCount: z.number().int().positive().optional(),
     busSize: z.enum(['small', 'medium', 'large']).optional(),
+    requesterType: z.enum(['individual', 'corporate', 'agency']).optional(),
     stopoverDetail: z.string().optional(),
     companionType: z.enum(['depart_return', 'with_schedule']).optional(),
     itineraryDetail: z.string().optional(),
@@ -453,6 +457,9 @@ router.patch(
             if (updateData.paxCount) dataToUpdate.paxCount = updateData.paxCount;
             if (updateData.busSize)
                 dataToUpdate.busSize = updateData.busSize as BusSize;
+            if (updateData.requesterType !== undefined) {
+                dataToUpdate.requesterType = updateData.requesterType || null;
+            }
             if (updateData.stopoverDetail !== undefined) {
                 dataToUpdate.stopoverDetail = updateData.stopoverDetail.trim()
                     ? updateData.stopoverDetail.trim()

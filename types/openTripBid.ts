@@ -6,6 +6,7 @@ export type OpenTripBidTrip = {
     paxCount: number;
     busSize: string;
     servicePurpose?: string | null;
+    requesterType?: string | null;
     stopoverDetail?: string | null;
     companionType?: 'depart_return' | 'with_schedule' | null;
     itineraryDetail?: string | null;

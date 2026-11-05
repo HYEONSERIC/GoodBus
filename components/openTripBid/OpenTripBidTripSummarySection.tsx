@@ -3,6 +3,7 @@
 import {
     formatBoardingLine,
     getBusLabel,
+    getRequesterTypeLabel,
     getServicePurposeLabel,
     paymentMethodLabel,
 } from '@/lib/tripDisplay';
@@ -82,6 +83,15 @@ export function OpenTripBidTripSummarySection({
                                     trip.busSize
                                 )}
                             </span>
+                            {getRequesterTypeLabel(
+                                trip.requesterType
+                            ) && (
+                                <span className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700">
+                                    {getRequesterTypeLabel(
+                                        trip.requesterType
+                                    )}
+                                </span>
+                            )}
                             {getServicePurposeLabel(
                                 trip.servicePurpose
                             ) && (

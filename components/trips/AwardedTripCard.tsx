@@ -15,6 +15,7 @@ import {
     formatTripDateLine,
     formatTripTime,
     getBusLabel,
+    getRequesterTypeLabel,
     getServicePurposeLabel,
     paymentMethodLabel,
 } from '@/lib/tripDisplay';
@@ -278,6 +279,11 @@ function PassengerAwardedTripCardBody(props: AwardedTripPassengerLayoutProps) {
                     <span className="rounded border px-2 py-1">
                         {getBusLabel(trip.busSize)}
                     </span>
+                    {getRequesterTypeLabel(trip.requesterType) ? (
+                        <span className="rounded border px-2 py-1">
+                            {getRequesterTypeLabel(trip.requesterType)}
+                        </span>
+                    ) : null}
                     {getServicePurposeLabel(trip.servicePurpose) ? (
                         <span className="rounded border px-2 py-1">
                             {getServicePurposeLabel(trip.servicePurpose)}

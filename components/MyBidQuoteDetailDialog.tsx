@@ -10,6 +10,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { getRequesterTypeLabel } from '@/lib/tripDisplay';
 
 export type BidQuoteTrip = {
     id: string;
@@ -19,6 +20,7 @@ export type BidQuoteTrip = {
     paxCount: number;
     busSize: string;
     servicePurpose?: string | null;
+    requesterType?: string | null;
     paymentMethod?: string | null;
     additionalRequest?: string | null;
     companionType?: string | null;
@@ -273,6 +275,12 @@ export function MyBidQuoteDetailDialog({
                                 <span className="text-gray-500">인원수</span>
                                 <span className="font-medium text-gray-900">
                                     {trip.paxCount}명
+                                </span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span className="text-gray-500">고객 유형</span>
+                                <span className="text-right font-medium text-gray-900">
+                                    {getRequesterTypeLabel(trip.requesterType) || '—'}
                                 </span>
                             </div>
                             <div className="flex justify-between gap-3">

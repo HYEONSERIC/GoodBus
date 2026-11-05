@@ -12,6 +12,13 @@ export function getServicePurposeLabel(purpose?: string | null) {
     return purpose;
 }
 
+export function getRequesterTypeLabel(requesterType?: string | null) {
+    if (requesterType === 'corporate') return '법인';
+    if (requesterType === 'agency') return '여행사';
+    if (requesterType === 'individual') return '개인';
+    return null;
+}
+
 export function formatBoardingLine(dateTime: string) {
     const d = new Date(dateTime);
     return `${d.toLocaleDateString('ko-KR', {

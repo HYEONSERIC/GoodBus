@@ -214,6 +214,9 @@ model Trip {
   dateTime    DateTime
   paxCount    Int
   busSize     BusSize
+  /// 개인/법인/여행사 — 비로그인 견적 위저드(/quote)에서 수집, 기존 대시보드
+  /// 다이얼로그에서는 선택값으로 비워둘 수 있음.
+  requesterType String?
   stopoverDetail String?
   companionType  String?
   itineraryDetail String?

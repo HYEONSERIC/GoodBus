@@ -23,6 +23,7 @@ export type OpenTripLike = {
     busSize: string;
     status?: string;
     servicePurpose?: string | null;
+    requesterType?: string | null;
     companionType?: 'depart_return' | 'with_schedule' | null;
     bids?: TripBidLike[];
 };

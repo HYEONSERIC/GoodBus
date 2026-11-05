@@ -6,6 +6,7 @@ import {
     biddingCompanionSubtitle,
     formatTripDateLine,
     getBusLabel,
+    getRequesterTypeLabel,
     getServicePurposeLabel,
 } from '@/lib/tripDisplay';
 import type { OpenTripLike } from '@/types/trip';
@@ -38,6 +39,7 @@ export function OpenTripCard({
     onBid: () => void;
 }) {
     const servicePurpose = getServicePurposeLabel(trip.servicePurpose);
+    const requesterType = getRequesterTypeLabel(trip.requesterType);
     const companion = biddingCompanionSubtitle(trip);
 
     return (
@@ -79,6 +81,11 @@ export function OpenTripCard({
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
                 <div className="flex flex-wrap items-center gap-2">
+                    {requesterType ? (
+                        <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
+                            {requesterType}
+                        </span>
+                    ) : null}
                     {servicePurpose ? (
                         <span className="rounded-full border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-600">
                             {servicePurpose}

@@ -54,6 +54,15 @@ app.use(
         setHeaders: (res) => {
             res.setHeader('X-Content-Type-Options', 'nosniff');
             res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+            // Helmet's default Cross-Origin-Resource-Policy: same-origin (set
+            // above by app.use(helmet(...))) blocks <img> tags from loading
+            // these files when the frontend and backend are on different
+            // origins — true for local dev (localhost:3000 vs :4000), masked
+            // in production only because nginx proxies /uploads under the
+            // same domain. CORS already explicitly allow-lists CORS_ORIGIN
+            // for this route, so these files are already meant to be
+            // fetched cross-origin; override Helmet's blanket default here.
+            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         },
     })
 );

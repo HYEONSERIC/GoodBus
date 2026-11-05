@@ -135,7 +135,7 @@ export default function Home() {
                                     size="lg"
                                     className="h-12 w-full rounded-full bg-[#2563eb] px-7 text-base text-white shadow-sm shadow-[#2563eb]/25 hover:bg-[#1d4ed8] sm:w-auto"
                                 >
-                                    <Link href="/signup">
+                                    <Link href="/quote">
                                         무료로 여정 등록하기
                                         <ArrowRight className="size-4" />
                                     </Link>

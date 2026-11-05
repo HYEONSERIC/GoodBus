@@ -13,6 +13,7 @@ import {
     formatTripDateLine,
     formatTripTime,
     getBusLabel,
+    getRequesterTypeLabel,
     getServicePurposeLabel,
 } from '@/lib/tripDisplay';
 import type { PassengerBid, PassengerTrip } from '@/types/passenger';
@@ -161,6 +162,17 @@ export function PassengerQuoteTripCard({
                                 trip.busSize,
                             )}
                         </span>
+                        {getRequesterTypeLabel(
+                            trip.requesterType,
+                        ) && (
+                            <span className="rounded border px-2 py-1">
+                                {
+                                    getRequesterTypeLabel(
+                                        trip.requesterType,
+                                    )!
+                                }
+                            </span>
+                        )}
                         {getServicePurposeLabel(
                             trip.servicePurpose,
                         ) && (
