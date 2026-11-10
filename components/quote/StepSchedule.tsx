@@ -1,55 +1,16 @@
 'use client';
 
-import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { DateTimeField } from '@/components/quote/DateTimeField';
 import type { QuoteWizardApi } from '@/hooks/useQuoteWizard';
 
-function DateTimeField({
-    label,
-    value,
-    min,
-    onChange,
-}: {
-    label: string;
-    value: string;
-    min: string;
-    onChange: (value: string) => void;
-}) {
-    const ref = useRef<HTMLInputElement | null>(null);
-    return (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            <div className="relative">
-                <Input
-                    ref={ref}
-                    type="datetime-local"
-                    min={min}
-                    value={value}
-                    className={`peer h-11 pr-10 ${!value ? 'text-transparent' : ''}`}
-                    onClick={() => {
-                        if (ref.current?.showPicker) {
-                            ref.current.showPicker();
-                            return;
-                        }
-                        ref.current?.focus();
-                    }}
-                    onChange={(e) => onChange(e.target.value)}
-                />
-                {!value && (
-                    <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-stone-500 peer-focus:hidden">
-                        날짜를 선택하세요
-                    </span>
-                )}
-            </div>
-        </div>
-    );
-}
-
 export function StepSchedule({ wizard }: { wizard: QuoteWizardApi }) {
-    const { form, update, goNext, canProceed, goingScheduleMin, returnScheduleMin } =
-        wizard;
+    const { form, update, goNext, canProceed } = wizard;
+
+    const goingMin = new Date();
+    const returnMin = form.goingDateTime
+        ? new Date(form.goingDateTime)
+        : goingMin;
 
     return (
         <div className="flex flex-1 flex-col">
@@ -57,18 +18,18 @@ export function StepSchedule({ wizard }: { wizard: QuoteWizardApi }) {
                 <h2 className="text-center text-lg font-bold text-stone-900">
                     일정을 알려주세요
                 </h2>
-                <div className="mx-auto max-w-sm space-y-4">
+                <div className="mx-auto max-w-sm space-y-6">
                     <DateTimeField
                         label="가는날 시간"
                         value={form.goingDateTime}
-                        min={goingScheduleMin}
+                        minDateTime={goingMin}
                         onChange={(value) => update({ goingDateTime: value })}
                     />
                     {form.tripType === 'round' && (
                         <DateTimeField
                             label="오는날 시간"
                             value={form.returnDateTime}
-                            min={returnScheduleMin}
+                            minDateTime={returnMin}
                             onChange={(value) => update({ returnDateTime: value })}
                         />
                     )}

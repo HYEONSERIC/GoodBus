@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authAPI, tripsAPI } from '@/lib/api';
-import { toDatetimeLocalInputValue } from '@/hooks/usePassengerTripForm';
 import type { KakaoPlace } from '@/types/dashboard';
 
 export const QUOTE_WIZARD_STEPS = [
@@ -73,11 +72,6 @@ export function useQuoteWizard() {
     }, [resendCooldown]);
 
     const step = QUOTE_WIZARD_STEPS[stepIndex];
-    const goingScheduleMin = toDatetimeLocalInputValue(new Date());
-    const returnScheduleMin =
-        form.goingDateTime && form.goingDateTime >= goingScheduleMin
-            ? form.goingDateTime
-            : goingScheduleMin;
 
     function update(patch: Partial<ReturnType<typeof createInitialWizardState>>) {
         setForm((prev) => ({ ...prev, ...patch }));
@@ -256,8 +250,6 @@ export function useQuoteWizard() {
         destinationResults,
         setDestinationResults,
         searchPlaces,
-        goingScheduleMin,
-        returnScheduleMin,
         phoneNumber,
         setPhoneNumber,
         phoneCode,
